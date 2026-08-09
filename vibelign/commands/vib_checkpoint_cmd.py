@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from collections.abc import Sequence
+from collections.abc import Callable
 from typing import Protocol, cast
 
 from vibelign.core.checkpoint_engine.router import (
@@ -157,6 +158,7 @@ def run_vib_checkpoint(args: object) -> None:
     # PROJECT_CONTEXT.md 자동 갱신
     context_updated = False
     handoff_warning = False
+    legacy_archive_path: str | None = None
     context_update_error: str | None = None
     try:
         build_context_content = cast(
@@ -169,12 +171,25 @@ def run_vib_checkpoint(args: object) -> None:
                 "_build_context_content",
             ),
         )
+        transfer_mod = cast(
+            object, importlib.import_module("vibelign.commands.vib_transfer_cmd")
+        )
         ctx_path = root / "PROJECT_CONTEXT.md"
-        if ctx_path.exists() and "## Session Handoff" in ctx_path.read_text(
-            encoding="utf-8"
-        ):
+        # handoff 원본은 .vibelign/handoff.json 에 따로 있고 재생성 때 다시
+        # 렌더링되므로 더 이상 사라지지 않는다 (issue #6). 원본이 없는데
+        # 파일 안에만 handoff 가 있는 구버전 상태면 통째로 보관한 뒤 알린다.
+        archive = cast(
+            "Callable[[Path, Path], Path | None]",
+            getattr(transfer_mod, "_archive_legacy_inline_handoff"),
+        )(root, ctx_path)
+        if archive is not None:
             handoff_warning = True
-        _ = ctx_path.write_text(build_context_content(root), encoding="utf-8")
+            legacy_archive_path = archive.name
+        write_context = cast(
+            "Callable[[Path, Path, str], None]",
+            getattr(transfer_mod, "write_project_context"),
+        )
+        write_context(root, ctx_path, build_context_content(root))
         context_updated = True
     except (ImportError, AttributeError, OSError) as exc:
         context_update_error = str(exc)
@@ -191,6 +206,7 @@ def run_vib_checkpoint(args: object) -> None:
                     "context_updated": context_updated,
                     "context_update_error": context_update_error,
                     "handoff_warning": handoff_warning,
+                    "legacy_handoff_archive": legacy_archive_path,
                 },
                 ensure_ascii=False,
             )
@@ -210,8 +226,10 @@ def run_vib_checkpoint(args: object) -> None:
             f"  오래된 체크포인트 {summary.pruned_count}개를 정리했고, 약 {freed_kb}KB를 비웠어요."
         )
     if handoff_warning:
-        print("  ⚠️  handoff 블록이 있었는데 체크포인트로 덮어써집니다.")
-        print("     AI 전환 전에 다시 `vib transfer --handoff`를 실행하세요.")
+        print("  ⚠️  구버전 PROJECT_CONTEXT.md 안에만 있던 handoff 를 발견했습니다.")
+        print(f"     원본을 .vibelign/{legacy_archive_path} 에 통째로 보관했습니다.")
+        print("     이후에는 `vib transfer --handoff` 로 한 번 다시 만들면")
+        print("     .vibelign/handoff.json 에 보관돼 체크포인트에도 살아남습니다.")
     if context_updated:
         print("  📄 PROJECT_CONTEXT.md 자동 갱신 완료")
     print("문제가 생기면 `vib undo`로 되돌릴 수 있습니다.")

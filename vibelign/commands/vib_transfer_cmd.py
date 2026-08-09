@@ -27,6 +27,9 @@ from vibelign.terminal_render import (
     clack_outro,
 )
 
+from vibelign.core.atomic_write import atomic_write_text, file_lock
+from vibelign.core.meta_paths import MetaPaths
+
 # PROJECT_CONTEXT.md 에 추가되는 마커 (중복 생성 방지용)
 _TRANSFER_MARKER = "<!-- VibeLign Transfer Context -->"
 _HANDOFF_CHANGE_DISPLAY_LIMIT = 30
@@ -1064,13 +1067,82 @@ def _build_current_work_section(
     )
 
 
+def save_handoff_data(root: Path, data: HandoffData) -> None:
+    """Session Handoff 원본을 .vibelign/handoff.json 에 보관한다 (issue #6).
+
+    PROJECT_CONTEXT.md 안에만 두면 재생성(=체크포인트)마다 사라졌다. 원본을
+    밖에 두면 재생성이 매번 여기서 다시 렌더링하므로 경계 파싱이 필요 없다.
+    """
+    payload = json.dumps(
+        cast(dict[str, object], cast(object, data)),
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+    )
+    atomic_write_text(MetaPaths(root).handoff_path, payload + "\n")
+
+
+def load_handoff_data(root: Path) -> HandoffData | None:
+    """보관된 Session Handoff 원본을 읽는다. 없거나 깨졌으면 None."""
+    path = MetaPaths(root).handoff_path
+    try:
+        raw = cast(object, json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    return cast(HandoffData, raw)
+
+
+def _archive_legacy_inline_handoff(root: Path, out_path: Path) -> Path | None:
+    """구버전 PROJECT_CONTEXT.md 안의 handoff 를 잃지 않게 통째로 보관한다.
+
+    블록만 잘라내지 않는 이유: 그 경계를 찾는 시도가 세 가지 방식 모두
+    깨졌다(첫 H1 매치는 본문 속 제목에서 잘리고, 마지막 매치는 생성 본문을
+    흡수하고, 전용 sentinel 은 자유 텍스트에 같은 문자열이 들어가면 뚫린다).
+    추측해서 일부만 남기느니 파일 전체를 남기고 사용자에게 알린다.
+    """
+    meta = MetaPaths(root)
+    if meta.handoff_path.exists():
+        return None
+    if not out_path.exists():
+        return None
+    try:
+        text = out_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    if "## Session Handoff" not in text:
+        return None
+    stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    archive = meta.vibelign_dir / f"handoff-legacy-{stamp}.md"
+    atomic_write_text(archive, text)
+    return archive
+
+
+def write_project_context(root: Path, out_path: Path, content: str) -> None:
+    """PROJECT_CONTEXT.md 를 원자적으로 교체 저장한다 (issue #2).
+
+    잠금은 재생성 순서를 직렬화할 뿐이고, 잘린 파일이 남지 않게 하는 본체는
+    원자적 교체다. 잠금을 못 얻어도 저장은 진행한다 — 체크포인트가 잠금
+    때문에 실패하는 편이 더 나쁘다.
+    """
+    with file_lock(MetaPaths(root).context_lock_path):
+        atomic_write_text(out_path, content)
+
+
 def _build_context_content(
     root: Path,
     compact: bool = False,
     full: bool = False,
     handoff_data: HandoffData | None = None,
 ) -> str:
-    """PROJECT_CONTEXT.md 내용 생성."""
+    """PROJECT_CONTEXT.md 내용 생성.
+
+    handoff_data 를 주지 않으면 보관된 원본을 읽어 쓴다. 그래서 체크포인트가
+    이 함수를 인자 없이 불러도 handoff 블록이 사라지지 않는다 (issue #6).
+    """
+    if handoff_data is None:
+        handoff_data = load_handoff_data(root)
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     project_name = _detect_project_name(root)
@@ -1311,9 +1383,7 @@ def _inject_agents_handoff_instruction(root: Path) -> None:
     text = agents_path.read_text(encoding="utf-8")
     if _AGENTS_HANDOFF_MARKER in text:
         return  # 이미 있음
-    _ = agents_path.write_text(
-        text.rstrip() + "\n\n" + _AGENTS_HANDOFF_BLOCK, encoding="utf-8"
-    )
+    atomic_write_text(agents_path, text.rstrip() + "\n\n" + _AGENTS_HANDOFF_BLOCK)
 
 
 def inject_agents_handoff_instruction(root: Path) -> None:
@@ -1577,6 +1647,7 @@ def run_transfer(args: object) -> None:
             decision=decision,
         )
         _persist_handoff_memory(root, handoff_data)
+        save_handoff_data(root, handoff_data)
         content = _build_context_content(root, handoff_data=handoff_data)
     else:
         handoff_data = None
@@ -1600,7 +1671,8 @@ def run_transfer(args: object) -> None:
         clack_outro("dry-run 완료 — 실제 저장하려면 --dry-run 없이 실행하세요.")
         return
 
-    _ = out_path.write_text(content, encoding="utf-8")
+    _archive_legacy_inline_handoff(root, out_path)
+    write_project_context(root, out_path, content)
 
     if handoff:
         _inject_agents_handoff_instruction(root)
@@ -1657,8 +1729,10 @@ def _run_ai_handoff_non_interactive(
         MetaPaths(root).work_memory_path,
         cast(dict[str, object], cast(object, handoff_data)),
     )
+    save_handoff_data(root, handoff_data)
     content = _build_context_content(root, handoff_data=handoff_data)
-    _ = out_path.write_text(content, encoding="utf-8")
+    _archive_legacy_inline_handoff(root, out_path)
+    write_project_context(root, out_path, content)
     _inject_agents_handoff_instruction(root)
     payload: dict[str, object] = {
         "ok": True,
