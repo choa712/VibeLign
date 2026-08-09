@@ -42,21 +42,6 @@ def _checkpoint_file_to_dict(file_item: object) -> dict[str, object] | None:
     }
 
 
-class HandoffBoundaryUnresolved(Exception):
-    """handoff 블록은 있는데 경계를 확정할 수 없는 상태.
-
-    이때 PROJECT_CONTEXT.md 를 재생성하면 세션 상태가 영구 삭제된다.
-    """
-
-
-class HandoffExtractor(Protocol):
-    def __call__(self, text: str) -> str | None: ...
-
-
-class HandoffDetector(Protocol):
-    def __call__(self, text: str) -> bool: ...
-
-
 class TransferBuilder(Protocol):
     def __call__(
         self,
@@ -64,7 +49,6 @@ class TransferBuilder(Protocol):
         compact: bool = False,
         full: bool = False,
         handoff_data: dict[str, object] | None = None,
-        preserved_handoff: str | None = None,
     ) -> str: ...
 
 
@@ -172,7 +156,7 @@ def run_vib_checkpoint(args: object) -> None:
 
     # PROJECT_CONTEXT.md 자동 갱신
     context_updated = False
-    handoff_preserved = False
+    handoff_warning = False
     context_update_error: str | None = None
     try:
         build_context_content = cast(
@@ -185,48 +169,13 @@ def run_vib_checkpoint(args: object) -> None:
                 "_build_context_content",
             ),
         )
-        extract_handoff_section = cast(
-            HandoffExtractor,
-            getattr(
-                cast(
-                    object,
-                    importlib.import_module("vibelign.commands.vib_transfer_cmd"),
-                ),
-                "extract_handoff_section",
-            ),
-        )
-        contains_handoff = cast(
-            HandoffDetector,
-            getattr(
-                cast(
-                    object,
-                    importlib.import_module("vibelign.commands.vib_transfer_cmd"),
-                ),
-                "contains_handoff",
-            ),
-        )
         ctx_path = root / "PROJECT_CONTEXT.md"
-        # handoff 는 세션 상태라 체크포인트가 재생성할 대상이 아니다.
-        # 기존 블록을 떠서 그대로 실어 보존한다 (예전에는 경고만 하고 날렸다).
-        preserved_handoff: str | None = None
-        if ctx_path.exists():
-            raw = ctx_path.read_text(encoding="utf-8")
-            preserved_handoff = extract_handoff_section(raw)
-            handoff_preserved = preserved_handoff is not None
-            if preserved_handoff is None and contains_handoff(raw):
-                # handoff 는 있는데 경계를 확정할 수 없다 (구버전·수동 편집 등).
-                # 이 상태로 재생성하면 세션 상태가 영구 삭제되므로 손대지 않는다.
-                raise HandoffBoundaryUnresolved(
-                    "handoff 블록에 끝 표시가 없어 PROJECT_CONTEXT.md 를 그대로 둡니다"
-                    " — `vib transfer --handoff` 로 한 번 다시 만들면 이후 자동 보존됩니다"
-                )
-        _ = ctx_path.write_text(
-            build_context_content(root, preserved_handoff=preserved_handoff),
-            encoding="utf-8",
-        )
+        if ctx_path.exists() and "## Session Handoff" in ctx_path.read_text(
+            encoding="utf-8"
+        ):
+            handoff_warning = True
+        _ = ctx_path.write_text(build_context_content(root), encoding="utf-8")
         context_updated = True
-    except HandoffBoundaryUnresolved as exc:
-        context_update_error = str(exc)
     except (ImportError, AttributeError, OSError) as exc:
         context_update_error = str(exc)
 
@@ -241,7 +190,7 @@ def run_vib_checkpoint(args: object) -> None:
                     "pruned_count": summary.pruned_count,
                     "context_updated": context_updated,
                     "context_update_error": context_update_error,
-                    "handoff_preserved": handoff_preserved,
+                    "handoff_warning": handoff_warning,
                 },
                 ensure_ascii=False,
             )
@@ -260,9 +209,9 @@ def run_vib_checkpoint(args: object) -> None:
         print(
             f"  오래된 체크포인트 {summary.pruned_count}개를 정리했고, 약 {freed_kb}KB를 비웠어요."
         )
-    if handoff_preserved:
-        print("  ↻ 기존 handoff 블록을 그대로 보존했습니다.")
-        print("     최신 상태로 다시 만들려면 `vib transfer --handoff`를 실행하세요.")
+    if handoff_warning:
+        print("  ⚠️  handoff 블록이 있었는데 체크포인트로 덮어써집니다.")
+        print("     AI 전환 전에 다시 `vib transfer --handoff`를 실행하세요.")
     if context_updated:
         print("  📄 PROJECT_CONTEXT.md 자동 갱신 완료")
     print("문제가 생기면 `vib undo`로 되돌릴 수 있습니다.")
