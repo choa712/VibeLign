@@ -178,18 +178,15 @@ def run_vib_checkpoint(args: object) -> None:
         # handoff 원본은 .vibelign/handoff.json 에 따로 있고 재생성 때 다시
         # 렌더링되므로 더 이상 사라지지 않는다 (issue #6). 원본이 없는데
         # 파일 안에만 handoff 가 있는 구버전 상태면 통째로 보관한 뒤 알린다.
-        archive = cast(
-            "Callable[[Path, Path], Path | None]",
-            getattr(transfer_mod, "_archive_legacy_inline_handoff"),
-        )(root, ctx_path)
+        # 보관·쓰기는 한 잠금 안에서 처리된다 (commit_project_context).
+        commit = cast(
+            "Callable[[Path, Path, str], Path | None]",
+            getattr(transfer_mod, "commit_project_context"),
+        )
+        archive = commit(root, ctx_path, build_context_content(root))
         if archive is not None:
             handoff_warning = True
             legacy_archive_path = archive.name
-        write_context = cast(
-            "Callable[[Path, Path, str], None]",
-            getattr(transfer_mod, "write_project_context"),
-        )
-        write_context(root, ctx_path, build_context_content(root))
         context_updated = True
     except (ImportError, AttributeError, OSError) as exc:
         context_update_error = str(exc)

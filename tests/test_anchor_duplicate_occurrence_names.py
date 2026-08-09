@@ -98,4 +98,54 @@ class TestNestedSameName:
 
 
 # === ANCHOR: TEST_ANCHOR_DUPLICATE_OCCURRENCE_NAMES_TESTNESTEDSAMENAME_END ===
+
+
+# === ANCHOR: TEST_ANCHOR_DUPLICATE_OCCURRENCE_NAMES_TESTNAMECOLLISION_START ===
+class TestNameCollision:
+    """occurrence 이름이 실제 앵커 이름과 부딪히면 안 된다.
+
+    A 가 두 번 있으면 두 번째가 A_2 가 되는데, 파일에 진짜 A_2 앵커가 따로
+    있으면 키가 겹쳐 한쪽이 조용히 덮인다 — MCP 가 요청과 다른 코드를 준다.
+    """
+
+    def _sample(self, tmp_path: Path) -> Path:
+        return _write(
+            tmp_path,
+            [
+                _m("A_START"),
+                "first = 1",
+                _m("A_END"),
+                _m("A_2_START"),
+                "real_a2 = 2",
+                _m("A_2_END"),
+                _m("A_START"),
+                "second = 3",
+                _m("A_END"),
+            ],
+        )
+
+    def test_real_anchor_keeps_its_own_name(self, tmp_path: Path) -> None:
+        blocks = extract_anchor_blocks(self._sample(tmp_path))
+        assert blocks["A_2"] == "real_a2 = 2"
+
+    def test_second_occurrence_skips_the_taken_name(self, tmp_path: Path) -> None:
+        blocks = extract_anchor_blocks(self._sample(tmp_path))
+        assert blocks["A"] == "first = 1"
+        assert blocks["A_3"] == "second = 3"
+
+    def test_no_block_is_silently_overwritten(self, tmp_path: Path) -> None:
+        p = self._sample(tmp_path)
+        blocks = extract_anchor_blocks(p)
+        # 마커 쌍 3개 → 블록 3개. 겹치면 2개로 줄어든다.
+        assert len(blocks) == 3
+        assert sorted(blocks) == ["A", "A_2", "A_3"]
+
+    def test_spans_and_blocks_still_agree_under_collision(self, tmp_path: Path) -> None:
+        p = self._sample(tmp_path)
+        advertised = {str(s["name"]) for s in extract_anchor_spans(p)}
+        assert advertised == set(extract_anchor_blocks(p))
+        assert advertised == set(extract_anchor_line_ranges(p))
+
+
+# === ANCHOR: TEST_ANCHOR_DUPLICATE_OCCURRENCE_NAMES_TESTNAMECOLLISION_END ===
 # === ANCHOR: TEST_ANCHOR_DUPLICATE_OCCURRENCE_NAMES_END ===

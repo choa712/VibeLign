@@ -126,6 +126,31 @@ def _unindexed_source_files(
     return sorted(found, key=lambda item: item[1])
 
 
+def _crossing_warnings(path: Path) -> list[str]:
+    text = safe_read_text(path)
+    if not text:
+        return []
+    return anchor_tools_mod.find_crossing_anchors(text)
+
+
+def _print_crossing_warnings(warnings: list[str], limit: int = 10) -> None:
+    """교차 앵커는 경고로만 알린다 (차단하지 않는 이유는 함수 독스트링 참조).
+
+    수가 많을 수 있어 앞부분만 보여주고 나머지는 개수로 줄인다.
+    """
+    if not warnings:
+        return
+    print("")
+    print(f"⚠️  교차 앵커 {len(warnings)}건 (검증 실패는 아닙니다):")
+    for item in warnings[:limit]:
+        print(f"- {item}")
+    if len(warnings) > limit:
+        print(f"- … 외 {len(warnings) - limit}건")
+    print("  한쪽 블록이 다른 앵커의 여는 마커만 품어, 그 블록을 고치면")
+    print("  상대 앵커의 경계가 깨집니다. 대부분 `vib anchor --auto` 가")
+    print("  여러 줄 시그니처에서 END 를 잘못 넣어 생깁니다.")
+
+
 def _marker_format_problems(path: Path) -> list[str]:
     """앵커가 없는 파일에서 '읽히지 않는 마커'만 골라낸다."""
     text = safe_read_text(path)
@@ -458,10 +483,13 @@ def run_vib_anchor(args: object) -> None:
     if validate:
         index = _write_anchor_index(root, meta, allowed_exts)
         problems: list[str] = []
+        warnings: list[str] = []
         for rel in sorted(index):
             path = root / rel
             for problem in _validate_anchor_file(path):
                 problems.append(f"{rel}: {problem}")
+            for warning in _crossing_warnings(path):
+                warnings.append(f"{rel}: {warning}")
         # 인덱스는 "정본 앵커가 있는 파일"만 담는다. 인덱스만 돌면 구 형식·훼손
         # 마커만 가진 파일은 아예 순회되지 않아, 보호가 0인 프로젝트가 조용히
         # validation passed 를 받는다. 앵커가 없는 파일도 훑되 "앵커가 없습니다"
@@ -476,7 +504,11 @@ def run_vib_anchor(args: object) -> None:
                     {
                         "ok": not problems,
                         "error": None,
-                        "data": {"problems": problems, "anchor_index": index},
+                        "data": {
+                            "problems": problems,
+                            "warnings": warnings,
+                            "anchor_index": index,
+                        },
                     },
                     indent=2,
                     ensure_ascii=False,
@@ -489,8 +521,10 @@ def run_vib_anchor(args: object) -> None:
             print("Anchor validation problems:")
             for item in problems:
                 print(f"- {item}")
+            _print_crossing_warnings(warnings)
             raise SystemExit(1)
         print("Anchor validation passed.")
+        _print_crossing_warnings(warnings)
         print(f"Anchor index saved: {meta.anchor_index_path.relative_to(root)}")
         return
 

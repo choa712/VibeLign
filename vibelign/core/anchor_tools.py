@@ -1,5 +1,5 @@
 # === ANCHOR: ANCHOR_TOOLS_START ===
-from collections.abc import Collection, Iterator
+from collections.abc import Callable, Collection, Iterator
 from pathlib import Path
 import hashlib
 import json
@@ -589,15 +589,13 @@ def extract_anchor_spans(path: Path) -> list[dict[str, object]]:
     lines = text.splitlines()
     pending: dict[str, list[int]] = {}
     spans: list[dict[str, object]] = []
-    seen_counts: dict[str, int] = {}
+    name_for = _occurrence_namer(lines)
     for match in ANCHOR_RE.finditer(text):
         raw = match.group(1)
         line_no = text.count("\n", 0, match.start()) + 1
         if raw.endswith("_START"):
             base = re.sub(r"_START$", "", raw)
-            seen_counts[base] = seen_counts.get(base, 0) + 1
-            occurrence = seen_counts[base]
-            display_name = base if occurrence == 1 else f"{base}_{occurrence}"
+            display_name = name_for(base)
             pending.setdefault(base, []).append(len(spans))
             span: dict[str, object] = {"name": display_name, "start": line_no, "end": None}
             sig = _find_signature(lines, line_no)  # line_no is 1-based, lines is 0-based → lines[line_no] = next line
@@ -867,14 +865,15 @@ def extract_anchor_line_ranges(path: Path) -> dict[str, tuple[int, int]]:
     # 같은 이름이 겹쳐 열릴 수 있으므로 이름당 스택으로 쌓는다.
     # extract_anchor_blocks 와 동일한 규칙이어야 두 함수 결과가 일치한다.
     starts: dict[str, list[tuple[int, str]]] = {}
-    seen: dict[str, int] = {}
-    for i, line in enumerate(text.splitlines(), start=1):
+    lines = text.splitlines()
+    name_for = _occurrence_namer(lines)
+    for i, line in enumerate(lines, start=1):
         marker = _parse_anchor_marker(line)
         if marker is None:
             continue
         name, is_start = marker
         if is_start:
-            starts.setdefault(name, []).append((i, _occurrence_name(seen, name)))
+            starts.setdefault(name, []).append((i, name_for(name)))
             continue
         stack = starts.get(name)
         if stack:
@@ -886,21 +885,51 @@ def extract_anchor_line_ranges(path: Path) -> dict[str, tuple[int, int]]:
 # === ANCHOR: ANCHOR_TOOLS_EXTRACT_ANCHOR_LINE_RANGES_END ===
 
 
-# === ANCHOR: ANCHOR_TOOLS__OCCURRENCE_NAME_START ===
-def _occurrence_name(seen: dict[str, int], name: str) -> str:
+# === ANCHOR: ANCHOR_TOOLS__OCCURRENCE_NAMER_START ===
+def _all_marker_names(lines: list[str]) -> set[str]:
+    names: set[str] = set()
+    for line in lines:
+        marker = _parse_anchor_marker(line)
+        if marker is not None:
+            names.add(marker[0])
+    return names
+
+
+def _occurrence_namer(lines: list[str]) -> Callable[[str], str]:
     """같은 이름이 여러 번 열릴 때 두 번째부터 NAME_2, NAME_3 로 구분한다.
 
     extract_anchor_spans 가 project map·MCP 에 이 이름을 광고하는데,
     blocks/ranges 가 기본 이름만 만들면 광고된 NAME_2 를 요청했을 때
     "anchor not found" 가 돌아온다 — PR #1 이 고친 결함과 같은 부류다.
-    번호는 START 가 나타난 순서로 매긴다(spans 와 동일).
+
+    파일에 진짜 A_2 앵커가 따로 있는데 A 의 두 번째 occurrence 도 A_2 가 되면
+    키가 겹쳐 한쪽이 조용히 덮인다 — MCP 가 요청과 다른 코드를 돌려준다.
+    그래서 파일의 실제 마커 이름 전체를 먼저 모아 예약어로 두고, 겹치는
+    후보는 건너뛴다. 세 함수(spans/blocks/ranges)가 같은 규칙을 써야
+    한 곳이 광고한 이름을 다른 곳이 못 찾는 일이 안 생긴다.
     """
-    seen[name] = seen.get(name, 0) + 1
-    occurrence = seen[name]
-    return name if occurrence == 1 else f"{name}_{occurrence}"
+    reserved = _all_marker_names(lines)
+    used: set[str] = set()
+    seen: dict[str, int] = {}
+
+    def assign(name: str) -> str:
+        seen[name] = seen.get(name, 0) + 1
+        occurrence = seen[name]
+        if occurrence == 1:
+            used.add(name)
+            return name
+        candidate_index = occurrence
+        while True:
+            candidate = f"{name}_{candidate_index}"
+            if candidate not in reserved and candidate not in used:
+                used.add(candidate)
+                return candidate
+            candidate_index += 1
+
+    return assign
 
 
-# === ANCHOR: ANCHOR_TOOLS__OCCURRENCE_NAME_END ===
+# === ANCHOR: ANCHOR_TOOLS__OCCURRENCE_NAMER_END ===
 
 
 # === ANCHOR: ANCHOR_TOOLS_ITER_ANCHOR_BLOCKS_START ===
@@ -950,14 +979,14 @@ def extract_anchor_blocks(
     # 같은 이름이 겹쳐 열리면 END 마다 join 이 돌아 2차 비용이 된다
     # (깊이 4000 실측 0.097s) — 어차피 뒤 END 가 덮어쓰므로 낭비다.
     spans: dict[str, tuple[int, int]] = {}
-    seen: dict[str, int] = {}
+    name_for = _occurrence_namer(lines)
     for i, line in enumerate(lines):
         marker = _parse_anchor_marker(line)
         if marker is None:
             continue
         name, is_start = marker
         if is_start:
-            open_starts.setdefault(name, []).append((i, _occurrence_name(seen, name)))
+            open_starts.setdefault(name, []).append((i, name_for(name)))
             continue
         stack = open_starts.get(name)
         if not stack:
@@ -1429,17 +1458,6 @@ def validate_anchor_file(path: Path) -> list[str]:
             continue
         for idx in range(len(open_starts) - 1, -1, -1):
             if open_starts[idx][0] == name:
-                # 이 앵커보다 나중에 열려 아직 안 닫힌 앵커가 있으면 교차다
-                # (A_START B_START A_END B_END). 중첩과 달리 한쪽 블록이 다른
-                # 쪽의 여는 마커만 품게 되어, 그 블록을 고치면 상대 앵커의
-                # 경계가 깨진다. 완전히 포함되는 중첩만 정상으로 본다.
-                crossing = [n for n, _ in open_starts[idx + 1 :]]
-                if crossing:
-                    problems.append(
-                        f"{line_no}번째 줄: {name}_END 가 "
-                        f"{', '.join(crossing)} 와 교차합니다 — "
-                        "앵커는 완전히 포개지거나 완전히 떨어져 있어야 합니다"
-                    )
                 del open_starts[idx]
                 break
         else:
@@ -1484,6 +1502,47 @@ def find_legacy_anchor_markers(text: str) -> list[str]:
 
 
 # === ANCHOR: ANCHOR_TOOLS_FIND_LEGACY_ANCHOR_MARKERS_END ===
+
+
+# === ANCHOR: ANCHOR_TOOLS_FIND_CROSSING_ANCHORS_START ===
+def find_crossing_anchors(text: str) -> list[str]:
+    """교차 앵커를 찾는다 — 차단이 아니라 경고다.
+
+    A_START B_START A_END B_END 에서 블록 A 는 B 의 여는 마커만 품는다.
+    A 를 고치면 B 의 경계가 깨지는데 짝은 맞으니 검증은 통과한다. 완전히
+    포개지거나(중첩) 완전히 떨어져 있어야 안전하다.
+
+    차단하지 않는 이유: `vib anchor --auto` 의 심볼 앵커 삽입이 여러 줄
+    시그니처에서 END 를 잘못된 위치에 넣어 이 형태를 스스로 만들어낸다.
+    이 리포만 175개 파일이 해당한다. 지금 차단으로 올리면 --auto 를 한 번이라도
+    돌린 모든 프로젝트의 validate 가 깨진다. 생성기를 먼저 고치고 그 다음
+    차단으로 승격하는 순서가 맞다 (soft → hard 승격).
+    """
+    problems: list[str] = []
+    open_starts: list[tuple[str, int]] = []
+    for line_no, line in enumerate(text.splitlines(), 1):
+        marker = _parse_anchor_marker(line)
+        if marker is None:
+            continue
+        name, is_start = marker
+        if is_start:
+            open_starts.append((name, line_no))
+            continue
+        for idx in range(len(open_starts) - 1, -1, -1):
+            if open_starts[idx][0] == name:
+                crossing = [n for n, _ in open_starts[idx + 1 :]]
+                if crossing:
+                    problems.append(
+                        f"{line_no}번째 줄: {name}_END 가 "
+                        f"{', '.join(crossing)} 와 교차합니다 — "
+                        "앵커는 완전히 포개지거나 완전히 떨어져 있어야 합니다"
+                    )
+                del open_starts[idx]
+                break
+    return problems
+
+
+# === ANCHOR: ANCHOR_TOOLS_FIND_CROSSING_ANCHORS_END ===
 
 
 # === ANCHOR: ANCHOR_TOOLS_FIND_MALFORMED_ANCHOR_MARKERS_START ===

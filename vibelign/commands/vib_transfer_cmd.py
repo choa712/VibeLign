@@ -1121,15 +1121,32 @@ def _archive_legacy_inline_handoff(root: Path, out_path: Path) -> Path | None:
     return archive
 
 
-def write_project_context(root: Path, out_path: Path, content: str) -> None:
-    """PROJECT_CONTEXT.md 를 원자적으로 교체 저장한다 (issue #2).
+def commit_project_context(
+    root: Path,
+    out_path: Path,
+    content: str,
+    *,
+    handoff_data: HandoffData | None = None,
+) -> Path | None:
+    """생성물과 handoff 원본을 한 잠금 안에서 함께 확정한다 (issue #2, #6).
 
-    잠금은 재생성 순서를 직렬화할 뿐이고, 잘린 파일이 남지 않게 하는 본체는
-    원자적 교체다. 잠금을 못 얻어도 저장은 진행한다 — 체크포인트가 잠금
-    때문에 실패하는 편이 더 나쁘다.
+    셋을 따로 쓰면 동시 실행 시 handoff.json 은 B, PROJECT_CONTEXT.md 는 A 로
+    갈려 세션 상태가 어긋난다 — 새 AI 가 읽는 두 파일이 서로 다른 세션을
+    가리키게 된다. 순서도 여기서 고정한다: 보관 → 저장 → 쓰기. 저장이 먼저면
+    handoff.json 이 생겨 보관 조건이 막히고 구버전 handoff 가 그냥 사라진다.
+
+    잠금은 순서를 직렬화할 뿐이고, 잘린 파일이 남지 않게 하는 본체는 원자적
+    교체다. 잠금을 못 얻어도 저장은 진행한다 — 체크포인트가 잠금 때문에
+    실패하는 편이 더 나쁘다.
+
+    구버전 인라인 handoff 를 보관했으면 그 경로를 돌려준다.
     """
     with file_lock(MetaPaths(root).context_lock_path):
+        archive = _archive_legacy_inline_handoff(root, out_path)
+        if handoff_data is not None:
+            save_handoff_data(root, handoff_data)
         atomic_write_text(out_path, content)
+    return archive
 
 
 def _build_context_content(
@@ -1619,7 +1636,10 @@ def run_transfer(args: object) -> None:
         clack_info(f"오류: {exc}")
         return
 
-    if handoff and ai and (no_prompt or not sys.stdin.isatty()):
+    # dry_run 이면 이 분기로 빠지지 않는다 — 여기는 무조건 파일을 쓰므로
+    # `--handoff --ai --dry-run` 이 미리보기가 아니라 실행이 돼버린다.
+    # 아래 일반 경로가 dry_run 을 지킨다.
+    if handoff and ai and not dry_run and (no_prompt or not sys.stdin.isatty()):
         _run_ai_handoff_non_interactive(
             root,
             out_path,
@@ -1648,12 +1668,10 @@ def run_transfer(args: object) -> None:
             verification=verification,
             decision=decision,
         )
-        _persist_handoff_memory(root, handoff_data)
-        # 보관이 저장보다 먼저다. 순서가 뒤집히면 handoff.json 이 생겨
-        # 보관 조건이 막히고, 파일 안에만 있던 구버전 handoff 가 보관
-        # 없이 덮여 사라진다.
-        _archive_legacy_inline_handoff(root, out_path)
-        save_handoff_data(root, handoff_data)
+        # dry-run 은 아무것도 쓰지 않는다. work memory·보관 파일·handoff.json
+        # 을 먼저 기록하면 "미리보기" 가 아니라 그냥 실행이다.
+        if not dry_run:
+            _persist_handoff_memory(root, handoff_data)
         content = _build_context_content(root, handoff_data=handoff_data)
     else:
         handoff_data = None
@@ -1677,9 +1695,7 @@ def run_transfer(args: object) -> None:
         clack_outro("dry-run 완료 — 실제 저장하려면 --dry-run 없이 실행하세요.")
         return
 
-    if not handoff:
-        _archive_legacy_inline_handoff(root, out_path)
-    write_project_context(root, out_path, content)
+    _ = commit_project_context(root, out_path, content, handoff_data=handoff_data)
 
     if handoff:
         _inject_agents_handoff_instruction(root)
@@ -1736,10 +1752,8 @@ def _run_ai_handoff_non_interactive(
         MetaPaths(root).work_memory_path,
         cast(dict[str, object], cast(object, handoff_data)),
     )
-    _archive_legacy_inline_handoff(root, out_path)
-    save_handoff_data(root, handoff_data)
     content = _build_context_content(root, handoff_data=handoff_data)
-    write_project_context(root, out_path, content)
+    _ = commit_project_context(root, out_path, content, handoff_data=handoff_data)
     _inject_agents_handoff_instruction(root)
     payload: dict[str, object] = {
         "ok": True,

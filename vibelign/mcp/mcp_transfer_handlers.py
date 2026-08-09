@@ -117,21 +117,14 @@ def handle_handoff_create(
     handoff_data = enrich_handoff_with_work_memory(root, handoff_data)
     persist_handoff_memory(root, handoff_data)
 
-    from vibelign.commands.vib_transfer_cmd import (
-        _archive_legacy_inline_handoff,
-        save_handoff_data,
-        write_project_context,
-    )
+    from vibelign.commands.vib_transfer_cmd import commit_project_context
 
-    # CLI 경로와 반드시 같이 움직여야 한다. 여기서 원본을 보관하지 않으면
+    # CLI 경로와 반드시 같은 함수를 쓴다. 여기서 원본을 보관하지 않으면
     # MCP 로 만든 handoff 만 다음 체크포인트에 사라진다 (issue #6).
+    # 보관·저장·쓰기의 순서와 잠금은 commit_project_context 안에 있다.
     ctx_path = root / "PROJECT_CONTEXT.md"
-    # 보관이 저장보다 먼저 (CLI 경로와 동일 — 순서가 뒤집히면 구버전
-    # 인라인 handoff 가 보관 없이 덮인다).
-    _archive_legacy_inline_handoff(root, ctx_path)
-    save_handoff_data(root, handoff_data)
     content = build_context_content(root, handoff_data=handoff_data)
-    write_project_context(root, ctx_path, content)
+    _ = commit_project_context(root, ctx_path, content, handoff_data=handoff_data)
     inject_agents_handoff_instruction(root)
     return _text(
         text_content,

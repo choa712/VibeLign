@@ -19,7 +19,7 @@ from vibelign.commands.vib_transfer_cmd import (
     _build_context_content,
     load_handoff_data,
     save_handoff_data,
-    write_project_context,
+    commit_project_context,
 )
 from vibelign.core.atomic_write import atomic_write_text, file_lock
 from vibelign.core.meta_paths import MetaPaths
@@ -147,7 +147,7 @@ class TestLegacyMigration:
         assert archive is not None
         assert archive.read_text(encoding="utf-8") == body
 
-    def test_archive_runs_before_save_in_every_write_path(self) -> None:
+    def test_archive_runs_before_save_inside_commit(self) -> None:
         """보관이 저장보다 먼저 호출돼야 한다.
 
         순서가 뒤집히면 save 가 handoff.json 을 만들어 보관 조건이 막히고,
@@ -155,15 +155,21 @@ class TestLegacyMigration:
         """
         sources = {
             "cli": (Path("vibelign") / "commands" / "vib_transfer_cmd.py"),
-            "mcp": (Path("vibelign") / "mcp" / "mcp_transfer_handlers.py"),
         }
         for label, path in sources.items():
             lines = path.read_text(encoding="utf-8").splitlines()
+            # def 줄은 제외한다 — 정의가 위에 있다는 이유로 항상 통과하면
+            # 이 테스트는 아무것도 검증하지 않는다.
             archive_lines = [
-                i for i, x in enumerate(lines) if "_archive_legacy_inline_handoff(" in x
+                i
+                for i, x in enumerate(lines)
+                if "_archive_legacy_inline_handoff(" in x
+                and not x.lstrip().startswith("def ")
             ]
             save_lines = [
-                i for i, x in enumerate(lines) if x.strip().startswith("save_handoff_data(")
+                i
+                for i, x in enumerate(lines)
+                if x.strip().startswith("save_handoff_data(")
             ]
             assert save_lines, f"{label}: save_handoff_data 호출이 없습니다"
             for save_at in save_lines:
@@ -232,10 +238,20 @@ class TestAtomicWrite:
         assert seen == ["old" * 1000]
         assert p.read_text(encoding="utf-8") == "new" * 1000
 
-    def test_write_project_context_uses_atomic_path(self, tmp_path: Path) -> None:
+    def test_commit_project_context_uses_atomic_path(self, tmp_path: Path) -> None:
         ctx = tmp_path / "PROJECT_CONTEXT.md"
-        write_project_context(tmp_path, ctx, "생성물")
+        assert commit_project_context(tmp_path, ctx, "생성물") is None
         assert ctx.read_text(encoding="utf-8") == "생성물"
+
+    def test_commit_writes_handoff_and_context_together(self, tmp_path: Path) -> None:
+        """둘을 따로 쓰면 동시 실행 시 서로 다른 세션을 가리키게 된다."""
+        ctx = tmp_path / "PROJECT_CONTEXT.md"
+        _ = commit_project_context(
+            tmp_path, ctx, "본문", handoff_data=_handoff()  # type: ignore[arg-type]
+        )
+        assert ctx.read_text(encoding="utf-8") == "본문"
+        stored = load_handoff_data(tmp_path)
+        assert stored is not None and stored["source"] == "cli"
 
     def test_lock_is_advisory_and_reentrant_across_calls(self, tmp_path: Path) -> None:
         lock_path = tmp_path / "x.lock"
@@ -288,13 +304,13 @@ class TestWritePathParity:
             else Path("vibelign") / "commands" / "vib_transfer_cmd.py"
         ).read_text(encoding="utf-8")
 
-    def test_mcp_handoff_persists_the_source_of_truth(self) -> None:
-        assert "save_handoff_data(root, handoff_data)" in self._source("mcp")
-
-    def test_mcp_uses_atomic_context_write(self) -> None:
+    def test_mcp_goes_through_the_same_commit_helper(self) -> None:
         source = self._source("mcp")
-        assert "write_project_context(root, ctx_path, content)" in source
+        assert "commit_project_context(" in source
         assert "ctx_path.write_text" not in source
+
+    def test_cli_goes_through_the_same_commit_helper(self) -> None:
+        assert "commit_project_context(" in self._source("cli")
 
     def test_no_raw_project_context_write_remains(self) -> None:
         for name in ("mcp", "cli"):
@@ -304,4 +320,78 @@ class TestWritePathParity:
 
 
 # === ANCHOR: TEST_HANDOFF_OUT_OF_BAND_STORAGE_TESTWRITEPATHPARITY_END ===
+
+
+# === ANCHOR: TEST_HANDOFF_OUT_OF_BAND_STORAGE_TESTDRYRUNWRITESNOTHING_START ===
+class TestDryRunWritesNothing:
+    """dry-run 이 파일을 남기면 미리보기가 아니라 그냥 실행이다."""
+
+    def _run(self, cwd: Path, *args: str) -> int:
+        import os
+        import subprocess
+        import sys
+
+        proc = subprocess.run(
+            [sys.executable, "-m", "vibelign", "transfer", *args],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PYTHONPATH": str(Path.cwd())},
+        )
+        return proc.returncode
+
+    def _project(self, tmp_path: Path) -> Path:
+        marker = "=" * 3
+        (tmp_path / "src").mkdir()
+        _ = (tmp_path / "src" / "app.py").write_text(
+            f"# {marker} ANCHOR: APP_START {marker}\n"
+            "x = 1\n"
+            f"# {marker} ANCHOR: APP_END {marker}\n",
+            encoding="utf-8",
+        )
+        return tmp_path
+
+    def test_dry_run_leaves_no_state_files(self, tmp_path: Path) -> None:
+        root = self._project(tmp_path)
+        original = "## Session Handoff\n구버전 인수인계\n"
+        ctx = root / "PROJECT_CONTEXT.md"
+        _ = ctx.write_text(original, encoding="utf-8")
+
+        rc = self._run(
+            root,
+            "--handoff",
+            "--no-prompt",
+            "--dry-run",
+            "--session-summary",
+            "미리보기",
+            "--first-next-action",
+            "다음",
+        )
+        assert rc == 0
+        meta = MetaPaths(root)
+        assert not meta.handoff_path.exists()
+        assert not meta.work_memory_path.exists()
+        assert list(meta.vibelign_dir.glob("handoff-legacy-*.md")) == []
+        assert ctx.read_text(encoding="utf-8") == original
+
+    def test_ai_dry_run_does_not_take_the_writing_branch(self, tmp_path: Path) -> None:
+        # --ai 비대화형 분기는 무조건 파일을 쓴다 — dry_run 이면 타면 안 된다.
+        root = self._project(tmp_path)
+        rc = self._run(
+            root,
+            "--handoff",
+            "--ai",
+            "--no-prompt",
+            "--dry-run",
+            "--session-summary",
+            "미리보기",
+            "--first-next-action",
+            "다음",
+        )
+        assert rc == 0
+        assert not (root / "PROJECT_CONTEXT.md").exists()
+        assert not MetaPaths(root).handoff_path.exists()
+
+
+# === ANCHOR: TEST_HANDOFF_OUT_OF_BAND_STORAGE_TESTDRYRUNWRITESNOTHING_END ===
 # === ANCHOR: TEST_HANDOFF_OUT_OF_BAND_STORAGE_END ===
