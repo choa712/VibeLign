@@ -102,6 +102,18 @@ class TestMalformed:
         text = f"/* {MARKER.format(name='G_START')} */\n"
         assert find_malformed_anchor_markers(text)
 
+    def test_jsx_wrapped_marker_is_surfaced(self) -> None:
+        # 생성기는 이 형태를 만들지 않으므로 정본 파서가 읽지 않는다.
+        # 조용히 무시하면 그 파일은 보호받는 줄 알고 방치된다.
+        text = "{/* " + MARKER.format(name="J_START") + " */}\n"
+        assert find_malformed_anchor_markers(text)
+
+    def test_marker_without_direction_suffix_is_surfaced(self) -> None:
+        # `=== ANCHOR: FOO ===` — 형식은 정본인데 _START/_END 가 없다.
+        text = "# " + MARKER.format(name="NODIR") + "\n"
+        problems = find_malformed_anchor_markers(text)
+        assert problems and "NODIR" in problems[0]
+
     def test_canonical_marker_is_not_malformed(self, tmp_path: Path) -> None:
         text = f"# {MARKER.format(name='H_START')}\nx = 1\n# {MARKER.format(name='H_END')}\n"
         assert find_malformed_anchor_markers(text) == []

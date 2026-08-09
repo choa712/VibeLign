@@ -1460,8 +1460,16 @@ def find_legacy_anchor_markers(text: str) -> list[str]:
 # 산문과 구분하기 위해 주석 접두사를 걷어낸 나머지가 곧바로 마커 시도로
 # 시작할 때만 잡는다. "# format: ... ANCHOR: FOO_START" 같은 설명문은
 # 나머지가 'format:' 으로 시작하므로 걸리지 않는다.
-_COMMENT_LEAD_RE = re.compile(r"^[ \t]*(?://+|#+|/\*+|\*+)[ \t]*")
+# 여는 중괄호를 허용하는 이유: JSX 의 `{/* ... */}` 형태로 마커를 적는
+# 사람이 있는데, 생성기는 그 형태를 만들지 않으므로 정본 파서가 읽지 않는다.
+# 조용히 무시하면 그 파일은 보호받는 줄 알고 방치된다.
+_COMMENT_LEAD_RE = re.compile(r"^[ \t]*\{?[ \t]*(?://+|#+|/\*+|\*+)[ \t]*")
 _MARKER_ATTEMPT_RE = re.compile(r"^=*[ \t]*ANCHOR:[ \t]*[A-Z0-9_]+(?:_START|_END)\b")
+# 방향 접미사가 빠진 마커(`=== ANCHOR: FOO ===`). 형식은 정본인데 START/END 가
+# 없어 파서가 경계로 쓰지 못한다 — 흔한 오타이고, 역시 조용히 무시된다.
+_DIRECTIONLESS_MARKER_RE = re.compile(
+    r"^=+[ \t]*ANCHOR:[ \t]*([A-Z0-9_]+)[ \t]*=+[ \t\r]*$"
+)
 
 
 def find_malformed_anchor_markers(text: str) -> list[str]:
@@ -1475,7 +1483,14 @@ def find_malformed_anchor_markers(text: str) -> list[str]:
         lead = _COMMENT_LEAD_RE.match(line)
         if lead is None:
             continue
-        if not _MARKER_ATTEMPT_RE.match(line[lead.end() :]):
+        rest = line[lead.end() :]
+        directionless = _DIRECTIONLESS_MARKER_RE.match(rest)
+        if directionless is not None:
+            name = directionless.group(1)
+            if not name.endswith(("_START", "_END")):
+                broken.append(f"{line_no}번째 줄({name}: _START/_END 누락)")
+                continue
+        if not _MARKER_ATTEMPT_RE.match(rest):
             continue
         broken.append(f"{line_no}번째 줄")
     if not broken:
