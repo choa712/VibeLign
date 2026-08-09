@@ -131,7 +131,7 @@ def handle_handoff_create(
             ctx_path,
             lambda: build_context_content(root, handoff_data=handoff_data),
             handoff_data=handoff_data,
-            before_commit=lambda: persist_handoff_memory(root, handoff_data),
+            after_commit=lambda: persist_handoff_memory(root, handoff_data),
         )
     except PartialCommitError as exc:
         # 정본은 이미 갱신됐다 — "중단" 으로 보고하면 호출한 AI 가 원래

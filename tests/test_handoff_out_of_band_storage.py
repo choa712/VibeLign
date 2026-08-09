@@ -495,30 +495,74 @@ class TestAtomicWrite:
         assert load_handoff_data(tmp_path) is not None
         assert not ctx.exists()
 
-    def test_symlink_target_is_written_not_replaced(self, tmp_path: Path) -> None:
+    def test_symlink_inside_root_is_followed(self, tmp_path: Path) -> None:
         """링크를 일반 파일로 바꾸면 공유 정책(AGENTS.md 등)이 조용히 끊긴다.
 
         os.replace 는 링크 자체를 갈아끼운다. write_text 는 링크를 따라가므로
-        그 동작에 맞춰야 한다.
+        root 안이면 그 동작에 맞춘다.
         """
         target = tmp_path / "shared.md"
         _ = target.write_text("원본", encoding="utf-8")
         link = tmp_path / "AGENTS.md"
         link.symlink_to(target)
 
-        atomic_write_text(link, "새 내용")
+        atomic_write_text(link, "새 내용", root=tmp_path)
 
         assert link.is_symlink()
         assert target.read_text(encoding="utf-8") == "새 내용"
 
-    def test_broken_symlink_creates_the_target(self, tmp_path: Path) -> None:
+    def test_broken_symlink_inside_root_creates_the_target(self, tmp_path: Path) -> None:
         link = tmp_path / "dangling.md"
         link.symlink_to(tmp_path / "missing.md")
 
-        atomic_write_text(link, "생성")
+        atomic_write_text(link, "생성", root=tmp_path)
 
         assert link.is_symlink()
         assert (tmp_path / "missing.md").read_text(encoding="utf-8") == "생성"
+
+    def test_symlink_escaping_root_is_refused(self, tmp_path: Path) -> None:
+        """프로젝트 밖을 가리키는 링크를 따라가면 임의 파일 쓰기가 된다.
+
+        악의적 저장소가 .vibelign/handoff.json 을 시스템의 아무 파일로
+        링크해 두면, 체크아웃 후 vib transfer --handoff 한 번으로 그 파일이
+        덮인다. 조용히 링크만 바꾸지도 않는다 — 거부하고 알린다.
+        """
+        outside = tmp_path.parent / "victim.txt"
+        _ = outside.write_text("건드리면 안 됨", encoding="utf-8")
+        root = tmp_path / "proj"
+        root.mkdir()
+        link = root / "PROJECT_CONTEXT.md"
+        link.symlink_to(outside)
+
+        with pytest.raises(OSError, match="프로젝트 밖"):
+            atomic_write_text(link, "탈취", root=root)
+
+        assert outside.read_text(encoding="utf-8") == "건드리면 안 됨"
+
+    def test_symlink_is_not_followed_without_root(self, tmp_path: Path) -> None:
+        """기본값은 따라가지 않는 쪽 — root 를 아는 호출자만 허용한다."""
+        target = tmp_path / "shared.md"
+        _ = target.write_text("원본", encoding="utf-8")
+        link = tmp_path / "link.md"
+        link.symlink_to(target)
+
+        atomic_write_text(link, "새 내용")
+
+        assert not link.is_symlink()  # 링크 자체가 교체됨
+        assert target.read_text(encoding="utf-8") == "원본"  # 대상은 그대로
+
+    def test_commit_refuses_context_symlink_escaping_root(self, tmp_path: Path) -> None:
+        outside = tmp_path.parent / "victim2.txt"
+        _ = outside.write_text("보존", encoding="utf-8")
+        root = tmp_path / "proj"
+        root.mkdir()
+        ctx = root / "PROJECT_CONTEXT.md"
+        ctx.symlink_to(outside)
+
+        with pytest.raises(OSError, match="프로젝트 밖"):
+            _ = commit_project_context(root, ctx, lambda: "탈취")
+
+        assert outside.read_text(encoding="utf-8") == "보존"
 
     def test_commit_pair_preserves_symlinks(self, tmp_path: Path) -> None:
         target = tmp_path / "real-context.md"
@@ -535,6 +579,37 @@ class TestAtomicWrite:
 
         assert ctx.is_symlink()
         assert target.read_text(encoding="utf-8") == "새 본문"
+
+    def test_after_commit_runs_only_when_files_landed(self, tmp_path: Path) -> None:
+        """저장이 실패했는데 work_memory 에만 기록이 남으면 안 된다.
+
+        기록은 파일이 실제로 착지한 뒤에 한다 — 앞에 두면 '저장 안 됨' 이라고
+        보고하면서 메모리에는 그 handoff 가 남아 기록과 사실이 어긋난다.
+        """
+        ctx = tmp_path / "PROJECT_CONTEXT.md"
+        ran: list[str] = []
+
+        def boom() -> str:
+            raise RuntimeError("본문 생성 실패")
+
+        with pytest.raises(RuntimeError):
+            _ = commit_project_context(
+                tmp_path,
+                ctx,
+                boom,
+                handoff_data=_handoff(),  # type: ignore[arg-type]
+                after_commit=lambda: ran.append("recorded"),
+            )
+        assert ran == []
+
+        _ = commit_project_context(
+            tmp_path,
+            ctx,
+            lambda: "본문",
+            handoff_data=_handoff(),  # type: ignore[arg-type]
+            after_commit=lambda: ran.append("recorded"),
+        )
+        assert ran == ["recorded"]
 
     def test_partial_commit_error_is_an_oserror(self) -> None:
         # 기존 호출부의 except OSError 가 계속 받아야 한다.
