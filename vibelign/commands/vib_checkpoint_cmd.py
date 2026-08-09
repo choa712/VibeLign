@@ -217,7 +217,8 @@ def run_vib_checkpoint(args: object) -> None:
                 # handoff 는 있는데 경계를 확정할 수 없다 (구버전·수동 편집 등).
                 # 이 상태로 재생성하면 세션 상태가 영구 삭제되므로 손대지 않는다.
                 raise HandoffBoundaryUnresolved(
-                    "handoff 블록 경계를 확정할 수 없어 PROJECT_CONTEXT.md 를 그대로 둡니다"
+                    "handoff 블록에 끝 표시가 없어 PROJECT_CONTEXT.md 를 그대로 둡니다"
+                    " — `vib transfer --handoff` 로 한 번 다시 만들면 이후 자동 보존됩니다"
                 )
         _ = ctx_path.write_text(
             build_context_content(root, preserved_handoff=preserved_handoff),

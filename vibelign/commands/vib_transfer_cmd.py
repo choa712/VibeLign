@@ -1065,18 +1065,22 @@ def _build_current_work_section(
 
 
 _HANDOFF_HEADING = "## Session Handoff"
-# 생성된 본문의 시작 H1. handoff 블록의 끝 경계는 "아무 H1"이 아니라
-# 반드시 이 줄이어야 한다 — handoff 필드는 사용자/커밋 메시지에서 온
-# 자유 텍스트라 '# ' 로 시작하는 줄을 품을 수 있고, 그걸 경계로 삼으면
-# 뒤쪽 세션 상태가 통째로 잘려나간다 (보존하려던 것을 잃는다).
-_GENERATED_H1_RE = re.compile(r"^# ⚡ .+ — AI Transfer Context\s*$")
+# handoff 블록의 끝을 표시하는 전용 sentinel.
+#
+# 예전에는 문서 서식(다음 H1)에서 경계를 추론했는데, handoff 필드는 커밋
+# 메시지 등에서 온 자유 텍스트라 어떤 서식이든 품을 수 있어 양쪽으로 다
+# 깨졌다: 첫 매치를 쓰면 본문에 섞인 H1 에서 잘려 뒤쪽 상태를 잃고,
+# 마지막 매치를 쓰면 AGENTS.md 가 실린 생성 본문의 H1 까지 밀려 본문이
+# handoff 로 흡수돼 체크포인트마다 누적된다. 경계는 추론이 아니라
+# 표시해야 한다.
+HANDOFF_END_SENTINEL = "<!-- vibelign:handoff-end -->"
 
 
 def contains_handoff(text: str) -> bool:
     """Session Handoff 블록이 들어 있는지만 판정.
 
     extract_handoff_section 이 None 을 돌려준 이유가 '블록이 없어서'인지
-    '경계를 확정 못 해서'인지 호출부가 구분해야 한다 — 후자를 없음으로
+    'sentinel 이 없어서'인지 호출부가 구분해야 한다 — 후자를 없음으로
     취급하고 재생성하면 세션 상태가 영구 삭제된다.
     """
     return any(line.strip() == _HANDOFF_HEADING for line in text.splitlines())
@@ -1085,10 +1089,9 @@ def contains_handoff(text: str) -> bool:
 def extract_handoff_section(text: str) -> str | None:
     """PROJECT_CONTEXT.md 본문에서 Session Handoff 블록만 잘라낸다.
 
-    블록은 '## Session Handoff' 부터 생성 본문 H1 직전까지다
-    (_build_context_content 가 handoff_section 을 그 H1 바로 앞에 끼워 넣는다).
-    경계 H1 을 찾지 못하면 잘라낼 범위를 확정할 수 없으므로 None 을 돌려준다
-    — 어림짐작으로 자르면 조용한 데이터 손실이 된다.
+    블록은 '## Session Handoff' 부터 HANDOFF_END_SENTINEL 까지(포함)다.
+    sentinel 이 없는 문서(구버전·수동 편집)는 경계를 확정할 수 없으므로
+    None 을 돌려준다 — 호출부는 이때 재생성을 건너뛰어야 한다.
     """
     lines = text.splitlines()
     start = next(
@@ -1096,15 +1099,17 @@ def extract_handoff_section(text: str) -> str | None:
     )
     if start is None:
         return None
-    # 마지막 매치를 쓴다. handoff 자유 텍스트가 이 H1 모양을 그대로 품어도
-    # 진짜 생성 H1 은 항상 그 뒤에 오므로, 첫 매치를 쓰면 뒤쪽 상태가 잘린다.
     end = next(
-        (i for i in range(len(lines) - 1, start, -1) if _GENERATED_H1_RE.match(lines[i])),
+        (
+            i
+            for i in range(start + 1, len(lines))
+            if lines[i].strip() == HANDOFF_END_SENTINEL
+        ),
         None,
     )
     if end is None:
         return None
-    section = "\n".join(lines[start:end]).rstrip()
+    section = "\n".join(lines[start : end + 1]).rstrip()
     return f"{section}\n\n" if section else None
 
 
@@ -1145,8 +1150,14 @@ def _build_context_content(
     # Session Handoff 블록 (--handoff 모드일 때만)
     handoff_section = ""
     if handoff_data:
-        handoff_section = _build_handoff_block(handoff_data) + "\n---\n\n"
+        handoff_section = (
+            _build_handoff_block(handoff_data)
+            + "\n---\n\n"
+            + HANDOFF_END_SENTINEL
+            + "\n\n"
+        )
     elif preserved_handoff:
+        # 보존 블록은 sentinel 을 이미 품고 있다 (extract 가 포함해 잘라낸다)
         handoff_section = preserved_handoff
 
     content = f"""{_TRANSFER_MARKER}
