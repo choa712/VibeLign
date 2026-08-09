@@ -1,5 +1,5 @@
 # === ANCHOR: ANCHOR_TOOLS_START ===
-from collections.abc import Collection
+from collections.abc import Collection, Iterator
 from pathlib import Path
 import hashlib
 import json
@@ -859,20 +859,44 @@ def extract_anchor_line_ranges(path: Path) -> dict[str, tuple[int, int]]:
     if not text:
         return {}
     ranges: dict[str, tuple[int, int]] = {}
-    starts: dict[str, int] = {}
+    # 같은 이름이 겹쳐 열릴 수 있으므로 이름당 스택으로 쌓는다.
+    # extract_anchor_blocks 와 동일한 규칙이어야 두 함수 결과가 일치한다.
+    starts: dict[str, list[int]] = {}
     for i, line in enumerate(text.splitlines(), start=1):
         marker = _parse_anchor_marker(line)
         if marker is None:
             continue
         name, is_start = marker
         if is_start:
-            starts[name] = i
-        elif name in starts:
-            ranges[name] = (starts.pop(name), i)
+            starts.setdefault(name, []).append(i)
+            continue
+        stack = starts.get(name)
+        if stack:
+            ranges[name] = (stack.pop(), i)
     return ranges
 
 
 # === ANCHOR: ANCHOR_TOOLS_EXTRACT_ANCHOR_LINE_RANGES_END ===
+
+
+# === ANCHOR: ANCHOR_TOOLS_ITER_ANCHOR_BLOCKS_START ===
+def iter_anchor_blocks(path: Path) -> Iterator[tuple[str, str]]:
+    """앵커 블록을 (이름, 코드) 로 하나씩 내보낸다.
+
+    중첩 앵커는 바깥 블록이 안쪽 본문을 다시 담으므로, 전부 dict 로 만들면
+    중첩 깊이에 비례해 메모리가 늘어난다 (깊이 1200 실측 peak 41MB).
+    모든 블록을 훑되 한 번에 하나만 들고 있으면 되는 호출자(intent 생성)는
+    이 함수를 쓴다. 결과는 extract_anchor_blocks 와 동일하다.
+    """
+    text = safe_read_text(path)
+    if not text:
+        return
+    lines = text.splitlines()
+    for name, (start_line, end_line) in extract_anchor_line_ranges(path).items():
+        yield name, "\n".join(lines[start_line : end_line - 1]).strip()
+
+
+# === ANCHOR: ANCHOR_TOOLS_ITER_ANCHOR_BLOCKS_END ===
 
 
 # === ANCHOR: ANCHOR_TOOLS_EXTRACT_ANCHOR_BLOCKS_START ===
@@ -1014,7 +1038,7 @@ def generate_code_based_intents(root: Path, paths: list[Path]) -> int:
     existing = load_anchor_meta(root)
     count = 0
     for path in paths:
-        for anchor, code in extract_anchor_blocks(path).items():
+        for anchor, code in iter_anchor_blocks(path):
             aliases, description = generate_code_based_aliases(anchor, code)
             if not aliases:
                 continue
@@ -1209,7 +1233,7 @@ def generate_anchor_intents_with_ai(
     cached_hit = 0
     backfill_anchors: list[str] = []
     for path in paths:
-        for anchor, code in extract_anchor_blocks(path).items():
+        for anchor, code in iter_anchor_blocks(path):
             entry = existing.get(anchor, {})
             current_hash = _anchor_content_hash(code)
             hashes[anchor] = current_hash
