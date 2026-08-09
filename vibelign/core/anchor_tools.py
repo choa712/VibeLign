@@ -1389,8 +1389,37 @@ def validate_anchor_file(path: Path) -> list[str]:
             problems.append(f"{name}_END 에 대응하는 START 가 없습니다")
     if not start_markers and not end_markers:
         problems.append("앵커가 없습니다")
+    problems.extend(find_legacy_anchor_markers(text))
     return problems
 
 
 # === ANCHOR: ANCHOR_TOOLS_VALIDATE_ANCHOR_FILE_END ===
+
+
+# === ANCHOR: ANCHOR_TOOLS_FIND_LEGACY_ANCHOR_MARKERS_START ===
+# 등호로 감싸지 않은 옛 마커. 정본 파서는 이제 이 형식을 인정하지 않으므로,
+# 예전 프로젝트가 조용히 보호 구역을 잃지 않도록 검증에서 드러낸다.
+_LEGACY_MARKER_RE = re.compile(
+    r"^[ \t]*(?://|#)[ \t]*ANCHOR:[ \t]*([A-Z0-9_]+)_(?:START|END)[ \t]*$"
+)
+
+
+def find_legacy_anchor_markers(text: str) -> list[str]:
+    """구 형식(등호 없는) 앵커 마커를 찾아 경고 문구로 돌려준다."""
+    names: list[str] = []
+    for line in text.splitlines():
+        match = _LEGACY_MARKER_RE.match(line)
+        if match and match.group(1) not in names:
+            names.append(match.group(1))
+    if not names:
+        return []
+    listed = ", ".join(names[:5]) + (" 외" if len(names) > 5 else "")
+    return [
+        f"구 형식 앵커 마커 {len(names)}개가 있습니다 ({listed}) — "
+        "등호로 감싼 정본 형식이 아니라 어떤 파서도 읽지 않습니다. "
+        "정본 형식으로 바꾸거나 제거하세요"
+    ]
+
+
+# === ANCHOR: ANCHOR_TOOLS_FIND_LEGACY_ANCHOR_MARKERS_END ===
 # === ANCHOR: ANCHOR_TOOLS_END ===
