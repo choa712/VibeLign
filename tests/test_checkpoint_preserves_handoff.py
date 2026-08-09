@@ -8,8 +8,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from vibelign.commands import vib_checkpoint_cmd
 from vibelign.commands.vib_transfer_cmd import (
     _build_context_content,
+    contains_handoff,
     extract_handoff_section,
 )
 
@@ -146,3 +148,72 @@ def test_explicit_handoff_data_wins_over_preserved(tmp_path: Path) -> None:
     # ("Primary work item" 은 새로 생성되는 블록도 쓰는 문구라 판별에 못 쓴다)
     assert "out/report.html" not in rebuilt
     assert "튜토리얼 저장→되돌리기" not in rebuilt
+
+
+# 경계를 확정할 수 없는 문서: handoff 는 있는데 생성 H1 형식이 아니다
+# (구버전 파일, 사람이 손으로 고친 파일 등).
+UNRESOLVABLE = (
+    "## Session Handoff\n"
+    "- **Next action**: 반드시 지켜져야 하는 세션 상태\n\n"
+    "### Active intent\n"
+    "이 내용은 어떤 경우에도 삭제되면 안 된다.\n\n"
+    "---\n\n"
+    "# 손으로 바꾼 제목\n\n> 본문\n"
+)
+
+
+def test_contains_handoff_distinguishes_absent_from_unresolvable() -> None:
+    assert contains_handoff(UNRESOLVABLE) is True
+    assert extract_handoff_section(UNRESOLVABLE) is None
+    assert contains_handoff("# ⚡ demo — AI Transfer Context\n") is False
+
+
+class _Summary:
+    file_count = 1
+    pruned_count = 0
+    pruned_bytes = 0
+
+
+def test_checkpoint_skips_rewrite_when_boundary_unresolvable(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """경계 미확정이면 PROJECT_CONTEXT.md 를 아예 건드리지 않아야 한다.
+
+    None 을 '없음'으로 취급해 재생성하면 세션 상태가 영구 삭제된다.
+    """
+    ctx = tmp_path / "PROJECT_CONTEXT.md"
+    ctx.write_text(UNRESOLVABLE, encoding="utf-8")
+    before = ctx.read_text(encoding="utf-8")
+
+    monkeypatch.setattr(vib_checkpoint_cmd, "resolve_project_root", lambda _: tmp_path)
+    monkeypatch.setattr(
+        vib_checkpoint_cmd, "create_for_cli", lambda root, msg: (_Summary(), None)
+    )
+
+    vib_checkpoint_cmd.run_vib_checkpoint(
+        type("Args", (), {"json": False, "message": ["테스트"]})()
+    )
+
+    assert ctx.read_text(encoding="utf-8") == before
+    out = capsys.readouterr().out
+    assert "경계를 확정할 수 없어" in out
+
+
+def test_checkpoint_rewrites_when_boundary_is_resolvable(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    ctx = tmp_path / "PROJECT_CONTEXT.md"
+    ctx.write_text(CONTEXT, encoding="utf-8")
+
+    monkeypatch.setattr(vib_checkpoint_cmd, "resolve_project_root", lambda _: tmp_path)
+    monkeypatch.setattr(
+        vib_checkpoint_cmd, "create_for_cli", lambda root, msg: (_Summary(), None)
+    )
+
+    vib_checkpoint_cmd.run_vib_checkpoint(
+        type("Args", (), {"json": False, "message": ["테스트"]})()
+    )
+
+    after = ctx.read_text(encoding="utf-8")
+    assert extract_handoff_section(after) == extract_handoff_section(CONTEXT)
+    assert "경계를 확정할 수 없어" not in capsys.readouterr().out

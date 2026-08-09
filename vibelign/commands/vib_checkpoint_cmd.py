@@ -42,8 +42,19 @@ def _checkpoint_file_to_dict(file_item: object) -> dict[str, object] | None:
     }
 
 
+class HandoffBoundaryUnresolved(Exception):
+    """handoff 블록은 있는데 경계를 확정할 수 없는 상태.
+
+    이때 PROJECT_CONTEXT.md 를 재생성하면 세션 상태가 영구 삭제된다.
+    """
+
+
 class HandoffExtractor(Protocol):
     def __call__(self, text: str) -> str | None: ...
+
+
+class HandoffDetector(Protocol):
+    def __call__(self, text: str) -> bool: ...
 
 
 class TransferBuilder(Protocol):
@@ -184,20 +195,37 @@ def run_vib_checkpoint(args: object) -> None:
                 "extract_handoff_section",
             ),
         )
+        contains_handoff = cast(
+            HandoffDetector,
+            getattr(
+                cast(
+                    object,
+                    importlib.import_module("vibelign.commands.vib_transfer_cmd"),
+                ),
+                "contains_handoff",
+            ),
+        )
         ctx_path = root / "PROJECT_CONTEXT.md"
         # handoff 는 세션 상태라 체크포인트가 재생성할 대상이 아니다.
         # 기존 블록을 떠서 그대로 실어 보존한다 (예전에는 경고만 하고 날렸다).
         preserved_handoff: str | None = None
         if ctx_path.exists():
-            preserved_handoff = extract_handoff_section(
-                ctx_path.read_text(encoding="utf-8")
-            )
+            raw = ctx_path.read_text(encoding="utf-8")
+            preserved_handoff = extract_handoff_section(raw)
             handoff_preserved = preserved_handoff is not None
+            if preserved_handoff is None and contains_handoff(raw):
+                # handoff 는 있는데 경계를 확정할 수 없다 (구버전·수동 편집 등).
+                # 이 상태로 재생성하면 세션 상태가 영구 삭제되므로 손대지 않는다.
+                raise HandoffBoundaryUnresolved(
+                    "handoff 블록 경계를 확정할 수 없어 PROJECT_CONTEXT.md 를 그대로 둡니다"
+                )
         _ = ctx_path.write_text(
             build_context_content(root, preserved_handoff=preserved_handoff),
             encoding="utf-8",
         )
         context_updated = True
+    except HandoffBoundaryUnresolved as exc:
+        context_update_error = str(exc)
     except (ImportError, AttributeError, OSError) as exc:
         context_update_error = str(exc)
 

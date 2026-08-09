@@ -43,7 +43,10 @@ WINDOWS_SUBPROCESS_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32
 # 경로(fast_tools)와 Python 경로(anchor_tools)가 갈라져 ripgrep 설치
 # 여부에 따라 `vib anchor --auto` 대상이 바뀌는 결함이 있었다.
 # rg 는 -o 로 매치 전체를 출력하므로 같은 패턴 문자열을 그대로 쓴다.
-ANCHOR_MARKER_PATTERN = r"===\s*ANCHOR:\s*([A-Z0-9_]+)\s*==="
+# 공백은 같은 줄 안에서만 허용한다(\s 는 개행도 먹는다). Python 은 전문
+# 검색(finditer), ripgrep 과 마커 파서는 줄 단위라, 개행을 허용하면 줄을
+# 넘겨 쓴 마커가 경로마다 다르게 인식돼 인덱스·span·block 이 어긋난다.
+ANCHOR_MARKER_PATTERN = r"===[ \t]*ANCHOR:[ \t]*([A-Z0-9_]+)[ \t]*==="
 
 GENERATED_ARTIFACT_DIR_NAMES: frozenset[str] = frozenset(
     {"dist", "build", "target", ".next", ".pnpm-store", "node_modules"}

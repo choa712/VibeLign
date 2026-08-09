@@ -1072,6 +1072,16 @@ _HANDOFF_HEADING = "## Session Handoff"
 _GENERATED_H1_RE = re.compile(r"^# ⚡ .+ — AI Transfer Context\s*$")
 
 
+def contains_handoff(text: str) -> bool:
+    """Session Handoff 블록이 들어 있는지만 판정.
+
+    extract_handoff_section 이 None 을 돌려준 이유가 '블록이 없어서'인지
+    '경계를 확정 못 해서'인지 호출부가 구분해야 한다 — 후자를 없음으로
+    취급하고 재생성하면 세션 상태가 영구 삭제된다.
+    """
+    return any(line.strip() == _HANDOFF_HEADING for line in text.splitlines())
+
+
 def extract_handoff_section(text: str) -> str | None:
     """PROJECT_CONTEXT.md 본문에서 Session Handoff 블록만 잘라낸다.
 
