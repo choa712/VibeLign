@@ -13,12 +13,16 @@ import subprocess
 from pathlib import Path
 
 from vibelign.core.structure_policy import (
+    ANCHOR_MARKER_PATTERN,
     SCAN_IGNORED_DIRS,
     SOURCE_FILE_SUFFIXES,
     WINDOWS_SUBPROCESS_FLAGS,
 )
 
-_ANCHOR_RE = re.compile(r"ANCHOR:\s*([A-Z0-9_]+)")
+# anchor_tools 와 반드시 같은 패턴을 써야 한다. 갈라지면 ripgrep 설치
+# 여부에 따라 앵커 인덱스가 달라진다 (이 모듈 docstring 의 "기능 차이는
+# 없고 속도 차이만 있다" 계약 위반).
+_ANCHOR_RE = re.compile(ANCHOR_MARKER_PATTERN)
 
 # 모듈 로드 시 한 번만 체크 (Ubuntu는 fd 대신 fdfind 로 설치됨)
 _FD: str | None = shutil.which("fd") or shutil.which("fdfind")
@@ -95,7 +99,7 @@ def grep_anchors_rg(root: Path) -> dict[str, list[str]] | None:
             "--no-line-number",
             "--no-heading",
             "-o",
-            r"ANCHOR:\s*[A-Z0-9_]+",
+            ANCHOR_MARKER_PATTERN,
         ]
         + glob_args
         + [str(root)]

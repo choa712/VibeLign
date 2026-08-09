@@ -36,6 +36,15 @@ COMMON_IGNORED_DIRS: frozenset[str] = frozenset(
 
 WINDOWS_SUBPROCESS_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
+# 앵커 마커의 정본 형식. 등호 3개로 감싼 마커만 앵커로 인정한다.
+# (형식 예시를 주석에 그대로 적으면 그 줄이 팬텀 앵커로 잡히므로 쓰지 않는다.)
+# 여기 한 곳에만 두는 이유: 파서마다 따로 정의하면 형식이 갈라져
+# "어떤 경로로 읽었는가"에 따라 앵커 집합이 달라진다. 실제로 rg 가속
+# 경로(fast_tools)와 Python 경로(anchor_tools)가 갈라져 ripgrep 설치
+# 여부에 따라 `vib anchor --auto` 대상이 바뀌는 결함이 있었다.
+# rg 는 -o 로 매치 전체를 출력하므로 같은 패턴 문자열을 그대로 쓴다.
+ANCHOR_MARKER_PATTERN = r"===\s*ANCHOR:\s*([A-Z0-9_]+)\s*==="
+
 GENERATED_ARTIFACT_DIR_NAMES: frozenset[str] = frozenset(
     {"dist", "build", "target", ".next", ".pnpm-store", "node_modules"}
 )

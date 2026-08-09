@@ -9,6 +9,7 @@ from typing import TypeAlias, TypedDict, cast
 
 from vibelign.core.project_map import ProjectMapSnapshot
 from vibelign.core.project_scan import iter_source_files, line_count, safe_read_text
+from vibelign.core.structure_policy import ANCHOR_MARKER_PATTERN
 
 
 from vibelign.terminal_render import cli_print
@@ -78,7 +79,7 @@ COMMENT_PREFIX = {
     ".hpp": "//",
     ".cs": "//",
 }
-ANCHOR_RE = re.compile(r"===\s*ANCHOR:\s*([A-Z0-9_]+)\s*===")
+ANCHOR_RE = re.compile(ANCHOR_MARKER_PATTERN)
 PY_SYMBOL_RE = re.compile(
     r"^(?:async\s+def|def|class)\s+([A-Za-z_][A-Za-z0-9_]*)", re.MULTILINE
 )
@@ -828,9 +829,6 @@ def get_anchor_intent(root: Path, anchor_name: str) -> AnchorMetaEntry:
 
 
 # === ANCHOR: ANCHOR_TOOLS__PARSE_ANCHOR_MARKER_START ===
-_ANCHOR_TOKEN_RE = re.compile(r"ANCHOR:\s*([A-Z0-9_]+)")
-
-
 def _parse_anchor_marker(line: str) -> tuple[str, bool] | None:
     """앵커 마커 라인을 (이름, is_start) 로 해석. 마커가 아니면 None.
 
@@ -840,7 +838,7 @@ def _parse_anchor_marker(line: str) -> tuple[str, bool] | None:
     `VIB_START_CMD_END` 가 이름 `VIB` 의 START 로 오인된다.
     extract_anchors 와 동일한 이름 정규화 결과를 낸다.
     """
-    match = _ANCHOR_TOKEN_RE.search(line)
+    match = ANCHOR_RE.search(line)
     if not match:
         return None
     token = match.group(1)
