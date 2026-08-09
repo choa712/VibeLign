@@ -352,12 +352,53 @@ class TestAtomicWrite:
         atomic_write_text(p, "y")
         assert stat.S_IMODE(p.stat().st_mode) == 0o644
 
-    def test_new_file_is_group_readable(self, tmp_path: Path) -> None:
+    def test_new_file_respects_umask(self, tmp_path: Path) -> None:
+        """신규 파일 권한을 고정하면 umask 077 환경에서 내용이 노출된다.
+
+        커널이 umask 를 적용하도록 맡겨, open()/write_text 와 같은 권한을 낸다.
+        """
+        import os
         import stat
 
-        p = tmp_path / "new.md"
-        atomic_write_text(p, "z")
-        assert stat.S_IMODE(p.stat().st_mode) == 0o644
+        previous = os.umask(0o077)
+        try:
+            p = tmp_path / "restricted.md"
+            atomic_write_text(p, "z")
+            assert stat.S_IMODE(p.stat().st_mode) == 0o600
+        finally:
+            _ = os.umask(previous)
+
+        previous = os.umask(0o022)
+        try:
+            q = tmp_path / "normal.md"
+            atomic_write_text(q, "z")
+            assert stat.S_IMODE(q.stat().st_mode) == 0o644
+        finally:
+            _ = os.umask(previous)
+
+    def test_source_of_truth_is_replaced_before_derived(self, tmp_path: Path) -> None:
+        """정본(handoff.json) 이 파생물(PROJECT_CONTEXT.md) 보다 먼저 교체돼야 한다.
+
+        중간에 끊겼을 때 정본만 새것이면 다음 재생성이 본문을 다시 만들어
+        복구되지만, 반대면 새 본문이 옛 handoff 로 되돌려져 손실이 된다.
+        """
+        ctx = tmp_path / "PROJECT_CONTEXT.md"
+        order: list[str] = []
+        real_replace = atomic_write_mod.os.replace
+
+        def track(src: object, dst: object) -> None:
+            order.append(Path(str(dst)).name)
+            real_replace(src, dst)  # type: ignore[arg-type]
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(atomic_write_mod.os, "replace", track)
+            _ = commit_project_context(
+                tmp_path,
+                ctx,
+                lambda: "본문",
+                handoff_data=_handoff(),  # type: ignore[arg-type]
+            )
+        assert order == ["handoff.json", "PROJECT_CONTEXT.md"]
 
     def test_lock_is_advisory_and_reentrant_across_calls(self, tmp_path: Path) -> None:
         lock_path = tmp_path / "x.lock"

@@ -1155,6 +1155,7 @@ def commit_project_context(
     build_content: Callable[[], str],
     *,
     handoff_data: HandoffData | None = None,
+    before_commit: Callable[[], None] | None = None,
 ) -> tuple[Path | None, str]:
     """생성물과 handoff 원본을 한 잠금 안에서 함께 확정한다 (issue #2, #6).
 
@@ -1172,24 +1173,33 @@ def commit_project_context(
     handoff.json 은 B 인데 PROJECT_CONTEXT.md 는 A 가 된다 — 새 AI 가 읽는
     두 파일이 서로 다른 세션을 가리킨다.
 
+    before_commit 은 같은 잠금 안에서 먼저 실행된다. work_memory.json 처럼
+    읽고-고쳐-쓰는 상태를 여기 넣어야 동시 실행에서 갱신이 유실되지 않는다.
+
     (구버전 인라인 handoff 보관 경로, 실제로 쓴 본문) 을 돌려준다.
     """
     meta = MetaPaths(root)
     with file_lock(meta.context_lock_path):
         archive = _archive_legacy_inline_handoff(root, out_path)
+        if before_commit is not None:
+            before_commit()
         # 본문을 먼저 만든다 — 여기서 실패하면 아무것도 바뀌지 않는다.
         content = build_content()
-        staged: list[tuple[Path, Path]] = [
-            (stage_text(out_path, content), out_path),
-        ]
+        # 교체 순서: 정본(handoff.json) 먼저, 파생물(PROJECT_CONTEXT.md) 나중.
+        # 두 파일을 한꺼번에 원자적으로 바꾸는 건 저널 없이는 불가능하므로,
+        # 중간에 끊겼을 때 자가 복구되는 방향을 고른다:
+        #   정본 O / 파생물 X → 다음 재생성이 새 handoff 로 본문을 다시 만든다
+        #   정본 X / 파생물 O → 다음 재생성이 새 본문을 옛 handoff 로 되돌린다 (손실)
+        staged: list[tuple[Path, Path]] = []
         if handoff_data is not None:
             staged.append(
-                (stage_text(meta.handoff_path, _handoff_payload(handoff_data)),
-                 meta.handoff_path)
+                (
+                    stage_text(meta.handoff_path, _handoff_payload(handoff_data)),
+                    meta.handoff_path,
+                )
             )
-        # 준비가 다 끝난 뒤 replace 만 연달아 — 둘이 어긋나 있는 창을 없앤다.
-        # (handoff.json 을 먼저 갈아끼우고 나서 본문 생성이나 쓰기가 실패하면
-        #  두 파일이 영구히 다른 세션을 가리킨다)
+        staged.append((stage_text(out_path, content), out_path))
+        # 준비가 다 끝난 뒤 replace 만 연달아 — 사이에 I/O 가 없다.
         commit_staged(staged)
     return archive, content
 
@@ -1713,11 +1723,13 @@ def run_transfer(args: object) -> None:
             verification=verification,
             decision=decision,
         )
-        # dry-run 은 아무것도 쓰지 않는다. work memory·보관 파일·handoff.json
-        # 을 먼저 기록하면 "미리보기" 가 아니라 그냥 실행이다.
-        if not dry_run:
-            _persist_handoff_memory(root, handoff_data)
         captured = handoff_data
+
+        # work_memory.json 은 읽고-고쳐-쓰기라 잠금 밖에서 하면 동시 실행 시
+        # 한쪽 갱신이 통째로 사라진다. commit 과 같은 잠금 안에서 실행한다.
+        # (dry-run 은 commit 자체를 하지 않으므로 여기도 실행되지 않는다)
+        def persist_memory() -> None:
+            _persist_handoff_memory(root, captured)
 
         # handoff 경로는 명시 데이터로 본문을 만드므로 저장 데이터와 출처가
         # 같다 — 잠금 안에서 다시 만들어도 결과가 달라지지 않는다.
@@ -1725,6 +1737,7 @@ def run_transfer(args: object) -> None:
             return _build_context_content(root, handoff_data=captured)
     else:
         handoff_data = None
+        persist_memory = None
 
         # 이쪽은 저장된 handoff.json 을 읽어 본문을 만든다. 잠금 안에서
         # 만들어야 읽은 시점과 쓰는 시점 사이에 다른 세션이 끼어들지 않는다.
@@ -1752,7 +1765,11 @@ def run_transfer(args: object) -> None:
 
     try:
         _archive, content = commit_project_context(
-            root, out_path, build_content, handoff_data=handoff_data
+            root,
+            out_path,
+            build_content,
+            handoff_data=handoff_data,
+            before_commit=persist_memory,
         )
     except OSError as exc:
         clack_info(f"오류: {exc}")

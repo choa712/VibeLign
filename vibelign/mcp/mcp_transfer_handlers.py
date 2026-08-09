@@ -115,13 +115,14 @@ def handle_handoff_create(
     )
 
     handoff_data = enrich_handoff_with_work_memory(root, handoff_data)
-    persist_handoff_memory(root, handoff_data)
 
     from vibelign.commands.vib_transfer_cmd import commit_project_context
 
     # CLI 경로와 반드시 같은 함수를 쓴다. 여기서 원본을 보관하지 않으면
     # MCP 로 만든 handoff 만 다음 체크포인트에 사라진다 (issue #6).
     # 보관·저장·쓰기의 순서와 잠금은 commit_project_context 안에 있다.
+    # work_memory 갱신도 같은 잠금 안에서 — 밖에서 하면 동시 실행 시
+    # 읽고-고쳐-쓰기가 겹쳐 한쪽 갱신이 통째로 사라진다.
     ctx_path = root / "PROJECT_CONTEXT.md"
     try:
         _archive, _content = commit_project_context(
@@ -129,6 +130,7 @@ def handle_handoff_create(
             ctx_path,
             lambda: build_context_content(root, handoff_data=handoff_data),
             handoff_data=handoff_data,
+            before_commit=lambda: persist_handoff_memory(root, handoff_data),
         )
     except OSError as exc:
         # 잠금 경합(TimeoutError) 이나 기존 파일 읽기 실패. 둘 다 "덮지 않고

@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import errno
 import os
+import secrets
 import sys
-import tempfile
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -39,12 +39,12 @@ def commit_staged(pairs: list[tuple[Path, Path]]) -> None:
 
     PROJECT_CONTEXT.md 와 handoff.json 처럼 짝으로 읽히는 파일에 쓴다 —
     하나만 갱신된 채 끝나면 새 AI 가 서로 다른 세션을 가리키는 두 파일을 읽는다.
+    중간에 끊길 수 있으므로 호출자가 **정본을 먼저, 파생물을 나중에** 배치해야
+    한다. 그래야 끊겼을 때 다음 재생성이 파생물을 다시 만들어 자가 복구된다.
     """
-    replaced: list[Path] = []
     try:
         for tmp_path, dest in pairs:
             os.replace(tmp_path, dest)
-            replaced.append(dest)
     finally:
         for tmp_path, _dest in pairs:
             if tmp_path.exists():
@@ -60,17 +60,14 @@ def stage_text(path: Path, text: str, *, encoding: str = "utf-8") -> Path:
     """
     directory = path.parent
     directory.mkdir(parents=True, exist_ok=True)
-    # mkstemp 는 0600 으로 만든다. 그대로 교체하면 write_text 로 만들어졌던
-    # 파일(보통 0644)이 소유자 전용으로 바뀐다 — 팀 공유 체크아웃이나
-    # 다른 사용자로 도는 도구가 갑자기 읽지 못하게 된다.
+    # 기존 파일이면 그 권한을 그대로 유지한다. mkstemp 의 0600 으로 덮으면
+    # write_text 로 만들어졌던 파일(보통 0644)이 소유자 전용으로 바뀌어,
+    # 공유 체크아웃에서 남이 읽지 못하게 된다.
     try:
         keep_mode: int | None = path.stat().st_mode & 0o777
     except OSError:
         keep_mode = None
-    fd, tmp_name = tempfile.mkstemp(
-        dir=str(directory), prefix=f".{path.name}.", suffix=".tmp"
-    )
-    tmp_path = Path(tmp_name)
+    fd, tmp_path = _open_exclusive(directory, path.name, keep_mode)
     try:
         # newline 은 기본값 그대로 둔다 — Path.write_text 와 줄바꿈 처리가
         # 달라지면 Windows 에서 기존 파일과 diff 가 통째로 뜬다.
@@ -80,10 +77,6 @@ def stage_text(path: Path, text: str, *, encoding: str = "utf-8") -> Path:
             # fsync 없이 replace 하면 전원이 끊길 때 빈 파일이 남을 수 있다
             # (교체는 기록됐는데 내용은 아직 디스크에 없는 상태).
             os.fsync(handle.fileno())
-        # 새로 만드는 경우 0644 — write_text 가 umask 022 에서 내던 값과 같다.
-        # umask 를 읽으려면 잠시 바꿔야 하는데(os.umask), 그 사이 다른 스레드가
-        # 파일을 만들면 권한이 틀어지므로 고정값을 쓴다.
-        os.chmod(tmp_path, keep_mode if keep_mode is not None else 0o644)
     except BaseException:
         with _suppress_os_error():
             tmp_path.unlink()
@@ -92,6 +85,37 @@ def stage_text(path: Path, text: str, *, encoding: str = "utf-8") -> Path:
 
 
 # === ANCHOR: ATOMIC_WRITE_ATOMIC_WRITE_TEXT_END ===
+
+
+# === ANCHOR: ATOMIC_WRITE__OPEN_EXCLUSIVE_START ===
+def _open_exclusive(
+    directory: Path, base_name: str, keep_mode: int | None
+) -> tuple[int, Path]:
+    """임시 파일을 배타 생성하고 (fd, 경로) 를 돌려준다.
+
+    mkstemp 를 쓰지 않는 이유: mkstemp 는 항상 0600 으로 만든다. 신규 파일에
+    고정 권한을 부여하면(0644 등) umask 077 로 운영하는 환경에서 handoff 내용이
+    같은 머신의 다른 사용자에게 노출된다. os.open 에 0o666 을 넘기면 커널이
+    umask 를 적용하므로, open()·write_text 와 정확히 같은 권한이 나온다.
+    os.umask 를 읽었다 되돌리는 방식은 그 사이 다른 스레드가 만드는 파일의
+    권한을 망가뜨리므로 쓰지 않는다.
+    """
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+    for _ in range(100):
+        candidate = directory / f".{base_name}.{secrets.token_hex(8)}.tmp"
+        try:
+            fd = os.open(candidate, flags, keep_mode if keep_mode is not None else 0o666)
+        except FileExistsError:
+            continue
+        if keep_mode is not None:
+            # O_CREAT 모드에도 umask 가 적용되므로, 기존 권한을 그대로
+            # 이어받으려면 명시적으로 다시 지정해야 한다.
+            os.fchmod(fd, keep_mode)
+        return fd, candidate
+    raise OSError(f"{directory} 에 임시 파일을 만들지 못했습니다")
+
+
+# === ANCHOR: ATOMIC_WRITE__OPEN_EXCLUSIVE_END ===
 
 
 # === ANCHOR: ATOMIC_WRITE__SUPPRESS_OS_ERROR_START ===
