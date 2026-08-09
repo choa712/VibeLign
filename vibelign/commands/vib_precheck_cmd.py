@@ -2,24 +2,27 @@
 from __future__ import annotations
 
 import json
-import re
 import sys
 from argparse import Namespace
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import cast
 
-from vibelign.core.anchor_tools import COMMENT_PREFIX
+from vibelign.core.anchor_tools import (
+    COMMENT_PREFIX,
+    find_legacy_anchor_markers,
+    find_malformed_anchor_markers,
+)
 from vibelign.core.hook_setup import is_claude_hook_enabled
 from vibelign.core.meta_paths import MetaPaths
 from vibelign.core.project_root import resolve_project_root
 from vibelign.core.structure_policy import (
     classify_structure_path,
+    has_anchor_markers,
     is_structure_production_kind,
     small_fix_line_threshold,
 )
 
-_ANCHOR_PATTERN = re.compile(r"ANCHOR:\s*[A-Z0-9_]+_(START|END)")
 _SOURCE_EXTENSIONS = set(COMMENT_PREFIX.keys())
 
 
@@ -123,10 +126,28 @@ def _planning_status(root: Path, target_path: Path, content: str) -> tuple[str, 
 def _has_anchor_markers(path: Path, content: str) -> bool:
     if path.suffix.lower() not in _SOURCE_EXTENSIONS:
         return True
-    return _ANCHOR_PATTERN.search(content) is not None
+    # 정본 형식만 인정한다. 예전 이 자리의 느슨한 정규식은 구 형식·반쪽 마커도
+    # 통과시켰는데, 그 마커들은 어떤 파서도 읽지 않으므로 실제 보호는 0이었다.
+    return has_anchor_markers(content)
 
 
 # === ANCHOR: VIB_PRECHECK_CMD__HAS_ANCHOR_MARKERS_END ===
+
+
+# === ANCHOR: VIB_PRECHECK_CMD__NO_ANCHOR_MESSAGE_START ===
+def _no_anchor_message(content: str) -> str:
+    """왜 막혔는지 구체적으로 알려준다.
+
+    마커를 적어뒀는데 형식이 어긋난 경우 "앵커가 없습니다"만 보면
+    사용자는 도구가 고장 났다고 판단한다. 실제 원인을 짚어준다.
+    """
+    hints = find_legacy_anchor_markers(content) + find_malformed_anchor_markers(content)
+    if hints:
+        return "앵커로 인정되지 않는 마커가 있습니다. " + " / ".join(hints)
+    return "앵커가 없습니다. 앵커를 추가한 뒤 다시 시도하세요"
+
+
+# === ANCHOR: VIB_PRECHECK_CMD__NO_ANCHOR_MESSAGE_END ===
 
 
 # === ANCHOR: VIB_PRECHECK_CMD_RUN_VIB_PRECHECK_START ===
@@ -168,7 +189,7 @@ def run_vib_precheck(_args: Namespace) -> None:
         raise SystemExit(2)
 
     if not _has_anchor_markers(target_path, content):
-        print("앵커가 없습니다. 앵커를 추가한 뒤 다시 시도하세요", file=sys.stderr)
+        print(_no_anchor_message(content), file=sys.stderr)
         raise SystemExit(2)
 
     print(json.dumps({"permissionDecision": "allow"}, ensure_ascii=False))

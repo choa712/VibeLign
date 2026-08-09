@@ -11,6 +11,7 @@ from vibelign.core import anchor_tools as anchor_tools_mod
 from vibelign.core.meta_paths import MetaPaths
 from vibelign.core.project_map import ProjectMapSnapshot, load_project_map
 from vibelign.core.project_root import resolve_project_root
+from vibelign.core.project_scan import iter_source_files, safe_read_text
 
 
 from vibelign.terminal_render import cli_print
@@ -105,6 +106,34 @@ def _split_csv(value: object) -> list[str] | None:
 
 def _validate_anchor_file(path: Path) -> Iterable[str]:
     return cast(Iterable[str], anchor_tools_mod.validate_anchor_file(path))
+
+
+def _unindexed_source_files(
+    root: Path, index: dict[str, object], allowed_exts: set[str] | None
+) -> list[tuple[Path, str]]:
+    """앵커 인덱스에 없는 소스 파일 (= 정본 앵커가 하나도 없는 파일)."""
+    found: list[tuple[Path, str]] = []
+    for path in iter_source_files(root):
+        if allowed_exts is not None and path.suffix.lower() not in allowed_exts:
+            continue
+        try:
+            rel = str(path.relative_to(root))
+        except ValueError:
+            continue
+        if rel in index:
+            continue
+        found.append((path, rel))
+    return sorted(found, key=lambda item: item[1])
+
+
+def _marker_format_problems(path: Path) -> list[str]:
+    """앵커가 없는 파일에서 '읽히지 않는 마커'만 골라낸다."""
+    text = safe_read_text(path)
+    if not text:
+        return []
+    return anchor_tools_mod.find_legacy_anchor_markers(
+        text
+    ) + anchor_tools_mod.find_malformed_anchor_markers(text)
 
 
 def _allowed_exts(value: str) -> set[str] | None:
@@ -432,6 +461,14 @@ def run_vib_anchor(args: object) -> None:
         for rel in sorted(index):
             path = root / rel
             for problem in _validate_anchor_file(path):
+                problems.append(f"{rel}: {problem}")
+        # 인덱스는 "정본 앵커가 있는 파일"만 담는다. 인덱스만 돌면 구 형식·훼손
+        # 마커만 가진 파일은 아예 순회되지 않아, 보호가 0인 프로젝트가 조용히
+        # validation passed 를 받는다. 앵커가 없는 파일도 훑되 "앵커가 없습니다"
+        # 는 보고하지 않는다 — 그건 vib anchor --suggest 의 몫이고, 여기서
+        # 쏟아내면 신규 프로젝트에서 신호가 묻힌다.
+        for path, rel in _unindexed_source_files(root, index, allowed_exts):
+            for problem in _marker_format_problems(path):
                 problems.append(f"{rel}: {problem}")
         if json_mode:
             print(

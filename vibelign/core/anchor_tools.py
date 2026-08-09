@@ -9,7 +9,7 @@ from typing import TypeAlias, TypedDict, cast
 
 from vibelign.core.project_map import ProjectMapSnapshot
 from vibelign.core.project_scan import iter_source_files, line_count, safe_read_text
-from vibelign.core.structure_policy import ANCHOR_MARKER_PATTERN
+from vibelign.core.structure_policy import ANCHOR_MARKER_PATTERN, has_anchor_markers
 
 
 from vibelign.terminal_render import cli_print
@@ -143,7 +143,10 @@ def preview_anchor_targets(
         if allowed_exts is not None and path.suffix.lower() not in allowed_exts:
             continue
         text = safe_read_text(path)
-        if text and "=== ANCHOR:" not in text:
+        # 부분 문자열 검사는 안 된다 — 문자열 리터럴에 마커를 적어둔 파일이
+        # "이미 앵커가 있다"로 잡혀 영영 대상에서 빠진다 (실제로 테스트 파일
+        # 14개가 그렇게 보호 없이 남아 있었다).
+        if text and not has_anchor_markers(text):
             targets.append(path)
     return targets
 
@@ -1377,21 +1380,45 @@ def strip_anchors(path: Path) -> bool:
 
 # === ANCHOR: ANCHOR_TOOLS_VALIDATE_ANCHOR_FILE_START ===
 def validate_anchor_file(path: Path) -> list[str]:
+    """마커를 순서대로 훑어 짝을 맞추고, 남은 START·고아 END 를 보고한다.
+
+    이름의 집합 포함 여부만 보면 개수와 중첩을 놓친다. 같은 이름의 START 2개 +
+    END 1개가 오류 없이 통과했는데, 추출은 안쪽 블록만 선택하므로 바깥 구간이
+    보호 없이 남는다 — 검증이 통과했으니 사용자는 알 수 없다.
+
+    중첩 자체는 정상이다(모듈 앵커 ⊃ 심볼 앵커). 짝이 안 맞는 경우만 보고한다.
+    짝 맞춤 규칙은 extract_anchor_blocks 와 같아야 한다: END 는 같은 이름의
+    가장 안쪽 START 를 닫는다. 다르면 "검증은 통과했는데 추출은 다른 구간"이 된다.
+    """
     text = safe_read_text(path)
     if not text:
         return ["파일 내용을 읽을 수 없습니다."]
-    start_markers: list[str] = re.findall(r"ANCHOR:\s*([A-Z0-9_]+)_START\s*===", text)
-    end_markers: list[str] = re.findall(r"ANCHOR:\s*([A-Z0-9_]+)_END\s*===", text)
     problems: list[str] = []
-    for name in start_markers:
-        if name not in end_markers:
-            problems.append(f"{name}_START 에 대응하는 END 가 없습니다")
-    for name in end_markers:
-        if name not in start_markers:
-            problems.append(f"{name}_END 에 대응하는 START 가 없습니다")
-    if not start_markers and not end_markers:
+    open_starts: list[tuple[str, int]] = []
+    saw_marker = False
+    for line_no, line in enumerate(text.splitlines(), 1):
+        marker = _parse_anchor_marker(line)
+        if marker is None:
+            continue
+        saw_marker = True
+        name, is_start = marker
+        if is_start:
+            open_starts.append((name, line_no))
+            continue
+        for idx in range(len(open_starts) - 1, -1, -1):
+            if open_starts[idx][0] == name:
+                del open_starts[idx]
+                break
+        else:
+            problems.append(
+                f"{line_no}번째 줄: {name}_END 에 대응하는 START 가 없습니다"
+            )
+    for name, line_no in open_starts:
+        problems.append(f"{line_no}번째 줄: {name}_START 에 대응하는 END 가 없습니다")
+    if not saw_marker:
         problems.append("앵커가 없습니다")
     problems.extend(find_legacy_anchor_markers(text))
+    problems.extend(find_malformed_anchor_markers(text))
     return problems
 
 
@@ -1424,4 +1451,44 @@ def find_legacy_anchor_markers(text: str) -> list[str]:
 
 
 # === ANCHOR: ANCHOR_TOOLS_FIND_LEGACY_ANCHOR_MARKERS_END ===
+
+
+# === ANCHOR: ANCHOR_TOOLS_FIND_MALFORMED_ANCHOR_MARKERS_START ===
+# "쓰다 만" 마커. 정본도 legacy 도 아니면 어떤 파서도 읽지 않는데, 사용자는
+# 마커를 적어뒀으니 보호되고 있다고 믿는다. 그 침묵이 이 규칙군의 실패 모드다.
+#
+# 산문과 구분하기 위해 주석 접두사를 걷어낸 나머지가 곧바로 마커 시도로
+# 시작할 때만 잡는다. "# format: ... ANCHOR: FOO_START" 같은 설명문은
+# 나머지가 'format:' 으로 시작하므로 걸리지 않는다.
+_COMMENT_LEAD_RE = re.compile(r"^[ \t]*(?://+|#+|/\*+|\*+)[ \t]*")
+_MARKER_ATTEMPT_RE = re.compile(r"^=*[ \t]*ANCHOR:[ \t]*[A-Z0-9_]+(?:_START|_END)\b")
+
+
+def find_malformed_anchor_markers(text: str) -> list[str]:
+    """정본도 legacy 도 아닌, 훼손된 마커 시도를 찾아 경고 문구로 돌려준다."""
+    broken: list[str] = []
+    for line_no, line in enumerate(text.splitlines(), 1):
+        if _parse_anchor_marker(line) is not None:
+            continue
+        if _LEGACY_MARKER_RE.match(line):
+            continue
+        lead = _COMMENT_LEAD_RE.match(line)
+        if lead is None:
+            continue
+        if not _MARKER_ATTEMPT_RE.match(line[lead.end() :]):
+            continue
+        broken.append(f"{line_no}번째 줄")
+    if not broken:
+        return []
+    listed = ", ".join(broken[:5]) + (" 외" if len(broken) > 5 else "")
+    return [
+        f"형식이 깨진 앵커 마커 {len(broken)}개가 있습니다 ({listed}) — "
+        "줄 전체가 마커여야 하고 앞뒤를 등호 3개로 감싸야 합니다. "
+        "지금 형태로는 어떤 파서도 읽지 않습니다"
+    ]
+
+
+# === ANCHOR: ANCHOR_TOOLS_FIND_MALFORMED_ANCHOR_MARKERS_END ===
+
+
 # === ANCHOR: ANCHOR_TOOLS_END ===

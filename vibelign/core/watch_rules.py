@@ -1,18 +1,21 @@
+# === ANCHOR: WATCH_RULES_START ===
 from pathlib import Path
 from typing import Literal, TypedDict
 
-from vibelign.core.structure_policy import is_core_entry_file
+from vibelign.core.structure_policy import has_anchor_markers, is_core_entry_file
 
 
 WatchLevel = Literal["HIGH", "WARN", "OK"]
 
 
+# === ANCHOR: WATCH_RULES_WATCHWARNING_START ===
 class WatchWarning(TypedDict):
     level: WatchLevel
     path: str
     message: str
     why: str
     action: str
+# === ANCHOR: WATCH_RULES_WATCHWARNING_END ===
 
 
 CATCH_ALL = {
@@ -58,6 +61,7 @@ BIZ_HINTS = [
 ]
 
 
+# === ANCHOR: WATCH_RULES_CLASSIFY_EVENT_START ===
 def classify_event(
     path: Path,
     text: str,
@@ -65,6 +69,7 @@ def classify_event(
     new_lines: int,
     strict: bool = False,
     protected_files: set[str] | None = None,
+# === ANCHOR: WATCH_RULES_CLASSIFY_EVENT_END ===
 ) -> list[WatchWarning]:
     name = path.name
     warnings: list[WatchWarning] = []
@@ -73,6 +78,7 @@ def classify_event(
     anchor_limit = 40 if strict else 80
     is_entry_file = is_core_entry_file(path)
 
+    # === ANCHOR: WATCH_RULES_ADD_START ===
     def add(level: WatchLevel, message: str, why: str, action: str) -> None:
         warnings.append(
             {
@@ -83,6 +89,7 @@ def classify_event(
                 "action": action,
             }
         )
+    # === ANCHOR: WATCH_RULES_ADD_END ===
 
     low = text.lower()
 
@@ -157,7 +164,7 @@ def classify_event(
 
     # 명세·문서 파일(기획안 markdown 등)은 코드가 아니라 앵커가 필요 없다 — 경고 제외.
     is_doc_file = path.suffix.lower() in {".md", ".markdown", ".rst", ".txt"}
-    if new_lines > anchor_limit and "=== ANCHOR:" not in text and not is_doc_file:
+    if new_lines > anchor_limit and not has_anchor_markers(text) and not is_doc_file:
         add(
             "WARN",
             f"{name}에 앵커가 없습니다",
@@ -185,3 +192,4 @@ def classify_event(
             "AI 수정 전에 처리 로직을 별도 모듈로 옮기세요.",
         )
     return warnings
+# === ANCHOR: WATCH_RULES_END ===

@@ -59,6 +59,23 @@ ANCHOR_MARKER_PATTERN = (
     r"^[ \t]*(?://|#)[ \t]*===[ \t]*ANCHOR:[ \t]*([A-Z0-9_]+)[ \t]*===[ \t\r]*$"
 )
 
+_ANCHOR_MARKER_RE = re.compile(ANCHOR_MARKER_PATTERN, re.MULTILINE)
+
+
+def has_anchor_markers(text: str) -> bool:
+    """정본 형식 앵커 마커가 하나라도 있는가.
+
+    "앵커가 있는가" 판정이 모듈마다 제각각(부분 문자열 검사, 느슨한 정규식)이면
+    같은 파일이 어느 경로로 보느냐에 따라 보호됨/안 됨으로 갈린다. 실제로
+    preview_anchor_targets 는 `"=== ANCHOR:" in text` 부분 문자열로 판정해,
+    문자열 리터럴에 마커를 적어둔 테스트 파일 14개를 "이미 앵커가 있다"고 보고
+    영영 대상에서 제외했다 — 그 파일들은 보호 없이 남아 있었다.
+
+    패턴을 소유한 이 모듈에 둔다. 상위 모듈(anchor_tools)에 두면
+    watch_rules·risk_analyzer 가 쓰려 할 때 순환 임포트가 된다.
+    """
+    return bool(text) and _ANCHOR_MARKER_RE.search(text) is not None
+
 GENERATED_ARTIFACT_DIR_NAMES: frozenset[str] = frozenset(
     {"dist", "build", "target", ".next", ".pnpm-store", "node_modules"}
 )
