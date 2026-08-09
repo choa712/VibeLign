@@ -28,7 +28,12 @@ from vibelign.terminal_render import (
     clack_outro,
 )
 
-from vibelign.core.atomic_write import atomic_write_text, file_lock
+from vibelign.core.atomic_write import (
+    atomic_write_text,
+    commit_staged,
+    file_lock,
+    stage_text,
+)
 from vibelign.core.meta_paths import MetaPaths
 
 # PROJECT_CONTEXT.md 에 추가되는 마커 (중복 생성 방지용)
@@ -1068,19 +1073,29 @@ def _build_current_work_section(
     )
 
 
+def _handoff_payload(data: HandoffData) -> str:
+    return (
+        json.dumps(
+            cast(dict[str, object], cast(object, data)),
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+            default=str,
+        )
+        + "\n"
+    )
+
+
 def save_handoff_data(root: Path, data: HandoffData) -> None:
     """Session Handoff 원본을 .vibelign/handoff.json 에 보관한다 (issue #6).
 
     PROJECT_CONTEXT.md 안에만 두면 재생성(=체크포인트)마다 사라졌다. 원본을
     밖에 두면 재생성이 매번 여기서 다시 렌더링하므로 경계 파싱이 필요 없다.
+
+    PROJECT_CONTEXT.md 와 짝으로 갱신할 때는 commit_project_context 를 쓴다 —
+    따로 쓰면 하나만 갱신된 채 끝날 수 있다.
     """
-    payload = json.dumps(
-        cast(dict[str, object], cast(object, data)),
-        ensure_ascii=False,
-        indent=2,
-        sort_keys=True,
-    )
-    atomic_write_text(MetaPaths(root).handoff_path, payload + "\n")
+    atomic_write_text(MetaPaths(root).handoff_path, _handoff_payload(data))
 
 
 def load_handoff_data(root: Path) -> HandoffData | None:
@@ -1091,6 +1106,11 @@ def load_handoff_data(root: Path) -> HandoffData | None:
     except (OSError, json.JSONDecodeError):
         return None
     if not isinstance(raw, dict):
+        return None
+    # 빈 객체는 "handoff 가 있다"로 치지 않는다. 있다고 보면 보관을 건너뛰는데
+    # 정작 렌더링되는 블록은 없어서, 파일 안에만 있던 유일한 인수인계가
+    # 보관 없이 덮인다.
+    if not cast(dict[str, object], raw):
         return None
     return cast(HandoffData, raw)
 
@@ -1154,12 +1174,23 @@ def commit_project_context(
 
     (구버전 인라인 handoff 보관 경로, 실제로 쓴 본문) 을 돌려준다.
     """
-    with file_lock(MetaPaths(root).context_lock_path):
+    meta = MetaPaths(root)
+    with file_lock(meta.context_lock_path):
         archive = _archive_legacy_inline_handoff(root, out_path)
-        if handoff_data is not None:
-            save_handoff_data(root, handoff_data)
+        # 본문을 먼저 만든다 — 여기서 실패하면 아무것도 바뀌지 않는다.
         content = build_content()
-        atomic_write_text(out_path, content)
+        staged: list[tuple[Path, Path]] = [
+            (stage_text(out_path, content), out_path),
+        ]
+        if handoff_data is not None:
+            staged.append(
+                (stage_text(meta.handoff_path, _handoff_payload(handoff_data)),
+                 meta.handoff_path)
+            )
+        # 준비가 다 끝난 뒤 replace 만 연달아 — 둘이 어긋나 있는 창을 없앤다.
+        # (handoff.json 을 먼저 갈아끼우고 나서 본문 생성이나 쓰기가 실패하면
+        #  두 파일이 영구히 다른 세션을 가리킨다)
+        commit_staged(staged)
     return archive, content
 
 

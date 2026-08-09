@@ -205,6 +205,11 @@ def register_extended_commands(
     )
     _ = p.add_argument("--validate", action="store_true", help="앵커 검증")
     _ = p.add_argument(
+        "--strict",
+        action="store_true",
+        help="--validate 와 함께: 교차 앵커 경고도 실패로 처리",
+    )
+    _ = p.add_argument(
         "--dry-run", action="store_true", help="실제로 바꾸지 않고 미리 보기"
     )
     _ = p.add_argument("--json", action="store_true", help="JSON으로 출력")

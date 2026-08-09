@@ -123,12 +123,18 @@ def handle_handoff_create(
     # MCP 로 만든 handoff 만 다음 체크포인트에 사라진다 (issue #6).
     # 보관·저장·쓰기의 순서와 잠금은 commit_project_context 안에 있다.
     ctx_path = root / "PROJECT_CONTEXT.md"
-    _archive, _content = commit_project_context(
-        root,
-        ctx_path,
-        lambda: build_context_content(root, handoff_data=handoff_data),
-        handoff_data=handoff_data,
-    )
+    try:
+        _archive, _content = commit_project_context(
+            root,
+            ctx_path,
+            lambda: build_context_content(root, handoff_data=handoff_data),
+            handoff_data=handoff_data,
+        )
+    except OSError as exc:
+        # 잠금 경합(TimeoutError) 이나 기존 파일 읽기 실패. 둘 다 "덮지 않고
+        # 멈춘" 상태이므로 그대로 알린다 — 도구 호출이 트레이스백으로
+        # 죽으면 호출한 AI 는 무엇이 저장됐는지 알 수 없다.
+        return _text(text_content, f"Session Handoff 저장 중단: {exc}")
     inject_agents_handoff_instruction(root)
     return _text(
         text_content,

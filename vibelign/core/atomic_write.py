@@ -25,7 +25,35 @@ from typing import BinaryIO
 
 # === ANCHOR: ATOMIC_WRITE_ATOMIC_WRITE_TEXT_START ===
 def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None:
-    """텍스트를 원자적으로 교체 저장한다.
+    """텍스트를 원자적으로 교체 저장한다."""
+    staged = stage_text(path, text, encoding=encoding)
+    commit_staged([(staged, path)])
+
+
+def commit_staged(pairs: list[tuple[Path, Path]]) -> None:
+    """준비된 임시 파일들을 연달아 교체한다.
+
+    두 파일을 한꺼번에 원자적으로 바꾸는 건 저널 없이는 불가능하다. 대신
+    "내용 만들기·쓰기·fsync" 를 전부 끝낸 뒤 os.replace 만 연속 실행해,
+    둘이 어긋나 있는 창을 실질적으로 없앤다 (사이에 I/O 가 없다).
+
+    PROJECT_CONTEXT.md 와 handoff.json 처럼 짝으로 읽히는 파일에 쓴다 —
+    하나만 갱신된 채 끝나면 새 AI 가 서로 다른 세션을 가리키는 두 파일을 읽는다.
+    """
+    replaced: list[Path] = []
+    try:
+        for tmp_path, dest in pairs:
+            os.replace(tmp_path, dest)
+            replaced.append(dest)
+    finally:
+        for tmp_path, _dest in pairs:
+            if tmp_path.exists():
+                with _suppress_os_error():
+                    tmp_path.unlink()
+
+
+def stage_text(path: Path, text: str, *, encoding: str = "utf-8") -> Path:
+    """교체 직전 상태까지 준비하고 임시 파일 경로를 돌려준다.
 
     임시 파일은 반드시 대상과 같은 디렉터리에 만든다. os.replace 는 같은
     파일시스템 안에서만 원자적이라, /tmp 를 거치면 보장이 깨진다.
@@ -56,11 +84,11 @@ def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None
         # umask 를 읽으려면 잠시 바꿔야 하는데(os.umask), 그 사이 다른 스레드가
         # 파일을 만들면 권한이 틀어지므로 고정값을 쓴다.
         os.chmod(tmp_path, keep_mode if keep_mode is not None else 0o644)
-        os.replace(tmp_path, path)
     except BaseException:
         with _suppress_os_error():
             tmp_path.unlink()
         raise
+    return tmp_path
 
 
 # === ANCHOR: ATOMIC_WRITE_ATOMIC_WRITE_TEXT_END ===

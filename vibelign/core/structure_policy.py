@@ -82,19 +82,14 @@ def has_anchor_markers(text: str) -> bool:
     if not text:
         return False
     opened: set[str] = set()
-    closed: set[str] = set()
     for match in _ANCHOR_MARKER_RE.finditer(text):
         raw = match.group(1)
         if raw.endswith("_START"):
-            name = raw[: -len("_START")]
-            if name in closed:
-                return True
-            opened.add(name)
-        elif raw.endswith("_END"):
-            name = raw[: -len("_END")]
-            if name in opened:
-                return True
-            closed.add(name)
+            opened.add(raw[: -len("_START")])
+        elif raw.endswith("_END") and raw[: -len("_END")] in opened:
+            # 순서가 중요하다. END 가 START 보다 앞에 오면 추출되는 블록이
+            # 없으므로, 이름만 양쪽에 있다고 참으로 보면 안 된다.
+            return True
     return False
 
 GENERATED_ARTIFACT_DIR_NAMES: frozenset[str] = frozenset(

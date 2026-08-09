@@ -95,6 +95,39 @@ class TestMultiplicity:
         text = "\n".join([_m("M_START"), _m("M_F_START"), "x", _m("M_F_END"), _m("M_END")])
         assert find_crossing_anchors(text) == []
 
+    def test_strict_flag_turns_crossing_into_failure(self, tmp_path: Path) -> None:
+        """기본은 경고, --strict 는 실패 — 지금 막고 싶은 사람에게 길을 준다."""
+        import json
+        import os
+        import subprocess
+        import sys
+
+        lines = [_m("P_START"), _m("Q_START"), "x = 1", _m("P_END"), _m("Q_END")]
+        (tmp_path / "src").mkdir()
+        _ = (tmp_path / "src" / "mod.py").write_text(
+            "\n".join(lines) + "\n", encoding="utf-8"
+        )
+        env = {**os.environ, "PYTHONPATH": str(Path.cwd())}
+
+        def run(*extra: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [sys.executable, "-m", "vibelign", "anchor", "--validate", "--json", *extra],
+                cwd=tmp_path,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+
+        default = run()
+        assert default.returncode == 0
+        assert json.loads(default.stdout)["data"]["warnings"]
+
+        strict = run("--strict")
+        assert strict.returncode == 1
+        payload = json.loads(strict.stdout)
+        assert payload["ok"] is False
+        assert payload["data"]["strict"] is True
+
 
 # === ANCHOR: TEST_ANCHOR_VALIDATE_PAIRING_TESTMULTIPLICITY_END ===
 

@@ -133,15 +133,23 @@ def _crossing_warnings(path: Path) -> list[str]:
     return anchor_tools_mod.find_crossing_anchors(text)
 
 
-def _print_crossing_warnings(warnings: list[str], limit: int = 10) -> None:
-    """교차 앵커는 경고로만 알린다 (차단하지 않는 이유는 함수 독스트링 참조).
+def _print_crossing_warnings(
+    warnings: list[str], limit: int = 10, *, strict: bool = False
+) -> None:
+    """교차 앵커를 알린다. 기본은 경고, --strict 에서는 실패.
 
     수가 많을 수 있어 앞부분만 보여주고 나머지는 개수로 줄인다.
     """
     if not warnings:
         return
     print("")
-    print(f"⚠️  교차 앵커 {len(warnings)}건 (검증 실패는 아닙니다):")
+    if strict:
+        print(f"🛑 교차 앵커 {len(warnings)}건 (--strict: 실패로 처리):")
+    else:
+        print(
+            f"⚠️  교차 앵커 {len(warnings)}건 "
+            "(검증 실패는 아닙니다 — --strict 로 올릴 수 있습니다):"
+        )
     for item in warnings[:limit]:
         print(f"- {item}")
     if len(warnings) > limit:
@@ -498,15 +506,22 @@ def run_vib_anchor(args: object) -> None:
         for path, rel in _unindexed_source_files(root, index, allowed_exts):
             for problem in _marker_format_problems(path):
                 problems.append(f"{rel}: {problem}")
+        # 교차 앵커는 기본값에서 경고다. `vib anchor --auto` 가 여러 줄
+        # 시그니처에서 스스로 만들어내므로(이 리포만 175개 파일) 차단으로
+        # 두면 --auto 를 돌린 모든 프로젝트가 깨진다. 원인은 별도 이슈이고,
+        # 지금 막고 싶은 사람은 --strict 로 올릴 수 있다.
+        strict = bool(getattr(args, "strict", False))
+        blocking = problems + (warnings if strict else [])
         if json_mode:
             print(
                 json.dumps(
                     {
-                        "ok": not problems,
+                        "ok": not blocking,
                         "error": None,
                         "data": {
                             "problems": problems,
                             "warnings": warnings,
+                            "strict": strict,
                             "anchor_index": index,
                         },
                     },
@@ -514,17 +529,18 @@ def run_vib_anchor(args: object) -> None:
                     ensure_ascii=False,
                 )
             )
-            if problems:
+            if blocking:
                 raise SystemExit(1)
             return
         if problems:
             print("Anchor validation problems:")
             for item in problems:
                 print(f"- {item}")
-            _print_crossing_warnings(warnings)
+        elif not blocking:
+            print("Anchor validation passed.")
+        _print_crossing_warnings(warnings, strict=strict)
+        if blocking:
             raise SystemExit(1)
-        print("Anchor validation passed.")
-        _print_crossing_warnings(warnings)
         print(f"Anchor index saved: {meta.anchor_index_path.relative_to(root)}")
         return
 

@@ -147,37 +147,44 @@ class TestLegacyMigration:
         assert archive is not None
         assert archive.read_text(encoding="utf-8") == body
 
-    def test_archive_runs_before_save_inside_commit(self) -> None:
-        """보관이 저장보다 먼저 호출돼야 한다.
+    def test_commit_archives_before_replacing_handoff_json(self, tmp_path: Path) -> None:
+        """보관이 handoff.json 교체보다 먼저여야 한다.
 
-        순서가 뒤집히면 save 가 handoff.json 을 만들어 보관 조건이 막히고,
-        약속한 보관 파일 없이 구버전 handoff 가 사라진다. 소스 순서로 고정한다.
+        순서가 뒤집히면 handoff.json 이 생겨 보관 조건이 막히고, 약속한
+        보관 파일 없이 구버전 handoff 가 사라진다. 소스 순서가 아니라
+        결과로 확인한다 — 구조가 바뀌어도 계약은 남는다.
         """
-        sources = {
-            "cli": (Path("vibelign") / "commands" / "vib_transfer_cmd.py"),
-        }
-        for label, path in sources.items():
-            lines = path.read_text(encoding="utf-8").splitlines()
-            # def 줄은 제외한다 — 정의가 위에 있다는 이유로 항상 통과하면
-            # 이 테스트는 아무것도 검증하지 않는다.
-            archive_lines = [
-                i
-                for i, x in enumerate(lines)
-                if "_archive_legacy_inline_handoff(" in x
-                and not x.lstrip().startswith("def ")
-            ]
-            save_lines = [
-                i
-                for i, x in enumerate(lines)
-                if x.strip().startswith("save_handoff_data(")
-            ]
-            assert save_lines, f"{label}: save_handoff_data 호출이 없습니다"
-            for save_at in save_lines:
-                earlier = [i for i in archive_lines if i < save_at]
-                assert earlier, (
-                    f"{label}:{save_at + 1} save_handoff_data 앞에 "
-                    "_archive_legacy_inline_handoff 호출이 없습니다"
-                )
+        ctx = tmp_path / "PROJECT_CONTEXT.md"
+        original = "## Session Handoff\n구버전 인수인계\n"
+        _ = ctx.write_text(original, encoding="utf-8")
+        assert not MetaPaths(tmp_path).handoff_path.exists()
+
+        archive, _content = commit_project_context(
+            tmp_path,
+            ctx,
+            lambda: "새 본문",
+            handoff_data=_handoff(),  # type: ignore[arg-type]
+        )
+        assert archive is not None
+        assert archive.read_text(encoding="utf-8") == original
+
+    def test_empty_handoff_json_does_not_suppress_archive(self, tmp_path: Path) -> None:
+        """빈 객체는 'handoff 가 있다'로 치면 안 된다.
+
+        렌더링되는 블록은 없는데 보관만 건너뛰어, 파일 안에만 있던 유일한
+        인수인계가 그대로 덮인다.
+        """
+        stored = MetaPaths(tmp_path).handoff_path
+        stored.parent.mkdir(parents=True, exist_ok=True)
+        _ = stored.write_text("{}", encoding="utf-8")
+        ctx = tmp_path / "PROJECT_CONTEXT.md"
+        body = "## Session Handoff\n살아있는 인수인계\n"
+        _ = ctx.write_text(body, encoding="utf-8")
+
+        assert load_handoff_data(tmp_path) is None
+        archive = _archive_legacy_inline_handoff(tmp_path, ctx)
+        assert archive is not None
+        assert archive.read_text(encoding="utf-8") == body
 
 
 # === ANCHOR: TEST_HANDOFF_OUT_OF_BAND_STORAGE_TESTLEGACYMIGRATION_END ===
@@ -258,28 +265,55 @@ class TestAtomicWrite:
         stored = load_handoff_data(tmp_path)
         assert stored is not None and stored["source"] == "cli"
 
-    def test_content_is_built_inside_the_lock(self, tmp_path: Path) -> None:
-        """본문 생성이 잠금 안에서 일어나야 저장된 handoff 와 어긋나지 않는다.
+    def test_no_partial_state_is_visible_while_building(self, tmp_path: Path) -> None:
+        """본문 생성 중에는 어느 파일도 아직 바뀌어 있으면 안 된다.
 
-        밖에서 만들면 handoff 를 읽어 본문을 만든 사이에 다른 세션이
-        handoff.json 을 바꿔, 두 파일이 서로 다른 세션을 가리킬 수 있다.
+        handoff.json 을 먼저 갈아끼운 뒤 본문 생성이나 쓰기가 실패하면
+        두 파일이 영구히 다른 세션을 가리킨다. 준비를 다 끝낸 뒤 교체만
+        연달아 하는 구조인지 확인한다.
         """
         ctx = tmp_path / "PROJECT_CONTEXT.md"
-        order: list[str] = []
+        _ = ctx.write_text("옛 본문", encoding="utf-8")
+        save_handoff_data(tmp_path, _handoff(source="old"))  # type: ignore[arg-type]
+        seen: list[str] = []
 
         def build() -> str:
-            # 이 시점엔 이미 저장이 끝나 있어야 한다
             stored = load_handoff_data(tmp_path)
-            order.append("built" if stored is not None else "built-before-save")
-            return "본문"
+            seen.append(str(stored["source"]) if stored else "none")
+            seen.append(ctx.read_text(encoding="utf-8"))
+            return "새 본문"
 
         _ = commit_project_context(
             tmp_path,
             ctx,
             build,
-            handoff_data=_handoff(),  # type: ignore[arg-type]
+            handoff_data=_handoff(source="new"),  # type: ignore[arg-type]
         )
-        assert order == ["built"]
+        # 생성 시점엔 둘 다 옛 상태
+        assert seen == ["old", "옛 본문"]
+        # 끝난 뒤엔 둘 다 새 상태
+        stored = load_handoff_data(tmp_path)
+        assert stored is not None and stored["source"] == "new"
+        assert ctx.read_text(encoding="utf-8") == "새 본문"
+
+    def test_build_failure_leaves_both_files_untouched(self, tmp_path: Path) -> None:
+        ctx = tmp_path / "PROJECT_CONTEXT.md"
+        _ = ctx.write_text("옛 본문", encoding="utf-8")
+        save_handoff_data(tmp_path, _handoff(source="old"))  # type: ignore[arg-type]
+
+        def boom() -> str:
+            raise RuntimeError("본문 생성 실패")
+
+        with pytest.raises(RuntimeError):
+            _ = commit_project_context(
+                tmp_path,
+                ctx,
+                boom,
+                handoff_data=_handoff(source="new"),  # type: ignore[arg-type]
+            )
+        stored = load_handoff_data(tmp_path)
+        assert stored is not None and stored["source"] == "old"
+        assert ctx.read_text(encoding="utf-8") == "옛 본문"
 
     def test_unreadable_context_aborts_instead_of_overwriting(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
