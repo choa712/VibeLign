@@ -1,7 +1,12 @@
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from vibelign.core.anchor_tools import extract_anchors, extract_anchor_spans
+from vibelign.core.anchor_tools import (
+    extract_anchors,
+    extract_anchor_blocks,
+    extract_anchor_line_ranges,
+    extract_anchor_spans,
+)
 
 
 def _write(tmp_path: Path, name: str, text: str) -> Path:
@@ -47,6 +52,18 @@ class TestBug4DunderPreserved:
         )
         p = _write(tmp_path, "cli_base.py", text)
         assert extract_anchors(p) == ["CLI_BASE___INIT__"]
+
+    def test_extract_anchor_blocks_preserves_dunder_suffix(self, tmp_path: Path) -> None:
+        text = (
+            "# === ANCHOR: __INIT___START ===\n"
+            "pass\n"
+            "# === ANCHOR: __INIT___END ===\n"
+        )
+        p = _write(tmp_path, "__init__.py", text)
+        # extract_anchors 가 광고하는 이름으로 블록을 읽을 수 있어야 한다
+        assert extract_anchors(p) == ["__INIT__"]
+        assert set(extract_anchor_blocks(p)) == {"__INIT__"}
+        assert set(extract_anchor_line_ranges(p)) == {"__INIT__"}
 
     def test_extract_anchor_spans_preserves_dunder_suffix(self, tmp_path: Path) -> None:
         text = (
@@ -96,6 +113,109 @@ class TestBug1DuplicateNamesSuffixed:
         assert names == ["DUP", "DUP_2"]
         assert spans[0]["start"] == 1 and spans[0]["end"] == 3
         assert spans[1]["start"] == 5 and spans[1]["end"] == 7
+
+
+class TestBug5NestedAnchorBlocksDropped:
+    """`vib anchor --auto`는 모듈 앵커 안에 심볼 앵커를 중첩 삽입한다.
+
+    extract_anchor_blocks 가 단일 current_anchor 로 파싱하면 안쪽 START 가
+    바깥 앵커를 덮어써 바깥 블록이 통째로 소실된다. 형제 함수
+    extract_anchor_line_ranges 는 이름 매칭으로 이미 올바르게 처리한다.
+    """
+
+    NESTED = (
+        "// === ANCHOR: OUTER_START ===\n"
+        "const before = 1;\n"
+        "// === ANCHOR: OUTER_INNER_START ===\n"
+        "const inner = 2;\n"
+        "// === ANCHOR: OUTER_INNER_END ===\n"
+        "const after = 3;\n"
+        "// === ANCHOR: OUTER_END ===\n"
+    )
+
+    def test_outer_block_survives_nested_inner_anchor(self, tmp_path: Path) -> None:
+        p = _write(tmp_path, "nested.ts", self.NESTED)
+        blocks = extract_anchor_blocks(p)
+        assert set(blocks) == {"OUTER", "OUTER_INNER"}
+        assert blocks["OUTER_INNER"] == "const inner = 2;"
+        assert "const before = 1;" in blocks["OUTER"]
+        assert "const after = 3;" in blocks["OUTER"]
+
+    def test_blocks_agree_with_index_and_line_ranges(self, tmp_path: Path) -> None:
+        p = _write(tmp_path, "nested.ts", self.NESTED)
+        assert set(extract_anchor_blocks(p)) == set(extract_anchors(p))
+        assert set(extract_anchor_blocks(p)) == set(extract_anchor_line_ranges(p))
+
+    def test_flat_anchors_unchanged(self, tmp_path: Path) -> None:
+        text = (
+            "// === ANCHOR: FIRST_START ===\n"
+            "const a = 1;\n"
+            "// === ANCHOR: FIRST_END ===\n"
+            "const between = 0;\n"
+            "// === ANCHOR: SECOND_START ===\n"
+            "const b = 2;\n"
+            "// === ANCHOR: SECOND_END ===\n"
+        )
+        p = _write(tmp_path, "flat.ts", text)
+        assert extract_anchor_blocks(p) == {
+            "FIRST": "const a = 1;",
+            "SECOND": "const b = 2;",
+        }
+
+    def test_dangling_start_is_not_returned(self, tmp_path: Path) -> None:
+        text = (
+            "// === ANCHOR: GOOD_START ===\n"
+            "const ok = 1;\n"
+            "// === ANCHOR: GOOD_END ===\n"
+            "// === ANCHOR: DANGLING_START ===\n"
+            "const oops = 2;\n"
+        )
+        p = _write(tmp_path, "dangling.ts", text)
+        assert set(extract_anchor_blocks(p)) == {"GOOD"}
+
+
+class TestBug6NameContainingStartEnd:
+    """이름 자체에 START/END 가 들어간 앵커 (`VIB_START_CMD`, `..._EXCLUSIVE_END`).
+
+    `([A-Z0-9_]+)_START` 부분 매칭으로 판별하면 END 마커인
+    `VIB_START_CMD_END` 가 이름 `VIB` 의 START 로 오인되어 블록이 닫히지 않는다.
+    토큰 전체를 잡고 접미사로 판별해야 한다.
+    """
+
+    def test_name_containing_start_is_parsed(self, tmp_path: Path) -> None:
+        text = (
+            "# === ANCHOR: VIB_START_CMD_START ===\n"
+            "run = 1\n"
+            "# === ANCHOR: VIB_START_CMD_END ===\n"
+        )
+        p = _write(tmp_path, "vib_start_cmd.py", text)
+        assert extract_anchors(p) == ["VIB_START_CMD"]
+        assert extract_anchor_blocks(p) == {"VIB_START_CMD": "run = 1"}
+        assert set(extract_anchor_line_ranges(p)) == {"VIB_START_CMD"}
+
+    def test_name_ending_with_end_is_parsed(self, tmp_path: Path) -> None:
+        text = (
+            "# === ANCHOR: HEAD_EXCLUSIVE_END_START ===\n"
+            "value = 2\n"
+            "# === ANCHOR: HEAD_EXCLUSIVE_END_END ===\n"
+        )
+        p = _write(tmp_path, "chunk.py", text)
+        assert extract_anchors(p) == ["HEAD_EXCLUSIVE_END"]
+        assert extract_anchor_blocks(p) == {"HEAD_EXCLUSIVE_END": "value = 2"}
+
+    def test_blocks_agree_with_index_for_start_named_anchors(
+        self, tmp_path: Path
+    ) -> None:
+        text = (
+            "// === ANCHOR: ONBOARDING_START ===\n"
+            "const a = 1;\n"
+            "// === ANCHOR: ONBOARDING_STARTWSLINSTALL_START ===\n"
+            "const b = 2;\n"
+            "// === ANCHOR: ONBOARDING_STARTWSLINSTALL_END ===\n"
+            "// === ANCHOR: ONBOARDING_END ===\n"
+        )
+        p = _write(tmp_path, "onboarding.ts", text)
+        assert set(extract_anchor_blocks(p)) == set(extract_anchors(p))
 
 
 class TestSignatureExtraction:

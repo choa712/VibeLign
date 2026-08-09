@@ -827,6 +827,33 @@ def get_anchor_intent(root: Path, anchor_name: str) -> AnchorMetaEntry:
 # === ANCHOR: ANCHOR_TOOLS_GET_ANCHOR_INTENT_END ===
 
 
+# === ANCHOR: ANCHOR_TOOLS__PARSE_ANCHOR_MARKER_START ===
+_ANCHOR_TOKEN_RE = re.compile(r"ANCHOR:\s*([A-Z0-9_]+)")
+
+
+def _parse_anchor_marker(line: str) -> tuple[str, bool] | None:
+    """앵커 마커 라인을 (이름, is_start) 로 해석. 마커가 아니면 None.
+
+    앵커 이름 자체에 START/END 가 포함될 수 있으므로(`VIB_START_CMD`,
+    `HEAD_EXCLUSIVE_END`) 토큰 전체를 먼저 잡고 접미사로 판별한다.
+    `([A-Z0-9_]+)_START` 부분 매칭으로 판별하면 END 마커인
+    `VIB_START_CMD_END` 가 이름 `VIB` 의 START 로 오인된다.
+    extract_anchors 와 동일한 이름 정규화 결과를 낸다.
+    """
+    match = _ANCHOR_TOKEN_RE.search(line)
+    if not match:
+        return None
+    token = match.group(1)
+    if token.endswith("_START"):
+        return token[: -len("_START")], True
+    if token.endswith("_END"):
+        return token[: -len("_END")], False
+    return None
+
+
+# === ANCHOR: ANCHOR_TOOLS__PARSE_ANCHOR_MARKER_END ===
+
+
 # === ANCHOR: ANCHOR_TOOLS_EXTRACT_ANCHOR_LINE_RANGES_START ===
 def extract_anchor_line_ranges(path: Path) -> dict[str, tuple[int, int]]:
     """각 앵커의 START~END 줄 번호 반환. {anchor_name: (start_line, end_line)} (1-based)"""
@@ -836,16 +863,14 @@ def extract_anchor_line_ranges(path: Path) -> dict[str, tuple[int, int]]:
     ranges: dict[str, tuple[int, int]] = {}
     starts: dict[str, int] = {}
     for i, line in enumerate(text.splitlines(), start=1):
-        m_start = re.search(r"ANCHOR:\s*([A-Z0-9_]+)_START", line)
-        if m_start:
-            name = re.sub(r"_(START|END)$", "", m_start.group(1)).rstrip("_")
-            starts[name] = i
+        marker = _parse_anchor_marker(line)
+        if marker is None:
             continue
-        m_end = re.search(r"ANCHOR:\s*([A-Z0-9_]+)_END", line)
-        if m_end:
-            name = re.sub(r"_(START|END)$", "", m_end.group(1)).rstrip("_")
-            if name in starts:
-                ranges[name] = (starts.pop(name), i)
+        name, is_start = marker
+        if is_start:
+            starts[name] = i
+        elif name in starts:
+            ranges[name] = (starts.pop(name), i)
     return ranges
 
 
@@ -858,23 +883,24 @@ def extract_anchor_blocks(path: Path) -> dict[str, str]:
     text = safe_read_text(path)
     if not text:
         return {}
+    lines = text.splitlines()
     blocks: dict[str, str] = {}
-    current_anchor: str | None = None
-    current_lines: list[str] = []
-    for line in text.splitlines():
-        m_start = re.search(r"ANCHOR:\s*([A-Z0-9_]+)_START", line)
-        if m_start:
-            current_anchor = re.sub(r"_(START|END)$", "", m_start.group(1)).rstrip("_")
-            current_lines = []
+    # 이름별 START 위치를 기록해 END 와 이름으로 짝짓는다.
+    # 단일 current_anchor 로 추적하면 `vib anchor --auto` 가 삽입하는
+    # 모듈 앵커 ⊃ 심볼 앵커 중첩에서 바깥 블록이 소실된다.
+    # extract_anchor_line_ranges 와 동일한 매칭 규칙을 쓴다.
+    open_starts: dict[str, int] = {}
+    for i, line in enumerate(lines):
+        marker = _parse_anchor_marker(line)
+        if marker is None:
             continue
-        m_end = re.search(r"ANCHOR:\s*([A-Z0-9_]+)_END", line)
-        if m_end and current_anchor:
-            blocks[current_anchor] = "\n".join(current_lines).strip()
-            current_anchor = None
-            current_lines = []
+        name, is_start = marker
+        if is_start:
+            open_starts[name] = i
             continue
-        if current_anchor is not None:
-            current_lines.append(line)
+        start = open_starts.pop(name, None)
+        if start is not None:
+            blocks[name] = "\n".join(lines[start + 1 : i]).strip()
     return blocks
 
 
