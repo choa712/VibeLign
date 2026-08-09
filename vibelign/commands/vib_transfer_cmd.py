@@ -1064,13 +1064,43 @@ def _build_current_work_section(
     )
 
 
+_HANDOFF_HEADING = "## Session Handoff"
+
+
+def extract_handoff_section(text: str) -> str | None:
+    """PROJECT_CONTEXT.md 본문에서 Session Handoff 블록만 잘라낸다.
+
+    블록은 '## Session Handoff' 부터 다음 H1('# ') 직전까지다
+    (_build_context_content 가 handoff_section 을 H1 바로 앞에 끼워 넣는다).
+    handoff 는 세션 상태라 재생성 대상이 아니다 — 재생성하는 쪽이
+    이 함수로 기존 블록을 떠서 그대로 실어야 한다.
+    """
+    lines = text.splitlines()
+    start = next(
+        (i for i, line in enumerate(lines) if line.strip() == _HANDOFF_HEADING), None
+    )
+    if start is None:
+        return None
+    end = next(
+        (i for i in range(start + 1, len(lines)) if lines[i].startswith("# ")),
+        len(lines),
+    )
+    section = "\n".join(lines[start:end]).rstrip()
+    return f"{section}\n\n" if section else None
+
+
 def _build_context_content(
     root: Path,
     compact: bool = False,
     full: bool = False,
     handoff_data: HandoffData | None = None,
+    preserved_handoff: str | None = None,
 ) -> str:
-    """PROJECT_CONTEXT.md 내용 생성."""
+    """PROJECT_CONTEXT.md 내용 생성.
+
+    preserved_handoff: handoff_data 없이 재생성할 때 기존 Session Handoff
+    블록을 그대로 실어 보존한다 (vib checkpoint 경로).
+    """
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     project_name = _detect_project_name(root)
@@ -1097,6 +1127,8 @@ def _build_context_content(
     handoff_section = ""
     if handoff_data:
         handoff_section = _build_handoff_block(handoff_data) + "\n---\n\n"
+    elif preserved_handoff:
+        handoff_section = preserved_handoff
 
     content = f"""{_TRANSFER_MARKER}
 <!--
