@@ -12,6 +12,7 @@ AI 가 세션 시작에 읽는 파일이 반쯤 잘려 있으면, 그 세션은 
 
 from __future__ import annotations
 
+import errno
 import os
 import sys
 import tempfile
@@ -84,10 +85,17 @@ def file_lock(lock_path: Path, *, timeout: float = 10.0) -> Iterator[bool]:
 
     권고적이라는 뜻: 이 함수를 쓰지 않는 쓰기는 막지 못한다. 파손 방지의
     본체는 atomic_write_text 이고, 이 잠금은 "동시에 두 번 재생성해서 나중
-    것이 먼저 것을 덮는" 순서 뒤집힘을 줄인다.
+    것이 먼저 것을 덮는" 순서 뒤집힘을 막는다.
 
-    잠금을 얻지 못해도 예외를 던지지 않고 False 를 내주며 진행한다 —
-    잠금 실패로 체크포인트 저장 자체가 막히는 편이 더 나쁘다.
+    두 가지 실패를 구분한다:
+
+    - **잠금을 지원하지 않는 환경**(flock 없는 파일시스템 등) → False 를
+      내주고 진행한다. 더 할 수 있는 게 없고, 여기서 막으면 그런 환경에서는
+      도구 자체를 못 쓴다.
+    - **다른 프로세스가 쥐고 있어 timeout 초과** → TimeoutError 를 던진다.
+      그대로 진행하면 두 세션의 handoff.json 과 PROJECT_CONTEXT.md 가 섞여,
+      새 AI 가 읽는 두 파일이 서로 다른 세션을 가리키게 된다.
+      (TimeoutError 는 OSError 하위라 기존 호출부의 except OSError 가 받는다)
     """
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     handle: BinaryIO | None = None
@@ -97,10 +105,16 @@ def file_lock(lock_path: Path, *, timeout: float = 10.0) -> Iterator[bool]:
     except OSError:
         handle = None
     if handle is not None:
-        try:
-            acquired = _try_lock(handle, timeout)
-        except OSError:
-            acquired = False
+        outcome = _try_lock(handle, timeout)
+        if outcome == "contended":
+            with _suppress_os_error():
+                handle.close()
+            raise TimeoutError(
+                f"{lock_path} 잠금을 {timeout:g}초 안에 얻지 못했습니다 — "
+                "다른 VibeLign 작업이 같은 파일을 쓰는 중입니다. "
+                "섞인 상태를 남기지 않으려고 중단합니다."
+            )
+        acquired = outcome == "acquired"
     # yield 는 정확히 한 번. 이 자리를 try/except OSError 로 감싸면 with 본문이
     # 던진 OSError(디스크 가득참·권한)가 여기로 되돌아와 두 번째 yield 를
     # 실행하고, 원래 오류가 "generator didn't stop after throw()" 로 뒤바뀐다.
@@ -116,33 +130,51 @@ def file_lock(lock_path: Path, *, timeout: float = 10.0) -> Iterator[bool]:
                 handle.close()
 
 
-def _try_lock(handle: BinaryIO, timeout: float) -> bool:
+def _try_lock(handle: BinaryIO, timeout: float) -> str:
+    """acquired / contended / unsupported 중 하나를 돌려준다.
+
+    셋을 구분하는 이유: "다른 프로세스가 쥐고 있다"와 "이 파일시스템이 잠금을
+    지원하지 않는다"는 대응이 정반대다. 전자는 멈춰야 하고 후자는 진행해야 한다.
+    """
     deadline = time.monotonic() + timeout
     while True:
-        if _lock_once(handle):
-            return True
+        outcome = _lock_once(handle)
+        if outcome is None:
+            return "unsupported"
+        if outcome:
+            return "acquired"
         if time.monotonic() >= deadline:
-            return False
+            return "contended"
         time.sleep(0.05)
 
 
-def _lock_once(handle: BinaryIO) -> bool:
+def _lock_once(handle: BinaryIO) -> bool | None:
+    """True=획득, False=경합 중, None=이 환경이 잠금을 지원하지 않음."""
     if sys.platform == "win32":
         try:
             import msvcrt
-
+        except ImportError:
+            return None
+        try:
             _ = handle.seek(0)
             msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
             return True
-        except (OSError, ImportError, ValueError):
-            return False
+        except OSError as exc:
+            # EACCES/EDEADLOCK 은 경합, 그 밖(ENOSYS 등)은 미지원으로 본다.
+            return False if exc.errno in (errno.EACCES, errno.EDEADLK) else None
+        except ValueError:
+            return None
     try:
         import fcntl
-
+    except ImportError:
+        return None
+    try:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         return True
-    except (OSError, ImportError, ValueError):
-        return False
+    except OSError as exc:
+        return False if exc.errno in (errno.EACCES, errno.EAGAIN) else None
+    except ValueError:
+        return None
 
 
 def _unlock(handle: BinaryIO) -> None:

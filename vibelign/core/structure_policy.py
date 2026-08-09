@@ -71,18 +71,30 @@ def has_anchor_markers(text: str) -> bool:
     문자열 리터럴에 마커를 적어둔 테스트 파일 14개를 "이미 앵커가 있다"고 보고
     영영 대상에서 제외했다 — 그 파일들은 보호 없이 남아 있었다.
 
-    _START/_END 가 붙은 마커만 센다. 방향 없는 `ANCHOR: FOO` 는 block/range
-    파서가 경계로 쓰지 못하므로, 여기서 참으로 보면 precheck 는 통과시키는데
-    실제 보호 구간은 없는 상태가 된다.
+    짝이 맞는 START/END 가 최소 한 쌍 있어야 참이다. 방향 없는 `ANCHOR: FOO`
+    나 END 만 있는 `ANCHOR: FAKE_END` 는 block/range 파서가 경계로 쓰지 못한다.
+    그런 걸 참으로 보면 precheck·guard 는 통과시키는데 실제 보호 구간은
+    0인 상태가 된다 — 정확히 이 규칙군이 막으려는 침묵이다.
 
     패턴을 소유한 이 모듈에 둔다. 상위 모듈(anchor_tools)에 두면
     watch_rules·risk_analyzer 가 쓰려 할 때 순환 임포트가 된다.
     """
     if not text:
         return False
+    opened: set[str] = set()
+    closed: set[str] = set()
     for match in _ANCHOR_MARKER_RE.finditer(text):
-        if match.group(1).endswith(("_START", "_END")):
-            return True
+        raw = match.group(1)
+        if raw.endswith("_START"):
+            name = raw[: -len("_START")]
+            if name in closed:
+                return True
+            opened.add(name)
+        elif raw.endswith("_END"):
+            name = raw[: -len("_END")]
+            if name in opened:
+                return True
+            closed.add(name)
     return False
 
 GENERATED_ARTIFACT_DIR_NAMES: frozenset[str] = frozenset(

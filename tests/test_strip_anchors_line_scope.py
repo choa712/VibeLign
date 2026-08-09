@@ -52,6 +52,31 @@ class TestKeepsRealCode:
         _ = strip_anchors(p)
         assert code in p.read_text(encoding="utf-8")
 
+    def test_jsx_marker_with_trailing_code_survives(self, tmp_path: Path) -> None:
+        """마커 뒤에 실제 코드가 붙은 줄은 통째로 지우면 안 된다.
+
+        경고용 탐지기는 이 줄을 '훼손된 마커' 로 잡는 게 맞지만, 그 판정을
+        삭제에 그대로 쓰면 <CriticalComponent /> 까지 사라진다.
+        """
+        line = "{/* " + MARKER.format(name="X_START") + " */}<CriticalComponent />"
+        p = _write(
+            tmp_path,
+            "App.tsx",
+            ["// " + MARKER.format(name="APP_START"), line, "// " + MARKER.format(name="APP_END")],
+        )
+        _ = strip_anchors(p)
+        assert line in p.read_text(encoding="utf-8")
+
+    def test_marker_only_jsx_line_is_removed(self, tmp_path: Path) -> None:
+        # 반대로 마커뿐인 줄은 지워도 안전하다.
+        p = _write(
+            tmp_path,
+            "Only.tsx",
+            ["{/* " + MARKER.format(name="Y_START") + " */}", "const keep = 1;"],
+        )
+        assert strip_anchors(p) is True
+        assert p.read_text(encoding="utf-8").strip() == "const keep = 1;"
+
     def test_no_change_when_only_literals_present(self, tmp_path: Path) -> None:
         literal = 'SAMPLE = "# ' + MARKER.format(name="FOO_START") + '"'
         p = _write(tmp_path, "only.py", [literal, "y = 2"])

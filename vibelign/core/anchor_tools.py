@@ -1568,24 +1568,28 @@ _DIRECTIONLESS_MARKER_RE = re.compile(
 )
 
 
+# 줄에 마커 말고는 아무것도 없을 때만 매치한다. 삭제 판정 전용이라
+# 경고용 탐지기(find_malformed_anchor_markers)보다 훨씬 엄격해야 한다 —
+# 저쪽은 "마커를 쓰려다 만 흔적"을 넓게 잡는 게 목적이지만, 이쪽이 넓으면
+# `{/* === ANCHOR: X_START === */}<Component />` 같은 줄에서 컴포넌트까지
+# 지운다. 되돌릴 수 없는 손실이므로 애매하면 남긴다.
+_MARKER_ONLY_LINE_RE = re.compile(
+    r"^[ \t]*\{?[ \t]*(?://+|#+|/\*+)[ \t]*"  # 줄 시작의 주석 접두사
+    r"=*[ \t]*ANCHOR:[ \t]*[A-Z0-9_]+[ \t]*=*"  # 마커 본체 (등호 유무 허용)
+    r"[ \t]*(?:\*/\}?|-->)?[ \t\r]*$"  # 닫는 토큰까지만, 그 뒤엔 아무것도 없음
+)
+
+
 def is_anchor_marker_line(line: str) -> bool:
-    """이 줄이 (정본이든 구 형식이든 훼손됐든) 앵커 마커 줄인가.
+    """이 줄이 오직 앵커 마커로만 이루어져 있는가 (정본·구 형식·훼손 포함).
 
     마커를 지우는 쪽(strip_anchors)이 쓴다. "마커를 포함한 줄"이 아니라
-    "마커인 줄"만 판정해야 한다 — 전자로 지우면 문자열 리터럴에 마커 예시를
-    담은 정상 코드가 함께 사라진다.
+    "마커뿐인 줄"만 참이어야 한다 — 전자로 지우면 문자열 리터럴에 마커 예시를
+    담은 정상 코드나 마커 뒤에 붙은 실제 코드가 함께 사라진다.
     """
     if _parse_anchor_marker(line) is not None:
         return True
-    if _LEGACY_MARKER_RE.match(line):
-        return True
-    lead = _COMMENT_LEAD_RE.match(line)
-    if lead is None:
-        return False
-    rest = line[lead.end() :]
-    return bool(
-        _MARKER_ATTEMPT_RE.match(rest) or _DIRECTIONLESS_MARKER_RE.match(rest)
-    )
+    return _MARKER_ONLY_LINE_RE.match(line) is not None
 
 
 def find_malformed_anchor_markers(text: str) -> list[str]:

@@ -343,6 +343,31 @@ class TestAtomicWrite:
             with file_lock(tmp_path / "y.lock"):
                 raise OSError("disk full")
 
+    def test_contended_lock_aborts_instead_of_interleaving(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """경합으로 잠금을 못 얻으면 진행하지 않는다.
+
+        그대로 쓰면 두 세션의 handoff.json 과 PROJECT_CONTEXT.md 가 섞여
+        새 AI 가 읽는 두 파일이 서로 다른 세션을 가리킨다.
+        """
+        monkeypatch.setattr(atomic_write_mod, "_lock_once", lambda _handle: False)
+        with pytest.raises(TimeoutError):
+            with file_lock(tmp_path / "busy.lock", timeout=0.1):
+                raise AssertionError("본문이 실행되면 안 된다")
+
+    def test_unsupported_locking_proceeds(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """잠금을 지원하지 않는 환경에서는 막지 않는다 — 막으면 도구를 못 쓴다."""
+        monkeypatch.setattr(atomic_write_mod, "_lock_once", lambda _handle: None)
+        with file_lock(tmp_path / "nofs.lock", timeout=0.1) as acquired:
+            assert acquired is False
+
+    def test_timeout_error_is_an_oserror(self) -> None:
+        # 호출부가 except OSError 로 받으므로 계층이 유지돼야 한다.
+        assert issubclass(TimeoutError, OSError)
+
     def test_lock_released_after_body_error(self, tmp_path: Path) -> None:
         lock_path = tmp_path / "z.lock"
         with pytest.raises(RuntimeError):

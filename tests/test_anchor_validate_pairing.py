@@ -152,16 +152,39 @@ class TestMalformed:
 
 # === ANCHOR: TEST_ANCHOR_VALIDATE_PAIRING_TESTHASANCHORMARKERS_START ===
 class TestHasAnchorMarkers:
-    """'앵커가 있는가' 판정을 정본 파서 한 곳으로 모은다."""
+    """'앵커가 있는가' 판정을 정본 파서 한 곳으로 모은다.
+
+    실제로 추출 가능한 블록이 하나라도 있어야 참이다. 이 판정이 헐거우면
+    precheck·guard 는 통과시키는데 보호 구간은 0인 상태가 된다.
+    """
+
+    def _pair(self, name: str) -> str:
+        return f"# {MARKER.format(name=name + '_START')}\nx = 1\n# {MARKER.format(name=name + '_END')}\n"
 
     def test_string_literal_does_not_count(self) -> None:
         assert not has_anchor_markers(f's = "# {MARKER.format(name="X_START")}"')
 
     def test_legacy_does_not_count(self) -> None:
-        assert not has_anchor_markers("# ANCHOR: X_START\n")
+        assert not has_anchor_markers("# ANCHOR: X_START\n# ANCHOR: X_END\n")
 
-    def test_canonical_counts(self) -> None:
-        assert has_anchor_markers(f"# {MARKER.format(name='X_START')}\n")
+    def test_paired_canonical_counts(self) -> None:
+        assert has_anchor_markers(self._pair("X"))
+
+    def test_lone_start_does_not_count(self) -> None:
+        assert not has_anchor_markers(f"# {MARKER.format(name='X_START')}\n")
+
+    def test_lone_end_does_not_count(self) -> None:
+        # END 만 있으면 추출되는 블록이 0이다 — 보호받는 척만 한다.
+        assert not has_anchor_markers(f"# {MARKER.format(name='FAKE_END')}\n")
+
+    def test_direction_less_marker_does_not_count(self) -> None:
+        assert not has_anchor_markers(f"# {MARKER.format(name='NODIR')}\n")
+
+    def test_mismatched_names_do_not_count(self) -> None:
+        text = (
+            f"# {MARKER.format(name='A_START')}\nx = 1\n# {MARKER.format(name='B_END')}\n"
+        )
+        assert not has_anchor_markers(text)
 
 
 # === ANCHOR: TEST_ANCHOR_VALIDATE_PAIRING_TESTHASANCHORMARKERS_END ===
