@@ -131,3 +131,39 @@ def test_read_content_rejects_path_outside_root(tmp_path: Path) -> None:
     assert payload["ok"] is False
     # The error should indicate the boundary violation, not leak the contents
     assert "SECRET = 42" not in (payload.get("error") or "")
+
+
+def _write_end_named(root: Path) -> None:
+    """이름 자체가 _END 로 끝나는 앵커 (context_chunk.py 실제 사례)."""
+    (root / "chunk.py").write_text(
+        "# === ANCHOR: HEAD_EXCLUSIVE_END_START ===\n"
+        "LIMIT = 3\n"
+        "# === ANCHOR: HEAD_EXCLUSIVE_END_END ===\n",
+        encoding="utf-8",
+    )
+
+
+def test_read_content_anchor_name_ending_with_end(tmp_path: Path) -> None:
+    _write_end_named(tmp_path)
+    result = handle_anchor_read_content(
+        tmp_path,
+        {"file": "chunk.py", "anchor_name": "HEAD_EXCLUSIVE_END"},
+        _factory,
+    )
+    payload = json.loads(result[0]["text"])
+    assert payload["ok"] is True, payload["error"]
+    assert "LIMIT = 3" in payload["data"]["content"]
+    assert payload["data"]["anchor_name"] == "HEAD_EXCLUSIVE_END"
+
+
+def test_read_content_marker_name_still_resolves(tmp_path: Path) -> None:
+    """마커 이름(FOO_START)으로 요청하는 기존 편의 동작은 유지된다."""
+    _write_sample(tmp_path)
+    result = handle_anchor_read_content(
+        tmp_path,
+        {"file": "sample.py", "anchor_name": "FOO_START"},
+        _factory,
+    )
+    payload = json.loads(result[0]["text"])
+    assert payload["ok"] is True, payload["error"]
+    assert "def foo()" in payload["data"]["content"]

@@ -215,7 +215,7 @@ def handle_anchor_read_content(
         err = {"ok": False, "error": "anchor_name is required", "data": None}
         return _text(text_content, json.dumps(err, ensure_ascii=False))
     file_rel = file_raw.strip()
-    anchor_name = re.sub(r"_(START|END)$", "", anchor_raw.strip())
+    anchor_name = anchor_raw.strip()
     fp = (root / file_rel).resolve()
     root_resolved = root.resolve()
     try:
@@ -236,6 +236,14 @@ def handle_anchor_read_content(
         return _text(text_content, json.dumps(err, ensure_ascii=False))
     blocks = extract_anchor_blocks(fp)
     body = blocks.get(anchor_name)
+    if body is None:
+        # 마커 이름(FOO_START)으로 요청한 경우를 위한 폴백.
+        # 정확 일치를 먼저 시도해야 이름 자체가 _END 로 끝나는 앵커
+        # (CONTEXT_CHUNK__PYTHON_HEAD_EXCLUSIVE_END)를 가리지 않는다.
+        fallback = re.sub(r"_(START|END)$", "", anchor_name)
+        if fallback != anchor_name and fallback in blocks:
+            anchor_name = fallback
+            body = blocks[fallback]
     if body is None:
         err = {
             "ok": False,
