@@ -128,6 +128,51 @@ class TestLegacyMigration:
         _ = ctx.write_text("# 그냥 생성 본문\n", encoding="utf-8")
         assert _archive_legacy_inline_handoff(tmp_path, ctx) is None
 
+    def test_corrupt_handoff_json_does_not_suppress_archive(
+        self, tmp_path: Path
+    ) -> None:
+        """깨진 handoff.json 의 '존재'만으로 보관을 건너뛰면 안 된다.
+
+        load 는 None 을 주므로 재생성물엔 블록이 없는데, 존재만 보고
+        보관을 건너뛰면 아직 멀쩡한 파일 안의 handoff 가 그대로 덮인다.
+        """
+        stored = MetaPaths(tmp_path).handoff_path
+        stored.parent.mkdir(parents=True, exist_ok=True)
+        _ = stored.write_text("{ 깨진 json", encoding="utf-8")
+        ctx = tmp_path / "PROJECT_CONTEXT.md"
+        body = "## Session Handoff\n아직 살아있는 인수인계\n"
+        _ = ctx.write_text(body, encoding="utf-8")
+
+        archive = _archive_legacy_inline_handoff(tmp_path, ctx)
+        assert archive is not None
+        assert archive.read_text(encoding="utf-8") == body
+
+    def test_archive_runs_before_save_in_every_write_path(self) -> None:
+        """보관이 저장보다 먼저 호출돼야 한다.
+
+        순서가 뒤집히면 save 가 handoff.json 을 만들어 보관 조건이 막히고,
+        약속한 보관 파일 없이 구버전 handoff 가 사라진다. 소스 순서로 고정한다.
+        """
+        sources = {
+            "cli": (Path("vibelign") / "commands" / "vib_transfer_cmd.py"),
+            "mcp": (Path("vibelign") / "mcp" / "mcp_transfer_handlers.py"),
+        }
+        for label, path in sources.items():
+            lines = path.read_text(encoding="utf-8").splitlines()
+            archive_lines = [
+                i for i, x in enumerate(lines) if "_archive_legacy_inline_handoff(" in x
+            ]
+            save_lines = [
+                i for i, x in enumerate(lines) if x.strip().startswith("save_handoff_data(")
+            ]
+            assert save_lines, f"{label}: save_handoff_data 호출이 없습니다"
+            for save_at in save_lines:
+                earlier = [i for i in archive_lines if i < save_at]
+                assert earlier, (
+                    f"{label}:{save_at + 1} save_handoff_data 앞에 "
+                    "_archive_legacy_inline_handoff 호출이 없습니다"
+                )
+
 
 # === ANCHOR: TEST_HANDOFF_OUT_OF_BAND_STORAGE_TESTLEGACYMIGRATION_END ===
 
@@ -198,6 +243,25 @@ class TestAtomicWrite:
             assert first is True
         with file_lock(lock_path) as second:
             assert second is True
+
+    def test_body_oserror_propagates_unchanged(self, tmp_path: Path) -> None:
+        """with 본문의 OSError 가 원형 그대로 올라와야 한다.
+
+        yield 를 try/except OSError 로 감싸면 본문 예외가 제너레이터로
+        되돌아와 두 번째 yield 를 실행하고, 디스크 가득참 같은 진짜 원인이
+        'generator didn't stop after throw()' 로 뒤바뀌어 사라진다.
+        """
+        with pytest.raises(OSError, match="disk full"):
+            with file_lock(tmp_path / "y.lock"):
+                raise OSError("disk full")
+
+    def test_lock_released_after_body_error(self, tmp_path: Path) -> None:
+        lock_path = tmp_path / "z.lock"
+        with pytest.raises(RuntimeError):
+            with file_lock(lock_path):
+                raise RuntimeError("boom")
+        with file_lock(lock_path) as again:
+            assert again is True
 
     def test_saved_handoff_json_is_valid(self, tmp_path: Path) -> None:
         save_handoff_data(tmp_path, _handoff())  # type: ignore[arg-type]

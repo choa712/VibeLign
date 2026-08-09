@@ -1102,8 +1102,10 @@ def _archive_legacy_inline_handoff(root: Path, out_path: Path) -> Path | None:
     흡수하고, 전용 sentinel 은 자유 텍스트에 같은 문자열이 들어가면 뚫린다).
     추측해서 일부만 남기느니 파일 전체를 남기고 사용자에게 알린다.
     """
-    meta = MetaPaths(root)
-    if meta.handoff_path.exists():
+    # "파일이 있다"가 아니라 "읽어낼 수 있다"로 판정한다. handoff.json 이
+    # 깨져 있으면 load 는 None 을 주고 재생성물에는 블록이 없는데, 존재만으로
+    # 보관을 건너뛰면 아직 멀쩡한 파일 안의 handoff 를 그대로 덮어쓴다.
+    if load_handoff_data(root) is not None:
         return None
     if not out_path.exists():
         return None
@@ -1114,7 +1116,7 @@ def _archive_legacy_inline_handoff(root: Path, out_path: Path) -> Path | None:
     if "## Session Handoff" not in text:
         return None
     stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
-    archive = meta.vibelign_dir / f"handoff-legacy-{stamp}.md"
+    archive = MetaPaths(root).vibelign_dir / f"handoff-legacy-{stamp}.md"
     atomic_write_text(archive, text)
     return archive
 
@@ -1647,6 +1649,10 @@ def run_transfer(args: object) -> None:
             decision=decision,
         )
         _persist_handoff_memory(root, handoff_data)
+        # 보관이 저장보다 먼저다. 순서가 뒤집히면 handoff.json 이 생겨
+        # 보관 조건이 막히고, 파일 안에만 있던 구버전 handoff 가 보관
+        # 없이 덮여 사라진다.
+        _archive_legacy_inline_handoff(root, out_path)
         save_handoff_data(root, handoff_data)
         content = _build_context_content(root, handoff_data=handoff_data)
     else:
@@ -1671,7 +1677,8 @@ def run_transfer(args: object) -> None:
         clack_outro("dry-run 완료 — 실제 저장하려면 --dry-run 없이 실행하세요.")
         return
 
-    _archive_legacy_inline_handoff(root, out_path)
+    if not handoff:
+        _archive_legacy_inline_handoff(root, out_path)
     write_project_context(root, out_path, content)
 
     if handoff:
@@ -1729,9 +1736,9 @@ def _run_ai_handoff_non_interactive(
         MetaPaths(root).work_memory_path,
         cast(dict[str, object], cast(object, handoff_data)),
     )
+    _archive_legacy_inline_handoff(root, out_path)
     save_handoff_data(root, handoff_data)
     content = _build_context_content(root, handoff_data=handoff_data)
-    _archive_legacy_inline_handoff(root, out_path)
     write_project_context(root, out_path, content)
     _inject_agents_handoff_instruction(root)
     payload: dict[str, object] = {

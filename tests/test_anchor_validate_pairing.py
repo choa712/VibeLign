@@ -66,12 +66,27 @@ class TestMultiplicity:
         )
         assert validate_anchor_file(p) == []
 
-    def test_interleaved_anchors_are_not_an_error(self, tmp_path: Path) -> None:
-        # 이름별 스택이라 교차해도 각자 짝이 맞으면 정상이다.
+    def test_crossing_anchors_are_reported(self, tmp_path: Path) -> None:
+        """교차는 중첩이 아니다.
+
+        P_START Q_START P_END Q_END 에서 블록 P 는 Q 의 여는 마커만 품는다.
+        AI 가 P 를 고치면 Q 의 경계가 깨지는데, 짝은 맞으니 예전 validator 는
+        통과시켰다. 완전히 포개지거나 완전히 떨어져 있어야 한다.
+        """
         p = _write(
             tmp_path,
             "cross.py",
             [_m("P_START"), _m("Q_START"), "x = 1", _m("P_END"), _m("Q_END")],
+        )
+        problems = validate_anchor_file(p)
+        assert any("교차" in x for x in problems), problems
+
+    def test_sequential_anchors_are_not_an_error(self, tmp_path: Path) -> None:
+        # 완전히 떨어진 형제 앵커는 정상이다.
+        p = _write(
+            tmp_path,
+            "sibling.py",
+            [_m("P_START"), "x = 1", _m("P_END"), _m("Q_START"), "y = 2", _m("Q_END")],
         )
         assert validate_anchor_file(p) == []
 

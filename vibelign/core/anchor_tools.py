@@ -866,22 +866,41 @@ def extract_anchor_line_ranges(path: Path) -> dict[str, tuple[int, int]]:
     ranges: dict[str, tuple[int, int]] = {}
     # 같은 이름이 겹쳐 열릴 수 있으므로 이름당 스택으로 쌓는다.
     # extract_anchor_blocks 와 동일한 규칙이어야 두 함수 결과가 일치한다.
-    starts: dict[str, list[int]] = {}
+    starts: dict[str, list[tuple[int, str]]] = {}
+    seen: dict[str, int] = {}
     for i, line in enumerate(text.splitlines(), start=1):
         marker = _parse_anchor_marker(line)
         if marker is None:
             continue
         name, is_start = marker
         if is_start:
-            starts.setdefault(name, []).append(i)
+            starts.setdefault(name, []).append((i, _occurrence_name(seen, name)))
             continue
         stack = starts.get(name)
         if stack:
-            ranges[name] = (stack.pop(), i)
+            start_line, display = stack.pop()
+            ranges[display] = (start_line, i)
     return ranges
 
 
 # === ANCHOR: ANCHOR_TOOLS_EXTRACT_ANCHOR_LINE_RANGES_END ===
+
+
+# === ANCHOR: ANCHOR_TOOLS__OCCURRENCE_NAME_START ===
+def _occurrence_name(seen: dict[str, int], name: str) -> str:
+    """같은 이름이 여러 번 열릴 때 두 번째부터 NAME_2, NAME_3 로 구분한다.
+
+    extract_anchor_spans 가 project map·MCP 에 이 이름을 광고하는데,
+    blocks/ranges 가 기본 이름만 만들면 광고된 NAME_2 를 요청했을 때
+    "anchor not found" 가 돌아온다 — PR #1 이 고친 결함과 같은 부류다.
+    번호는 START 가 나타난 순서로 매긴다(spans 와 동일).
+    """
+    seen[name] = seen.get(name, 0) + 1
+    occurrence = seen[name]
+    return name if occurrence == 1 else f"{name}_{occurrence}"
+
+
+# === ANCHOR: ANCHOR_TOOLS__OCCURRENCE_NAME_END ===
 
 
 # === ANCHOR: ANCHOR_TOOLS_ITER_ANCHOR_BLOCKS_START ===
@@ -931,20 +950,23 @@ def extract_anchor_blocks(
     # 같은 이름이 겹쳐 열리면 END 마다 join 이 돌아 2차 비용이 된다
     # (깊이 4000 실측 0.097s) — 어차피 뒤 END 가 덮어쓰므로 낭비다.
     spans: dict[str, tuple[int, int]] = {}
+    seen: dict[str, int] = {}
     for i, line in enumerate(lines):
         marker = _parse_anchor_marker(line)
         if marker is None:
             continue
         name, is_start = marker
         if is_start:
-            open_starts.setdefault(name, []).append(i)
+            open_starts.setdefault(name, []).append((i, _occurrence_name(seen, name)))
             continue
         stack = open_starts.get(name)
         if not stack:
             continue
-        start = stack.pop()  # 가장 안쪽 START 부터 닫는다
-        if only is None or name in only:
-            spans[name] = (start, i)
+        start, display = stack.pop()  # 가장 안쪽 START 부터 닫는다
+        # 걸러낼 때도 표시 이름으로 본다 — 호출자가 광고된 NAME_2 를
+        # 요청했는데 기본 이름으로만 비교하면 빈 결과가 돌아간다.
+        if only is None or display in only:
+            spans[display] = (start, i)
     for name, (start, end) in spans.items():
         blocks[name] = "\n".join(lines[start + 1 : end]).strip()
     return blocks
@@ -1407,6 +1429,17 @@ def validate_anchor_file(path: Path) -> list[str]:
             continue
         for idx in range(len(open_starts) - 1, -1, -1):
             if open_starts[idx][0] == name:
+                # 이 앵커보다 나중에 열려 아직 안 닫힌 앵커가 있으면 교차다
+                # (A_START B_START A_END B_END). 중첩과 달리 한쪽 블록이 다른
+                # 쪽의 여는 마커만 품게 되어, 그 블록을 고치면 상대 앵커의
+                # 경계가 깨진다. 완전히 포함되는 중첩만 정상으로 본다.
+                crossing = [n for n, _ in open_starts[idx + 1 :]]
+                if crossing:
+                    problems.append(
+                        f"{line_no}번째 줄: {name}_END 가 "
+                        f"{', '.join(crossing)} 와 교차합니다 — "
+                        "앵커는 완전히 포개지거나 완전히 떨어져 있어야 합니다"
+                    )
                 del open_starts[idx]
                 break
         else:

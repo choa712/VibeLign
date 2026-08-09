@@ -83,10 +83,19 @@ def file_lock(lock_path: Path, *, timeout: float = 10.0) -> Iterator[bool]:
     acquired = False
     try:
         handle = open(lock_path, "a+b")
-        acquired = _try_lock(handle, timeout)
-        yield acquired
     except OSError:
-        yield False
+        handle = None
+    if handle is not None:
+        try:
+            acquired = _try_lock(handle, timeout)
+        except OSError:
+            acquired = False
+    # yield 는 정확히 한 번. 이 자리를 try/except OSError 로 감싸면 with 본문이
+    # 던진 OSError(디스크 가득참·권한)가 여기로 되돌아와 두 번째 yield 를
+    # 실행하고, 원래 오류가 "generator didn't stop after throw()" 로 뒤바뀐다.
+    # 잠금 획득 실패는 위에서 이미 삼켰고, 본문 예외는 그대로 올려보낸다.
+    try:
+        yield acquired
     finally:
         if handle is not None:
             if acquired:

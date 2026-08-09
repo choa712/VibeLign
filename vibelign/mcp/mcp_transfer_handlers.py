@@ -125,10 +125,12 @@ def handle_handoff_create(
 
     # CLI 경로와 반드시 같이 움직여야 한다. 여기서 원본을 보관하지 않으면
     # MCP 로 만든 handoff 만 다음 체크포인트에 사라진다 (issue #6).
+    ctx_path = root / "PROJECT_CONTEXT.md"
+    # 보관이 저장보다 먼저 (CLI 경로와 동일 — 순서가 뒤집히면 구버전
+    # 인라인 handoff 가 보관 없이 덮인다).
+    _archive_legacy_inline_handoff(root, ctx_path)
     save_handoff_data(root, handoff_data)
     content = build_context_content(root, handoff_data=handoff_data)
-    ctx_path = root / "PROJECT_CONTEXT.md"
-    _archive_legacy_inline_handoff(root, ctx_path)
     write_project_context(root, ctx_path, content)
     inject_agents_handoff_instruction(root)
     return _text(
