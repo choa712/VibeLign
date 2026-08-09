@@ -9,6 +9,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from collections.abc import Callable
 from typing import Protocol, TypedDict, cast
 
 from vibelign.commands import transfer_git_context
@@ -1111,8 +1112,15 @@ def _archive_legacy_inline_handoff(root: Path, out_path: Path) -> Path | None:
         return None
     try:
         text = out_path.read_text(encoding="utf-8")
-    except OSError:
-        return None
+    except OSError as exc:
+        # 읽지 못했으면 "handoff 가 없다"가 아니라 "있는지 모른다"이다.
+        # 모르는 채로 덮으면 유일한 handoff 가 보관 없이 사라진다.
+        # 파일은 못 읽어도 상위 디렉터리 권한만 있으면 교체는 되기 때문에
+        # 조용히 넘기면 실제로 손실이 난다. 여기서 멈춘다.
+        raise OSError(
+            f"{out_path} 를 읽을 수 없어 기존 handoff 보관 여부를 확인할 수 "
+            "없습니다. 덮어쓰지 않고 중단합니다."
+        ) from exc
     if "## Session Handoff" not in text:
         return None
     stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
@@ -1124,10 +1132,10 @@ def _archive_legacy_inline_handoff(root: Path, out_path: Path) -> Path | None:
 def commit_project_context(
     root: Path,
     out_path: Path,
-    content: str,
+    build_content: Callable[[], str],
     *,
     handoff_data: HandoffData | None = None,
-) -> Path | None:
+) -> tuple[Path | None, str]:
     """생성물과 handoff 원본을 한 잠금 안에서 함께 확정한다 (issue #2, #6).
 
     셋을 따로 쓰면 동시 실행 시 handoff.json 은 B, PROJECT_CONTEXT.md 는 A 로
@@ -1139,14 +1147,20 @@ def commit_project_context(
     교체다. 잠금을 못 얻어도 저장은 진행한다 — 체크포인트가 잠금 때문에
     실패하는 편이 더 나쁘다.
 
-    구버전 인라인 handoff 를 보관했으면 그 경로를 돌려준다.
+    본문 생성도 잠금 안에서 한다. 밖에서 만들면 저장된 handoff 를 읽어 본문을
+    만든 사이에 다른 세션이 handoff.json 을 바꿀 수 있고, 그러면
+    handoff.json 은 B 인데 PROJECT_CONTEXT.md 는 A 가 된다 — 새 AI 가 읽는
+    두 파일이 서로 다른 세션을 가리킨다.
+
+    (구버전 인라인 handoff 보관 경로, 실제로 쓴 본문) 을 돌려준다.
     """
     with file_lock(MetaPaths(root).context_lock_path):
         archive = _archive_legacy_inline_handoff(root, out_path)
         if handoff_data is not None:
             save_handoff_data(root, handoff_data)
+        content = build_content()
         atomic_write_text(out_path, content)
-    return archive
+    return archive, content
 
 
 def _build_context_content(
@@ -1672,11 +1686,21 @@ def run_transfer(args: object) -> None:
         # 을 먼저 기록하면 "미리보기" 가 아니라 그냥 실행이다.
         if not dry_run:
             _persist_handoff_memory(root, handoff_data)
-        content = _build_context_content(root, handoff_data=handoff_data)
+        captured = handoff_data
+
+        # handoff 경로는 명시 데이터로 본문을 만드므로 저장 데이터와 출처가
+        # 같다 — 잠금 안에서 다시 만들어도 결과가 달라지지 않는다.
+        def build_content() -> str:
+            return _build_context_content(root, handoff_data=captured)
     else:
         handoff_data = None
-        content = _build_context_content(root, compact=compact, full=full)
 
+        # 이쪽은 저장된 handoff.json 을 읽어 본문을 만든다. 잠금 안에서
+        # 만들어야 읽은 시점과 쓰는 시점 사이에 다른 세션이 끼어들지 않는다.
+        def build_content() -> str:
+            return _build_context_content(root, compact=compact, full=full)
+
+    content = build_content()
     tokens = _estimate_tokens(content)
 
     if dry_run:
@@ -1695,7 +1719,14 @@ def run_transfer(args: object) -> None:
         clack_outro("dry-run 완료 — 실제 저장하려면 --dry-run 없이 실행하세요.")
         return
 
-    _ = commit_project_context(root, out_path, content, handoff_data=handoff_data)
+    try:
+        _archive, content = commit_project_context(
+            root, out_path, build_content, handoff_data=handoff_data
+        )
+    except OSError as exc:
+        clack_info(f"오류: {exc}")
+        return
+    tokens = _estimate_tokens(content)
 
     if handoff:
         _inject_agents_handoff_instruction(root)
@@ -1752,8 +1783,12 @@ def _run_ai_handoff_non_interactive(
         MetaPaths(root).work_memory_path,
         cast(dict[str, object], cast(object, handoff_data)),
     )
-    content = _build_context_content(root, handoff_data=handoff_data)
-    _ = commit_project_context(root, out_path, content, handoff_data=handoff_data)
+    _archive, _content = commit_project_context(
+        root,
+        out_path,
+        lambda: _build_context_content(root, handoff_data=handoff_data),
+        handoff_data=handoff_data,
+    )
     _inject_agents_handoff_instruction(root)
     payload: dict[str, object] = {
         "ok": True,

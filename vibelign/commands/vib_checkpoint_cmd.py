@@ -180,10 +180,13 @@ def run_vib_checkpoint(args: object) -> None:
         # 파일 안에만 handoff 가 있는 구버전 상태면 통째로 보관한 뒤 알린다.
         # 보관·쓰기는 한 잠금 안에서 처리된다 (commit_project_context).
         commit = cast(
-            "Callable[[Path, Path, str], Path | None]",
+            "Callable[[Path, Path, Callable[[], str]], tuple[Path | None, str]]",
             getattr(transfer_mod, "commit_project_context"),
         )
-        archive = commit(root, ctx_path, build_context_content(root))
+        # 본문 생성을 잠금 안으로 넘긴다 — 밖에서 만들면 저장된 handoff 를
+        # 읽은 뒤 다른 세션이 그것을 바꿔, handoff.json 과 PROJECT_CONTEXT.md
+        # 가 서로 다른 세션을 가리킬 수 있다.
+        archive, _content = commit(root, ctx_path, lambda: build_context_content(root))
         if archive is not None:
             handoff_warning = True
             legacy_archive_path = archive.name

@@ -31,6 +31,13 @@ def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None
     """
     directory = path.parent
     directory.mkdir(parents=True, exist_ok=True)
+    # mkstemp 는 0600 으로 만든다. 그대로 교체하면 write_text 로 만들어졌던
+    # 파일(보통 0644)이 소유자 전용으로 바뀐다 — 팀 공유 체크아웃이나
+    # 다른 사용자로 도는 도구가 갑자기 읽지 못하게 된다.
+    try:
+        keep_mode: int | None = path.stat().st_mode & 0o777
+    except OSError:
+        keep_mode = None
     fd, tmp_name = tempfile.mkstemp(
         dir=str(directory), prefix=f".{path.name}.", suffix=".tmp"
     )
@@ -44,6 +51,10 @@ def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None
             # fsync 없이 replace 하면 전원이 끊길 때 빈 파일이 남을 수 있다
             # (교체는 기록됐는데 내용은 아직 디스크에 없는 상태).
             os.fsync(handle.fileno())
+        # 새로 만드는 경우 0644 — write_text 가 umask 022 에서 내던 값과 같다.
+        # umask 를 읽으려면 잠시 바꿔야 하는데(os.umask), 그 사이 다른 스레드가
+        # 파일을 만들면 권한이 틀어지므로 고정값을 쓴다.
+        os.chmod(tmp_path, keep_mode if keep_mode is not None else 0o644)
         os.replace(tmp_path, path)
     except BaseException:
         with _suppress_os_error():

@@ -123,8 +123,12 @@ def handle_handoff_create(
     # MCP 로 만든 handoff 만 다음 체크포인트에 사라진다 (issue #6).
     # 보관·저장·쓰기의 순서와 잠금은 commit_project_context 안에 있다.
     ctx_path = root / "PROJECT_CONTEXT.md"
-    content = build_context_content(root, handoff_data=handoff_data)
-    _ = commit_project_context(root, ctx_path, content, handoff_data=handoff_data)
+    _archive, _content = commit_project_context(
+        root,
+        ctx_path,
+        lambda: build_context_content(root, handoff_data=handoff_data),
+        handoff_data=handoff_data,
+    )
     inject_agents_handoff_instruction(root)
     return _text(
         text_content,

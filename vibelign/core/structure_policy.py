@@ -71,10 +71,19 @@ def has_anchor_markers(text: str) -> bool:
     문자열 리터럴에 마커를 적어둔 테스트 파일 14개를 "이미 앵커가 있다"고 보고
     영영 대상에서 제외했다 — 그 파일들은 보호 없이 남아 있었다.
 
+    _START/_END 가 붙은 마커만 센다. 방향 없는 `ANCHOR: FOO` 는 block/range
+    파서가 경계로 쓰지 못하므로, 여기서 참으로 보면 precheck 는 통과시키는데
+    실제 보호 구간은 없는 상태가 된다.
+
     패턴을 소유한 이 모듈에 둔다. 상위 모듈(anchor_tools)에 두면
     watch_rules·risk_analyzer 가 쓰려 할 때 순환 임포트가 된다.
     """
-    return bool(text) and _ANCHOR_MARKER_RE.search(text) is not None
+    if not text:
+        return False
+    for match in _ANCHOR_MARKER_RE.finditer(text):
+        if match.group(1).endswith(("_START", "_END")):
+            return True
+    return False
 
 GENERATED_ARTIFACT_DIR_NAMES: frozenset[str] = frozenset(
     {"dist", "build", "target", ".next", ".pnpm-store", "node_modules"}

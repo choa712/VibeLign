@@ -240,18 +240,90 @@ class TestAtomicWrite:
 
     def test_commit_project_context_uses_atomic_path(self, tmp_path: Path) -> None:
         ctx = tmp_path / "PROJECT_CONTEXT.md"
-        assert commit_project_context(tmp_path, ctx, "생성물") is None
+        archive, content = commit_project_context(tmp_path, ctx, lambda: "생성물")
+        assert archive is None
+        assert content == "생성물"
         assert ctx.read_text(encoding="utf-8") == "생성물"
 
     def test_commit_writes_handoff_and_context_together(self, tmp_path: Path) -> None:
         """둘을 따로 쓰면 동시 실행 시 서로 다른 세션을 가리키게 된다."""
         ctx = tmp_path / "PROJECT_CONTEXT.md"
         _ = commit_project_context(
-            tmp_path, ctx, "본문", handoff_data=_handoff()  # type: ignore[arg-type]
+            tmp_path,
+            ctx,
+            lambda: "본문",
+            handoff_data=_handoff(),  # type: ignore[arg-type]
         )
         assert ctx.read_text(encoding="utf-8") == "본문"
         stored = load_handoff_data(tmp_path)
         assert stored is not None and stored["source"] == "cli"
+
+    def test_content_is_built_inside_the_lock(self, tmp_path: Path) -> None:
+        """본문 생성이 잠금 안에서 일어나야 저장된 handoff 와 어긋나지 않는다.
+
+        밖에서 만들면 handoff 를 읽어 본문을 만든 사이에 다른 세션이
+        handoff.json 을 바꿔, 두 파일이 서로 다른 세션을 가리킬 수 있다.
+        """
+        ctx = tmp_path / "PROJECT_CONTEXT.md"
+        order: list[str] = []
+
+        def build() -> str:
+            # 이 시점엔 이미 저장이 끝나 있어야 한다
+            stored = load_handoff_data(tmp_path)
+            order.append("built" if stored is not None else "built-before-save")
+            return "본문"
+
+        _ = commit_project_context(
+            tmp_path,
+            ctx,
+            build,
+            handoff_data=_handoff(),  # type: ignore[arg-type]
+        )
+        assert order == ["built"]
+
+    def test_unreadable_context_aborts_instead_of_overwriting(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """읽을 수 없으면 '없다'가 아니라 '모른다' — 덮지 않고 멈춘다.
+
+        파일은 못 읽어도 상위 디렉터리 권한만 있으면 교체는 되기 때문에,
+        조용히 넘기면 유일한 handoff 가 보관 없이 사라진다.
+        """
+        ctx = tmp_path / "PROJECT_CONTEXT.md"
+        original = "## Session Handoff\n유일한 인수인계\n"
+        _ = ctx.write_text(original, encoding="utf-8")
+
+        real_read = Path.read_text
+
+        def refuse(self: Path, *args: object, **kwargs: object) -> str:
+            if self == ctx:
+                raise OSError("permission denied")
+            return real_read(self, *args, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(Path, "read_text", refuse)
+        with pytest.raises(OSError):
+            _ = commit_project_context(tmp_path, ctx, lambda: "새 본문")
+
+        monkeypatch.undo()
+        assert ctx.read_text(encoding="utf-8") == original
+
+    def test_existing_file_mode_is_preserved(self, tmp_path: Path) -> None:
+        """0600 으로 떨어뜨리면 팀 공유 체크아웃에서 남이 못 읽는다."""
+        import os
+        import stat
+
+        p = tmp_path / "ctx.md"
+        _ = p.write_text("x", encoding="utf-8")
+        os.chmod(p, 0o644)
+        atomic_write_text(p, "y")
+        assert stat.S_IMODE(p.stat().st_mode) == 0o644
+
+    def test_new_file_is_group_readable(self, tmp_path: Path) -> None:
+        import stat
+
+        p = tmp_path / "new.md"
+        atomic_write_text(p, "z")
+        assert stat.S_IMODE(p.stat().st_mode) == 0o644
 
     def test_lock_is_advisory_and_reentrant_across_calls(self, tmp_path: Path) -> None:
         lock_path = tmp_path / "x.lock"

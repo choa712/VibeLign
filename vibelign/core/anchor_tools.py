@@ -1415,7 +1415,11 @@ def strip_anchors(path: Path) -> bool:
     if not text:
         return False
     lines = text.splitlines()
-    cleaned = [line for line in lines if not re.search(r"===\s*ANCHOR:", line)]
+    # 줄 전체가 마커인 줄만 지운다. 예전엔 `=== ANCHOR:` 를 포함한 아무 줄이나
+    # 지웠는데, `vib scan --auto` 가 검증 문제 파일에 이 함수를 돌리므로
+    # 문자열 리터럴에 마커 예시를 담은 정상 코드가 통째로 사라졌다.
+    # 검증 항목이 늘어날수록 이 삭제 경로에 들어오는 파일도 늘어난다.
+    cleaned = [line for line in lines if not is_anchor_marker_line(line)]
     if len(cleaned) == len(lines):
         return False
     try:
@@ -1562,6 +1566,26 @@ _MARKER_ATTEMPT_RE = re.compile(r"^=*[ \t]*ANCHOR:[ \t]*[A-Z0-9_]+(?:_START|_END
 _DIRECTIONLESS_MARKER_RE = re.compile(
     r"^=+[ \t]*ANCHOR:[ \t]*([A-Z0-9_]+)[ \t]*=+[ \t\r]*$"
 )
+
+
+def is_anchor_marker_line(line: str) -> bool:
+    """이 줄이 (정본이든 구 형식이든 훼손됐든) 앵커 마커 줄인가.
+
+    마커를 지우는 쪽(strip_anchors)이 쓴다. "마커를 포함한 줄"이 아니라
+    "마커인 줄"만 판정해야 한다 — 전자로 지우면 문자열 리터럴에 마커 예시를
+    담은 정상 코드가 함께 사라진다.
+    """
+    if _parse_anchor_marker(line) is not None:
+        return True
+    if _LEGACY_MARKER_RE.match(line):
+        return True
+    lead = _COMMENT_LEAD_RE.match(line)
+    if lead is None:
+        return False
+    rest = line[lead.end() :]
+    return bool(
+        _MARKER_ATTEMPT_RE.match(rest) or _DIRECTIONLESS_MARKER_RE.match(rest)
+    )
 
 
 def find_malformed_anchor_markers(text: str) -> list[str]:
