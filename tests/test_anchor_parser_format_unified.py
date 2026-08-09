@@ -80,14 +80,20 @@ class TestRgPathMatchesPythonPath(unittest.TestCase):
         cmd = cast("list[str]", run.call_args.args[0])
         self.assertIn(ANCHOR_MARKER_PATTERN, cmd)
 
-    def test_rg_output_parsing_matches_extract_anchors(self) -> None:
-        """rg -o 출력(정본 마커 전체)에서 extract_anchors 와 같은 이름을 뽑는다."""
-        stdout = (
-            "/tmp/project/mod.py:=== ANCHOR: FOO_START ===\n"
-            "/tmp/project/mod.py:=== ANCHOR: FOO_END ===\n"
-            "/tmp/project/mod.py:=== ANCHOR: __INIT___START ===\n"
-            "/tmp/project/mod.py:=== ANCHOR: __INIT___END ===\n"
+    def test_rg_command_requests_nul_separator(self) -> None:
+        """경로/매치 구분자는 NUL 이어야 한다 (Windows 드라이브 문자 대비)."""
+        completed = subprocess.CompletedProcess(
+            args=["rg"], returncode=0, stdout="", stderr=""
         )
+        with patch.object(fast_tools, "_RG", "rg"):
+            with patch(
+                "vibelign.core.fast_tools.subprocess.run", return_value=completed
+            ) as run:
+                _ = fast_tools.grep_anchors_rg(Path("/tmp/project"))
+        cmd = cast("list[str]", run.call_args.args[0])
+        self.assertIn("--null", cmd)
+
+    def _run_with_stdout(self, stdout: str, root: str) -> dict[str, list[str]] | None:
         completed = subprocess.CompletedProcess(
             args=["rg"], returncode=0, stdout=stdout, stderr=""
         )
@@ -95,18 +101,44 @@ class TestRgPathMatchesPythonPath(unittest.TestCase):
             with patch(
                 "vibelign.core.fast_tools.subprocess.run", return_value=completed
             ):
-                result = fast_tools.grep_anchors_rg(Path("/tmp/project"))
+                return fast_tools.grep_anchors_rg(Path(root))
+
+    def test_rg_output_parsing_matches_extract_anchors(self) -> None:
+        """rg -o 출력(정본 마커 줄 전체)에서 extract_anchors 와 같은 이름을 뽑는다."""
+        stdout = (
+            "/tmp/project/mod.py\0# === ANCHOR: FOO_START ===\n"
+            "/tmp/project/mod.py\0# === ANCHOR: FOO_END ===\n"
+            "/tmp/project/mod.py\0# === ANCHOR: __INIT___START ===\n"
+            "/tmp/project/mod.py\0# === ANCHOR: __INIT___END ===\n"
+        )
+        result = self._run_with_stdout(stdout, "/tmp/project")
         self.assertEqual(result, {"mod.py": ["FOO", "__INIT__"]})
+
+    def test_rg_output_parsing_handles_indented_marker(self) -> None:
+        """들여쓴 마커는 -o 출력에 선행 공백이 포함된 채로 온다."""
+        stdout = "/tmp/project/mod.py\0    # === ANCHOR: INNER_START ===\n"
+        result = self._run_with_stdout(stdout, "/tmp/project")
+        self.assertEqual(result, {"mod.py": ["INNER"]})
+
+    def test_rg_output_parsing_handles_windows_drive_letter(self) -> None:
+        """C:\\... 경로에서 드라이브 문자의 ':' 가 구분자로 오인되면 안 된다.
+
+        ':' 로 나누던 시절엔 모든 앵커가 파일 "C" 하나에 몰렸다.
+        """
+        stdout = "C:\\proj\\mod.py\0# === ANCHOR: WIN_START ===\n"
+        result = self._run_with_stdout(stdout, "C:\\proj")
+        assert result is not None
+        self.assertEqual(list(result.values()), [["WIN"]])
+        self.assertNotIn("C", result)
 
     def test_rg_output_ignores_legacy_format(self) -> None:
         """구 형식은 rg 패턴에 걸리지 않으므로 인덱스에 들어가면 안 된다."""
-        stdout = "/tmp/project/mod.py:ANCHOR: LEGACY_START\n"
-        completed = subprocess.CompletedProcess(
-            args=["rg"], returncode=0, stdout=stdout, stderr=""
-        )
-        with patch.object(fast_tools, "_RG", "rg"):
-            with patch(
-                "vibelign.core.fast_tools.subprocess.run", return_value=completed
-            ):
-                result = fast_tools.grep_anchors_rg(Path("/tmp/project"))
+        stdout = "/tmp/project/mod.py\0# ANCHOR: LEGACY_START\n"
+        result = self._run_with_stdout(stdout, "/tmp/project")
+        self.assertEqual(result, {})
+
+    def test_rg_output_ignores_marker_embedded_in_code(self) -> None:
+        """줄 안쪽에 박힌 마커는 rg 파싱 단계에서도 앵커가 아니다."""
+        stdout = '/tmp/project/mod.py\0s = "# === ANCHOR: PHANTOM_START ==="\n'
+        result = self._run_with_stdout(stdout, "/tmp/project")
         self.assertEqual(result, {})

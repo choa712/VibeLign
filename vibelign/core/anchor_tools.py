@@ -79,7 +79,9 @@ COMMENT_PREFIX = {
     ".hpp": "//",
     ".cs": "//",
 }
-ANCHOR_RE = re.compile(ANCHOR_MARKER_PATTERN)
+# MULTILINE 필수: 패턴이 ^/$ 로 줄 고정돼 있어 전문(finditer) 검색에서
+# 플래그가 없으면 파일의 첫 줄만 매치된다.
+ANCHOR_RE = re.compile(ANCHOR_MARKER_PATTERN, re.MULTILINE)
 PY_SYMBOL_RE = re.compile(
     r"^(?:async\s+def|def|class)\s+([A-Za-z_][A-Za-z0-9_]*)", re.MULTILINE
 )

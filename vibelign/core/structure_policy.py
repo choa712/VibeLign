@@ -46,7 +46,18 @@ WINDOWS_SUBPROCESS_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32
 # 공백은 같은 줄 안에서만 허용한다(\s 는 개행도 먹는다). Python 은 전문
 # 검색(finditer), ripgrep 과 마커 파서는 줄 단위라, 개행을 허용하면 줄을
 # 넘겨 쓴 마커가 경로마다 다르게 인식돼 인덱스·span·block 이 어긋난다.
-ANCHOR_MARKER_PATTERN = r"===[ \t]*ANCHOR:[ \t]*([A-Z0-9_]+)[ \t]*==="
+#
+# 줄 단위로 고정한다: "줄 전체가 마커인 주석"만 경계로 인정한다. 고정하지
+# 않으면 소스 텍스트 안에 박힌 마커 모양 문자열이 진짜 경계가 돼 블록이
+# 의도보다 짧게 잘리고 바깥 구간이 보호 없이 남는다 — 게다가 START/END
+# 쌍은 맞아 보이므로 validate 가 조용히 통과한다. 이 리포에서만 테스트
+# 파일의 문자열 리터럴 776건이 그렇게 팬텀 앵커로 잡히고 있었다.
+# 끝의 \r 은 CRLF 체크아웃(Windows)용 — 없으면 그쪽에서 전부 인식 실패한다.
+# 쓰는 쪽은 re.MULTILINE 을 반드시 켜야 한다(^/$ 가 줄 단위여야 함).
+# rg 는 줄 지향이라 플래그 없이 그대로 동작한다.
+ANCHOR_MARKER_PATTERN = (
+    r"^[ \t]*(?://|#)[ \t]*===[ \t]*ANCHOR:[ \t]*([A-Z0-9_]+)[ \t]*===[ \t\r]*$"
+)
 
 GENERATED_ARTIFACT_DIR_NAMES: frozenset[str] = frozenset(
     {"dist", "build", "target", ".next", ".pnpm-store", "node_modules"}
