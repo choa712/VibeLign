@@ -117,6 +117,7 @@ def handle_handoff_create(
     handoff_data = enrich_handoff_with_work_memory(root, handoff_data)
 
     from vibelign.commands.vib_transfer_cmd import commit_project_context
+    from vibelign.core.atomic_write import PartialCommitError
 
     # CLI 경로와 반드시 같은 함수를 쓴다. 여기서 원본을 보관하지 않으면
     # MCP 로 만든 handoff 만 다음 체크포인트에 사라진다 (issue #6).
@@ -132,6 +133,10 @@ def handle_handoff_create(
             handoff_data=handoff_data,
             before_commit=lambda: persist_handoff_memory(root, handoff_data),
         )
+    except PartialCommitError as exc:
+        # 정본은 이미 갱신됐다 — "중단" 으로 보고하면 호출한 AI 가 원래
+        # 상태가 그대로라고 믿는다.
+        return _text(text_content, f"Session Handoff 일부만 반영됨: {exc}")
     except OSError as exc:
         # 잠금 경합(TimeoutError) 이나 기존 파일 읽기 실패. 둘 다 "덮지 않고
         # 멈춘" 상태이므로 그대로 알린다 — 도구 호출이 트레이스백으로

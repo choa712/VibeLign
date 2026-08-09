@@ -30,6 +30,25 @@ def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None
     commit_staged([(staged, path)])
 
 
+class PartialCommitError(OSError):
+    """일부만 교체된 채 실패했다. 아무것도 안 바뀐 것과 구별해야 한다.
+
+    호출자가 이걸 그냥 "저장 중단" 으로 보고하면 사용자는 원래 상태가
+    그대로라고 믿는다. 실제로는 정본만 새것이라 다음 재생성이 파생물을
+    맞춰줘야 한다 — 그 사실을 알려야 다시 실행할 수 있다.
+    """
+
+    def __init__(self, replaced: list[Path], remaining: list[Path], cause: BaseException):
+        self.replaced = replaced
+        self.remaining = remaining
+        landed = ", ".join(p.name for p in replaced)
+        missed = ", ".join(p.name for p in remaining)
+        super().__init__(
+            f"일부만 반영됐습니다 — 갱신됨: {landed} / 갱신 못함: {missed} ({cause}). "
+            "정본이 먼저 갱신되므로 같은 명령을 다시 실행하면 나머지가 맞춰집니다."
+        )
+
+
 def commit_staged(pairs: list[tuple[Path, Path]]) -> None:
     """준비된 임시 파일들을 연달아 교체한다.
 
@@ -41,10 +60,22 @@ def commit_staged(pairs: list[tuple[Path, Path]]) -> None:
     하나만 갱신된 채 끝나면 새 AI 가 서로 다른 세션을 가리키는 두 파일을 읽는다.
     중간에 끊길 수 있으므로 호출자가 **정본을 먼저, 파생물을 나중에** 배치해야
     한다. 그래야 끊겼을 때 다음 재생성이 파생물을 다시 만들어 자가 복구된다.
+
+    첫 교체가 성공한 뒤 실패하면 PartialCommitError 를 던진다 — 아무것도
+    안 바뀐 실패와 섞이면 호출자가 사용자에게 거짓말을 하게 된다.
     """
+    replaced: list[Path] = []
     try:
-        for tmp_path, dest in pairs:
-            os.replace(tmp_path, dest)
+        for index, (tmp_path, dest) in enumerate(pairs):
+            try:
+                os.replace(tmp_path, dest)
+            except OSError as exc:
+                if replaced:
+                    raise PartialCommitError(
+                        replaced, [d for _t, d in pairs[index:]], exc
+                    ) from exc
+                raise
+            replaced.append(dest)
     finally:
         for tmp_path, _dest in pairs:
             if tmp_path.exists():

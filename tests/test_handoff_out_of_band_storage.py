@@ -461,6 +461,44 @@ class TestAtomicWrite:
                 pass
         assert capsys.readouterr().err.count("잠금 없이 진행") == 1
 
+    def test_partial_commit_is_reported_as_partial(self, tmp_path: Path) -> None:
+        """첫 교체가 성공한 뒤 실패하면 '중단' 이라고 하면 안 된다.
+
+        정본은 이미 갱신됐다. 아무것도 안 바뀐 실패와 같은 메시지를 내면
+        사용자는 원래 상태가 그대로라고 믿고 다시 실행하지 않는다.
+        """
+        ctx = tmp_path / "PROJECT_CONTEXT.md"
+        real_replace = atomic_write_mod.os.replace
+        calls = {"n": 0}
+
+        def fail_second(src: object, dst: object) -> None:
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise OSError("두 번째 교체 실패")
+            real_replace(src, dst)  # type: ignore[arg-type]
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(atomic_write_mod.os, "replace", fail_second)
+            with pytest.raises(atomic_write_mod.PartialCommitError) as caught:
+                _ = commit_project_context(
+                    tmp_path,
+                    ctx,
+                    lambda: "본문",
+                    handoff_data=_handoff(),  # type: ignore[arg-type]
+                )
+
+        message = str(caught.value)
+        assert "일부만 반영" in message
+        assert "handoff.json" in message  # 갱신된 쪽
+        assert "PROJECT_CONTEXT.md" in message  # 못 한 쪽
+        # 정본이 먼저 갱신되므로 재실행으로 복구 가능한 방향이다
+        assert load_handoff_data(tmp_path) is not None
+        assert not ctx.exists()
+
+    def test_partial_commit_error_is_an_oserror(self) -> None:
+        # 기존 호출부의 except OSError 가 계속 받아야 한다.
+        assert issubclass(atomic_write_mod.PartialCommitError, OSError)
+
     def test_timeout_error_is_an_oserror(self) -> None:
         # 호출부가 except OSError 로 받으므로 계층이 유지돼야 한다.
         assert issubclass(TimeoutError, OSError)

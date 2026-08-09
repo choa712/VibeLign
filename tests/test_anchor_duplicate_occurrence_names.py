@@ -148,4 +148,48 @@ class TestNameCollision:
 
 
 # === ANCHOR: TEST_ANCHOR_DUPLICATE_OCCURRENCE_NAMES_TESTNAMECOLLISION_END ===
+
+
+# === ANCHOR: TEST_ANCHOR_DUPLICATE_OCCURRENCE_NAMES_TESTCOLLISIONSCALING_START ===
+class TestCollisionScaling:
+    """충돌 회피가 2차가 되면 적당한 파일 하나로 스캔이 멈춘다.
+
+    A_2..A_N 이 예약된 상태에서 A 중복이 N 개면, 매번 occurrence 부터 다시
+    훑는 구현은 N 번째마다 N 칸을 걸어 전체가 O(N^2) 이 된다.
+    """
+
+    def _build(self, n: int) -> str:
+        lines: list[str] = []
+        for i in range(2, n + 2):  # 진짜 A_2..A_{n+1} 을 예약어로 만든다
+            lines += [_m(f"A_{i}_START"), f"x{i} = 1", _m(f"A_{i}_END")]
+        for _ in range(n):  # 같은 이름 A 를 n 번 중복
+            lines += [_m("A_START"), "y = 1", _m("A_END")]
+        return "\n".join(lines) + "\n"
+
+    def test_scaling_is_not_quadratic(self, tmp_path: Path) -> None:
+        import time
+
+        timings: dict[int, float] = {}
+        for n in (500, 1000):
+            p = tmp_path / f"m{n}.py"
+            _ = p.write_text(self._build(n), encoding="utf-8")
+            start = time.perf_counter()
+            blocks = extract_anchor_blocks(p)
+            timings[n] = time.perf_counter() - start
+            assert len(blocks) == 2 * n  # 충돌 없이 전부 별개 키
+
+        # 선형이면 2배 근처. 2차면 4배 근처. 측정 잡음을 감안해 3배로 자른다.
+        ratio = timings[1000] / max(timings[500], 1e-6)
+        assert ratio < 3.0, f"N 2배에 {ratio:.1f}배 — 2차 회귀 의심"
+
+    def test_no_key_is_lost_under_heavy_collision(self, tmp_path: Path) -> None:
+        p = tmp_path / "heavy.py"
+        _ = p.write_text(self._build(200), encoding="utf-8")
+        blocks = extract_anchor_blocks(p)
+        spans = {str(item["name"]) for item in extract_anchor_spans(p)}
+        assert spans == set(blocks)
+        assert len(blocks) == 400
+
+
+# === ANCHOR: TEST_ANCHOR_DUPLICATE_OCCURRENCE_NAMES_TESTCOLLISIONSCALING_END ===
 # === ANCHOR: TEST_ANCHOR_DUPLICATE_OCCURRENCE_NAMES_END ===

@@ -40,11 +40,13 @@ merge_gate:
     # 설치 경로 수정은 릴리스 파이프라인·플랫폼별 검증이 얽혀 있어 별도
     # 작업이어야 하므로 이슈로 분리하고, 그 기간만 수용한다.
     #
-    # 파일 단위로 좁힌 이유: 이 PR 이 그 파일의 로직을 건드리지 않으므로
-    # 해당 파일에서 나오는 CRITICAL 은 정의상 이 PR 밖이다. 다른 파일의
-    # CRITICAL 은 그대로 차단된다 (부분 waiver 로는 통과 불가).
+    # 파일이 아니라 "그 파일의 셸 파이프 설치 경로" 로 좁힌다. 파일 전체를
+    # 수용하면 나중에 같은 파일에 새로 들어온 다른 종류의 RCE(경로 순회,
+    # 임의 파일 쓰기 등)까지 만료일까지 조용히 통과한다. curl/irm/iex 가
+    # 언급된 finding 만 매칭하므로, 다른 결함은 그대로 차단된다.
+    # (다른 파일의 CRITICAL 도 물론 차단 — 부분 waiver 로는 통과 불가)
     - id: "tool-install-remote-shell-exec"
-      match: "tool_install\\.rs"
+      match: "tool_install\\.rs.*(curl|irm|iex)"
       reason: "origin/main 기존 결함(설치 스크립트 무검증 실행). 앵커 PR 은 이 파일의 앵커 주석만 변경. 이슈 #8 에서 버전 고정·SHA-256 검증·파이프 제거로 처리."
       accepted_by: "choa712"
       expires: "2026-11-08"

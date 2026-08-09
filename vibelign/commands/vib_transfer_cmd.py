@@ -29,6 +29,7 @@ from vibelign.terminal_render import (
 )
 
 from vibelign.core.atomic_write import (
+    PartialCommitError,
     atomic_write_text,
     commit_staged,
     file_lock,
@@ -1771,6 +1772,10 @@ def run_transfer(args: object) -> None:
             handoff_data=handoff_data,
             before_commit=persist_memory,
         )
+    except PartialCommitError as exc:
+        # "중단" 이라고 하면 안 된다 — 정본은 이미 갱신됐다.
+        clack_info(f"주의: {exc}")
+        return
     except OSError as exc:
         clack_info(f"오류: {exc}")
         return

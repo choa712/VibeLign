@@ -911,6 +911,11 @@ def _occurrence_namer(lines: list[str]) -> Callable[[str], str]:
     reserved = _all_marker_names(lines)
     used: set[str] = set()
     seen: dict[str, int] = {}
+    # 이름별로 "다음에 시도할 번호" 를 기억한다. 매번 occurrence 부터 다시
+    # 훑으면 A_2..A_N 이 이미 예약된 파일에서 N 번째 중복마다 N 칸을 다시
+    # 걸어 전체가 O(N²) 이 된다 (실측: N 500→2000 에서 15.9배). 후보는 항상
+    # 증가 방향으로만 소비되므로 커서를 들고 가면 전체가 선형이 된다.
+    cursor: dict[str, int] = {}
 
     def assign(name: str) -> str:
         seen[name] = seen.get(name, 0) + 1
@@ -918,11 +923,12 @@ def _occurrence_namer(lines: list[str]) -> Callable[[str], str]:
         if occurrence == 1:
             used.add(name)
             return name
-        candidate_index = occurrence
+        candidate_index = max(occurrence, cursor.get(name, 2))
         while True:
             candidate = f"{name}_{candidate_index}"
             if candidate not in reserved and candidate not in used:
                 used.add(candidate)
+                cursor[name] = candidate_index + 1
                 return candidate
             candidate_index += 1
 
