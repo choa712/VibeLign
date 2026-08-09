@@ -1,3 +1,4 @@
+// === ANCHOR: TUTORIALPICKER_TEST_START ===
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import TutorialPicker from "../TutorialPicker";
@@ -29,3 +30,4 @@ describe("TutorialPicker", () => {
     expect(onClose).toHaveBeenCalled();
   });
 });
+// === ANCHOR: TUTORIALPICKER_TEST_END ===

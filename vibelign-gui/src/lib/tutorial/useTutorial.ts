@@ -1,3 +1,4 @@
+// === ANCHOR: USETUTORIAL_START ===
 // ANCHOR: TUTORIAL_USE_TUTORIAL_START
 import { useCallback, useEffect, useState } from "react";
 import type { Tutorial, TutorialId, TutorialStep } from "./types";
@@ -5,10 +6,13 @@ import { getTutorial } from "./scripts";
 
 export const TUTORIAL_ACTIVE_KEY = "vibelign.tutorial.active";
 
+// === ANCHOR: USETUTORIAL_TUTORIALPROGRESSKEY_START ===
 export function tutorialProgressKey(id: TutorialId): string {
   return `vibelign.tutorial.progress.${id}`;
 }
+// === ANCHOR: USETUTORIAL_TUTORIALPROGRESSKEY_END ===
 
+// === ANCHOR: USETUTORIAL_READACTIVEID_START ===
 function readActiveId(): TutorialId | null {
   try {
     const raw = localStorage.getItem(TUTORIAL_ACTIVE_KEY);
@@ -19,7 +23,9 @@ function readActiveId(): TutorialId | null {
     return null;
   }
 }
+// === ANCHOR: USETUTORIAL_READACTIVEID_END ===
 
+// === ANCHOR: USETUTORIAL_READPROGRESS_START ===
 function readProgress(id: TutorialId): number {
   try {
     const raw = localStorage.getItem(tutorialProgressKey(id));
@@ -29,6 +35,7 @@ function readProgress(id: TutorialId): number {
     return 0;
   }
 }
+// === ANCHOR: USETUTORIAL_READPROGRESS_END ===
 
 export interface TutorialState {
   active: Tutorial | null;
@@ -40,6 +47,7 @@ export interface TutorialState {
   exit: () => void;
 }
 
+// === ANCHOR: USETUTORIAL_USETUTORIAL_START ===
 export function useTutorial(): TutorialState {
   const [activeId, setActiveId] = useState<TutorialId | null>(() => readActiveId());
   const [stepIndex, setStepIndex] = useState<number>(() => {
@@ -76,4 +84,6 @@ export function useTutorial(): TutorialState {
 
   return { active, stepIndex, step, isComplete, start, advance, exit };
 }
+// === ANCHOR: USETUTORIAL_USETUTORIAL_END ===
 // ANCHOR: TUTORIAL_USE_TUTORIAL_END
+// === ANCHOR: USETUTORIAL_END ===

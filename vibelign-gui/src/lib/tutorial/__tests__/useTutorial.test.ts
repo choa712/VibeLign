@@ -1,3 +1,4 @@
+// === ANCHOR: USETUTORIAL_TEST_START ===
 import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useTutorial, TUTORIAL_ACTIVE_KEY, tutorialProgressKey } from "../useTutorial";
@@ -53,3 +54,4 @@ describe("useTutorial", () => {
     expect(result.current.stepIndex).toBe(2);
   });
 });
+// === ANCHOR: USETUTORIAL_TEST_END ===

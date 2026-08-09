@@ -1,3 +1,4 @@
+// === ANCHOR: TYPES_START ===
 // ANCHOR: TUTORIAL_TYPES_START
 import type { Page } from "../nav/stages";
 
@@ -40,3 +41,4 @@ export interface Tutorial {
   steps: TutorialStep[];
 }
 // ANCHOR: TUTORIAL_TYPES_END
+// === ANCHOR: TYPES_END ===
