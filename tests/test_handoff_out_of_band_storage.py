@@ -206,4 +206,38 @@ class TestAtomicWrite:
 
 
 # === ANCHOR: TEST_HANDOFF_OUT_OF_BAND_STORAGE_TESTATOMICWRITE_END ===
+
+
+# === ANCHOR: TEST_HANDOFF_OUT_OF_BAND_STORAGE_TESTWRITEPATHPARITY_START ===
+class TestWritePathParity:
+    """PROJECT_CONTEXT.md 를 쓰는 경로가 CLI·MCP 둘이라 갈라지기 쉽다.
+
+    MCP 쪽만 save_handoff_data 를 빠뜨리면 'CLI 로 만든 handoff 는 남고
+    MCP 로 만든 것만 사라지는' 재현하기 어려운 버그가 된다. 실제로 처음
+    구현했을 때 그렇게 빠져 있었다.
+    """
+
+    def _source(self, name: str) -> str:
+        return (
+            Path("vibelign") / "mcp" / "mcp_transfer_handlers.py"
+            if name == "mcp"
+            else Path("vibelign") / "commands" / "vib_transfer_cmd.py"
+        ).read_text(encoding="utf-8")
+
+    def test_mcp_handoff_persists_the_source_of_truth(self) -> None:
+        assert "save_handoff_data(root, handoff_data)" in self._source("mcp")
+
+    def test_mcp_uses_atomic_context_write(self) -> None:
+        source = self._source("mcp")
+        assert "write_project_context(root, ctx_path, content)" in source
+        assert "ctx_path.write_text" not in source
+
+    def test_no_raw_project_context_write_remains(self) -> None:
+        for name in ("mcp", "cli"):
+            source = self._source(name)
+            assert "out_path.write_text(content" not in source
+            assert "ctx_path.write_text(content" not in source
+
+
+# === ANCHOR: TEST_HANDOFF_OUT_OF_BAND_STORAGE_TESTWRITEPATHPARITY_END ===
 # === ANCHOR: TEST_HANDOFF_OUT_OF_BAND_STORAGE_END ===
