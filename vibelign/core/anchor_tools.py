@@ -1439,6 +1439,37 @@ def strip_anchors(path: Path) -> bool:
 # === ANCHOR: ANCHOR_TOOLS_STRIP_ANCHORS_END ===
 
 
+# === ANCHOR: ANCHOR_TOOLS_STRIP_UNREADABLE_MARKERS_START ===
+def strip_unreadable_markers(path: Path) -> bool:
+    """어떤 파서도 읽지 않는 마커 줄만 지운다. 정본 앵커는 건드리지 않는다.
+
+    `vib scan --auto` 의 기본 수리 수단이다. strip_anchors + 재삽입은 파일의
+    **모든** 앵커를 지우고 일반 모듈 앵커로 갈아끼우므로, 구 형식 마커 하나
+    때문에 사용자가 붙여둔 DATA_START/DATA_END 같은 이름과 그 메타데이터가
+    통째로 사라진다. 읽히지 않는 줄만 걷어내면 보호 구간은 그대로 남는다.
+    """
+    text = safe_read_text(path)
+    if not text:
+        return False
+    lines = text.splitlines()
+    cleaned = [
+        line
+        for line in lines
+        if _parse_anchor_marker(line) is not None or not is_anchor_marker_line(line)
+    ]
+    if len(cleaned) == len(lines):
+        return False
+    try:
+        _ = path.write_text("\n".join(cleaned).rstrip() + "\n", encoding="utf-8")
+    except OSError as exc:
+        print(f"경고: {path} 마커 정리 실패: {exc}")
+        return False
+    return True
+
+
+# === ANCHOR: ANCHOR_TOOLS_STRIP_UNREADABLE_MARKERS_END ===
+
+
 # === ANCHOR: ANCHOR_TOOLS_VALIDATE_ANCHOR_FILE_START ===
 def validate_anchor_file(path: Path) -> list[str]:
     """마커를 순서대로 훑어 짝을 맞추고, 남은 START·고아 END 를 보고한다.

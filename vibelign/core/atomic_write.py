@@ -26,8 +26,9 @@ from typing import BinaryIO
 # === ANCHOR: ATOMIC_WRITE_ATOMIC_WRITE_TEXT_START ===
 def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None:
     """텍스트를 원자적으로 교체 저장한다."""
-    staged = stage_text(path, text, encoding=encoding)
-    commit_staged([(staged, path)])
+    target = resolve_write_target(path)
+    staged = stage_text(target, text, encoding=encoding)
+    commit_staged([(staged, target)])
 
 
 class PartialCommitError(OSError):
@@ -89,6 +90,9 @@ def stage_text(path: Path, text: str, *, encoding: str = "utf-8") -> Path:
     임시 파일은 반드시 대상과 같은 디렉터리에 만든다. os.replace 는 같은
     파일시스템 안에서만 원자적이라, /tmp 를 거치면 보장이 깨진다.
     """
+    # 호출자가 resolve_write_target 을 거쳤다고 가정하지 않는다 — 여기서
+    # 한 번 더 해석해도 결과는 같고(멱등), 빠뜨렸을 때 링크를 깨뜨리지 않는다.
+    path = resolve_write_target(path)
     directory = path.parent
     directory.mkdir(parents=True, exist_ok=True)
     # 기존 파일이면 그 권한을 그대로 유지한다. mkstemp 의 0600 으로 덮으면
@@ -116,6 +120,30 @@ def stage_text(path: Path, text: str, *, encoding: str = "utf-8") -> Path:
 
 
 # === ANCHOR: ATOMIC_WRITE_ATOMIC_WRITE_TEXT_END ===
+
+
+# === ANCHOR: ATOMIC_WRITE_RESOLVE_WRITE_TARGET_START ===
+def resolve_write_target(path: Path) -> Path:
+    """실제로 갈아끼울 경로. 심볼릭 링크면 그 최종 대상.
+
+    os.replace 는 링크 자체를 일반 파일로 바꿔버린다. AGENTS.md 처럼 공유
+    정책을 링크로 걸어둔 설정이 조용히 끊기므로, 링크를 따라가는
+    write_text 의 동작에 맞춘다.
+
+    끊긴 링크(대상 없음)도 대상 경로를 돌려준다 — write_text 가 그 자리에
+    파일을 만드는 동작과 같다. 링크 루프면 resolve 가 OSError 를 던지고,
+    그건 그대로 올려보낸다 (조용히 링크를 덮어쓰는 것보다 낫다).
+
+    여러 파일을 짝으로 교체할 때는 **호출자가 먼저 이 함수를 거친 경로를**
+    commit_staged 에 넘겨야 한다. stage_text 만 해석하고 원래 경로로
+    replace 하면 링크가 그대로 깨진다.
+    """
+    if not path.is_symlink():
+        return path
+    return path.resolve()
+
+
+# === ANCHOR: ATOMIC_WRITE_RESOLVE_WRITE_TARGET_END ===
 
 
 # === ANCHOR: ATOMIC_WRITE__OPEN_EXCLUSIVE_START ===

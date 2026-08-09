@@ -33,6 +33,7 @@ from vibelign.core.atomic_write import (
     atomic_write_text,
     commit_staged,
     file_lock,
+    resolve_write_target,
     stage_text,
 )
 from vibelign.core.meta_paths import MetaPaths
@@ -1191,15 +1192,19 @@ def commit_project_context(
         # 중간에 끊겼을 때 자가 복구되는 방향을 고른다:
         #   정본 O / 파생물 X → 다음 재생성이 새 handoff 로 본문을 다시 만든다
         #   정본 X / 파생물 O → 다음 재생성이 새 본문을 옛 handoff 로 되돌린다 (손실)
+        # 심볼릭 링크는 링크가 아니라 대상을 갈아끼운다 — stage 와 replace 가
+        # 같은 경로를 봐야 하므로 여기서 미리 해석한다.
         staged: list[tuple[Path, Path]] = []
         if handoff_data is not None:
+            handoff_target = resolve_write_target(meta.handoff_path)
             staged.append(
                 (
-                    stage_text(meta.handoff_path, _handoff_payload(handoff_data)),
-                    meta.handoff_path,
+                    stage_text(handoff_target, _handoff_payload(handoff_data)),
+                    handoff_target,
                 )
             )
-        staged.append((stage_text(out_path, content), out_path))
+        context_target = resolve_write_target(out_path)
+        staged.append((stage_text(context_target, content), context_target))
         # 준비가 다 끝난 뒤 replace 만 연달아 — 사이에 I/O 가 없다.
         commit_staged(staged)
     return archive, content

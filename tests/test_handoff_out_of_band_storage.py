@@ -495,6 +495,47 @@ class TestAtomicWrite:
         assert load_handoff_data(tmp_path) is not None
         assert not ctx.exists()
 
+    def test_symlink_target_is_written_not_replaced(self, tmp_path: Path) -> None:
+        """링크를 일반 파일로 바꾸면 공유 정책(AGENTS.md 등)이 조용히 끊긴다.
+
+        os.replace 는 링크 자체를 갈아끼운다. write_text 는 링크를 따라가므로
+        그 동작에 맞춰야 한다.
+        """
+        target = tmp_path / "shared.md"
+        _ = target.write_text("원본", encoding="utf-8")
+        link = tmp_path / "AGENTS.md"
+        link.symlink_to(target)
+
+        atomic_write_text(link, "새 내용")
+
+        assert link.is_symlink()
+        assert target.read_text(encoding="utf-8") == "새 내용"
+
+    def test_broken_symlink_creates_the_target(self, tmp_path: Path) -> None:
+        link = tmp_path / "dangling.md"
+        link.symlink_to(tmp_path / "missing.md")
+
+        atomic_write_text(link, "생성")
+
+        assert link.is_symlink()
+        assert (tmp_path / "missing.md").read_text(encoding="utf-8") == "생성"
+
+    def test_commit_pair_preserves_symlinks(self, tmp_path: Path) -> None:
+        target = tmp_path / "real-context.md"
+        _ = target.write_text("옛 본문", encoding="utf-8")
+        ctx = tmp_path / "PROJECT_CONTEXT.md"
+        ctx.symlink_to(target)
+
+        _ = commit_project_context(
+            tmp_path,
+            ctx,
+            lambda: "새 본문",
+            handoff_data=_handoff(),  # type: ignore[arg-type]
+        )
+
+        assert ctx.is_symlink()
+        assert target.read_text(encoding="utf-8") == "새 본문"
+
     def test_partial_commit_error_is_an_oserror(self) -> None:
         # 기존 호출부의 except OSError 가 계속 받아야 한다.
         assert issubclass(atomic_write_mod.PartialCommitError, OSError)
