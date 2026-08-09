@@ -151,15 +151,23 @@ def resolve_write_target(path: Path, root: Path | None = None) -> Path:
     여러 파일을 짝으로 교체할 때는 **호출자가 먼저 이 함수를 거친 경로를**
     commit_staged 에 넘겨야 한다. stage_text 만 해석하고 원래 경로로
     replace 하면 링크가 그대로 깨진다.
+
+    한계: 검사와 교체 사이에 링크를 바꿔치기하는 TOCTOU 는 막지 못한다.
+    그걸 막으려면 디렉터리 fd 를 O_NOFOLLOW 로 하나씩 열어 내려가야 한다.
+    로컬 체크아웃에 이미 쓰기 권한이 있는 공격자를 상정한 것이라 이 도구의
+    위협 모델 밖으로 두되, 정적인 악성 링크는 여기서 전부 걸린다.
     """
-    if root is None or not path.is_symlink():
+    if root is None:
         return path
+    # 마지막 이름만 검사하면 안 된다. `.vibelign` 자체를 바깥 디렉터리로
+    # 링크해 두면 `.vibelign/handoff.json` 은 링크가 아니면서도 바깥에 쓰인다.
+    # resolve() 는 모든 상위 요소를 따라가므로 그 결과로 판정한다.
     target = path.resolve()
     root_resolved = root.resolve()
     if target != root_resolved and root_resolved not in target.parents:
         raise OSError(
             f"{path} 가 프로젝트 밖({target})을 가리킵니다 — 덮어쓰지 않습니다. "
-            "생성물 경로의 심볼릭 링크는 프로젝트 안만 가리킬 수 있습니다."
+            "생성물 경로와 그 상위 디렉터리는 프로젝트 안에 있어야 합니다."
         )
     return target
 

@@ -1211,8 +1211,18 @@ def commit_project_context(
         # 스테이징이 실패했을 때 "저장 안 됨" 이라고 보고하면서 work_memory 에는
         # 그 handoff 가 남는다 — 기록과 사실이 어긋난다. 잠금 안이므로
         # 읽고-고쳐-쓰기 직렬화는 그대로다.
+        #
+        # 여기서 실패해도 저장 자체는 이미 성공했다. 예외를 그대로 올리면
+        # 호출부의 except OSError 가 "저장 중단" 으로 보고해 사용자가 다시
+        # 실행하게 만든다 — 사실과 반대다. 부수 기록 실패는 경고로 낮춘다.
         if after_commit is not None:
-            after_commit()
+            try:
+                after_commit()
+            except OSError as exc:
+                clack_info(
+                    f"주의: 저장은 끝났지만 작업 기록 갱신에 실패했습니다 ({exc}). "
+                    "PROJECT_CONTEXT.md 와 handoff.json 은 정상입니다."
+                )
     return archive, content
 
 

@@ -539,6 +539,28 @@ class TestAtomicWrite:
 
         assert outside.read_text(encoding="utf-8") == "건드리면 안 됨"
 
+    def test_ancestor_symlink_escaping_root_is_refused(self, tmp_path: Path) -> None:
+        """마지막 이름만 검사하면 상위 디렉터리 링크로 우회된다.
+
+        `.vibelign` 자체를 바깥 디렉터리로 링크해 두면 `.vibelign/handoff.json`
+        은 링크가 아니면서도 바깥에 쓰인다.
+        """
+        outside = tmp_path / "evil"
+        outside.mkdir()
+        victim = outside / "handoff.json"
+        _ = victim.write_text("건드리면 안 됨", encoding="utf-8")
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / ".vibelign").symlink_to(outside)
+
+        target = root / ".vibelign" / "handoff.json"
+        assert not target.is_symlink()  # 파일 자체는 링크가 아니다
+
+        with pytest.raises(OSError, match="프로젝트 밖"):
+            atomic_write_text(target, "탈취", root=root)
+
+        assert victim.read_text(encoding="utf-8") == "건드리면 안 됨"
+
     def test_symlink_is_not_followed_without_root(self, tmp_path: Path) -> None:
         """기본값은 따라가지 않는 쪽 — root 를 아는 호출자만 허용한다."""
         target = tmp_path / "shared.md"
