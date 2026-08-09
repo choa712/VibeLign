@@ -1065,15 +1065,20 @@ def _build_current_work_section(
 
 
 _HANDOFF_HEADING = "## Session Handoff"
+# 생성된 본문의 시작 H1. handoff 블록의 끝 경계는 "아무 H1"이 아니라
+# 반드시 이 줄이어야 한다 — handoff 필드는 사용자/커밋 메시지에서 온
+# 자유 텍스트라 '# ' 로 시작하는 줄을 품을 수 있고, 그걸 경계로 삼으면
+# 뒤쪽 세션 상태가 통째로 잘려나간다 (보존하려던 것을 잃는다).
+_GENERATED_H1_RE = re.compile(r"^# ⚡ .+ — AI Transfer Context\s*$")
 
 
 def extract_handoff_section(text: str) -> str | None:
     """PROJECT_CONTEXT.md 본문에서 Session Handoff 블록만 잘라낸다.
 
-    블록은 '## Session Handoff' 부터 다음 H1('# ') 직전까지다
-    (_build_context_content 가 handoff_section 을 H1 바로 앞에 끼워 넣는다).
-    handoff 는 세션 상태라 재생성 대상이 아니다 — 재생성하는 쪽이
-    이 함수로 기존 블록을 떠서 그대로 실어야 한다.
+    블록은 '## Session Handoff' 부터 생성 본문 H1 직전까지다
+    (_build_context_content 가 handoff_section 을 그 H1 바로 앞에 끼워 넣는다).
+    경계 H1 을 찾지 못하면 잘라낼 범위를 확정할 수 없으므로 None 을 돌려준다
+    — 어림짐작으로 자르면 조용한 데이터 손실이 된다.
     """
     lines = text.splitlines()
     start = next(
@@ -1082,9 +1087,11 @@ def extract_handoff_section(text: str) -> str | None:
     if start is None:
         return None
     end = next(
-        (i for i in range(start + 1, len(lines)) if lines[i].startswith("# ")),
-        len(lines),
+        (i for i in range(start + 1, len(lines)) if _GENERATED_H1_RE.match(lines[i])),
+        None,
     )
+    if end is None:
+        return None
     section = "\n".join(lines[start:end]).rstrip()
     return f"{section}\n\n" if section else None
 

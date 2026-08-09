@@ -45,6 +45,37 @@ def test_extract_returns_block_up_to_first_h1() -> None:
     assert "# ⚡ demo" not in section
 
 
+EMBEDDED_H1 = (
+    "<!--\n  ⚡ AI Transfer Context\n-->\n\n"
+    "## Session Handoff\n"
+    "- **Next action**: 커밋 메시지에 이런 줄이 있었다:\n"
+    "# Embedded heading in free text\n"
+    "- **State references**: work_memory.json\n\n"
+    "### Active intent\n"
+    "마지막 세션 상태 — 이 줄이 살아남아야 한다.\n\n"
+    "---\n\n"
+    "# ⚡ demo — AI Transfer Context\n\n> 자동 생성됨\n"
+)
+
+
+def test_embedded_h1_in_handoff_text_does_not_truncate() -> None:
+    """handoff 필드는 자유 텍스트라 '# ' 로 시작하는 줄을 품을 수 있다.
+
+    그걸 경계로 삼으면 뒤쪽 세션 상태가 통째로 잘려 — 보존하려던 것을 잃는다.
+    """
+    section = extract_handoff_section(EMBEDDED_H1)
+    assert section is not None
+    assert "# Embedded heading in free text" in section
+    assert "### Active intent" in section
+    assert "이 줄이 살아남아야 한다" in section
+    assert "# ⚡ demo" not in section
+
+
+def test_missing_boundary_h1_returns_none_instead_of_guessing() -> None:
+    """경계를 확정할 수 없으면 어림짐작으로 자르지 않는다."""
+    assert extract_handoff_section("## Session Handoff\n내용만 있고 H1 없음\n") is None
+
+
 def test_extract_returns_none_without_handoff() -> None:
     assert extract_handoff_section("# ⚡ demo\n\n본문만 있음\n") is None
 

@@ -922,6 +922,10 @@ def extract_anchor_blocks(
     # 이름당 하나만 들고 있으면 바깥 START 를 잃는다 → 리스트로 쌓는다.
     # extract_anchor_line_ranges 와 동일한 매칭 규칙을 쓴다.
     open_starts: dict[str, list[int]] = {}
+    # 구간만 먼저 확정하고 본문은 마지막에 이름당 한 번만 만든다.
+    # 같은 이름이 겹쳐 열리면 END 마다 join 이 돌아 2차 비용이 된다
+    # (깊이 4000 실측 0.097s) — 어차피 뒤 END 가 덮어쓰므로 낭비다.
+    spans: dict[str, tuple[int, int]] = {}
     for i, line in enumerate(lines):
         marker = _parse_anchor_marker(line)
         if marker is None:
@@ -935,7 +939,9 @@ def extract_anchor_blocks(
             continue
         start = stack.pop()  # 가장 안쪽 START 부터 닫는다
         if only is None or name in only:
-            blocks[name] = "\n".join(lines[start + 1 : i]).strip()
+            spans[name] = (start, i)
+    for name, (start, end) in spans.items():
+        blocks[name] = "\n".join(lines[start + 1 : end]).strip()
     return blocks
 
 

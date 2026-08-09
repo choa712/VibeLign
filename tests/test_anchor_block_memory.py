@@ -58,6 +58,41 @@ def test_iter_peak_scales_linearly(tmp_path: Path) -> None:
     assert large_peak < small_peak * 3, (small_peak, large_peak)
 
 
+def _same_name_nested(tmp_path: Path, depth: int, name: str) -> Path:
+    lines = ["# === ANCHOR: A_START ==="] * depth
+    lines.append("x = 1")
+    lines += ["# === ANCHOR: A_END ==="] * depth
+    p = tmp_path / name
+    p.write_text("\n".join(lines), encoding="utf-8")
+    return p
+
+
+def test_same_name_nesting_scales_linearly(tmp_path: Path) -> None:
+    """동일 이름이 겹쳐 열리면 END 마다 join 이 돌아 2차 비용이 됐다.
+
+    구간만 모으고 본문은 이름당 한 번만 만들면 선형이 된다.
+    """
+    import time
+
+    def elapsed(p: Path) -> float:
+        t0 = time.perf_counter()
+        extract_anchor_blocks(p, only={"A"})
+        return time.perf_counter() - t0
+
+    small = elapsed(_same_name_nested(tmp_path, 2000, "small.py"))
+    large = elapsed(_same_name_nested(tmp_path, 4000, "large.py"))
+    # 입력 2배에 시간 2배 근처여야 한다 (2차면 4배). 환경 변동 고려해 3배 상한.
+    assert large < max(small * 3, 0.05), (small, large)
+
+
+def test_same_name_nesting_returns_outermost_span(tmp_path: Path) -> None:
+    p = _same_name_nested(tmp_path, 3, "nested.py")
+    blocks = extract_anchor_blocks(p)
+    # 바깥 블록이 최종값 — 안쪽 마커들을 본문에 품는다
+    assert "x = 1" in blocks["A"]
+    assert blocks["A"].count("ANCHOR: A_START") == 2
+
+
 def test_line_ranges_same_name_nesting_matches_blocks(tmp_path: Path) -> None:
     """같은 이름이 겹쳐 열릴 때 두 파서가 같은 구간을 고른다."""
     text = (
