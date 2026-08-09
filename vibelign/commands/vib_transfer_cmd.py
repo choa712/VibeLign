@@ -1086,8 +1086,10 @@ def extract_handoff_section(text: str) -> str | None:
     )
     if start is None:
         return None
+    # 마지막 매치를 쓴다. handoff 자유 텍스트가 이 H1 모양을 그대로 품어도
+    # 진짜 생성 H1 은 항상 그 뒤에 오므로, 첫 매치를 쓰면 뒤쪽 상태가 잘린다.
     end = next(
-        (i for i in range(start + 1, len(lines)) if _GENERATED_H1_RE.match(lines[i])),
+        (i for i in range(len(lines) - 1, start, -1) if _GENERATED_H1_RE.match(lines[i])),
         None,
     )
     if end is None:

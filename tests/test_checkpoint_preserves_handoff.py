@@ -71,6 +71,30 @@ def test_embedded_h1_in_handoff_text_does_not_truncate() -> None:
     assert "# ⚡ demo" not in section
 
 
+def test_handoff_text_mimicking_the_boundary_h1_does_not_truncate() -> None:
+    """handoff 자유 텍스트가 경계 H1 모양을 그대로 품는 경우.
+
+    커밋 메시지가 이 문서 자신을 인용하면 실제로 생길 수 있다.
+    진짜 생성 H1 은 항상 뒤에 오므로 마지막 매치를 경계로 삼아야 한다.
+    """
+    mimic = (
+        "## Session Handoff\n"
+        "- **Next action**: 커밋 메시지가 이 문서를 인용했다:\n"
+        "# ⚡ demo — AI Transfer Context\n"
+        "- **State references**: work_memory.json\n\n"
+        "### Active intent\n"
+        "이 줄이 살아남아야 한다.\n\n"
+        "---\n\n"
+        "# ⚡ demo — AI Transfer Context\n\n> 자동 생성됨\n"
+    )
+    section = extract_handoff_section(mimic)
+    assert section is not None
+    assert "### Active intent" in section
+    assert "이 줄이 살아남아야 한다" in section
+    # 인용된 사본은 handoff 안에 남고, 진짜 생성 H1 은 잘려나간다
+    assert section.count("# ⚡ demo — AI Transfer Context") == 1
+
+
 def test_missing_boundary_h1_returns_none_instead_of_guessing() -> None:
     """경계를 확정할 수 없으면 어림짐작으로 자르지 않는다."""
     assert extract_handoff_section("## Session Handoff\n내용만 있고 H1 없음\n") is None
