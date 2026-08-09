@@ -307,3 +307,47 @@ class TestSignatureExtraction:
         spans = extract_anchor_spans(p)
         assert "signature" not in spans[0]
 
+
+
+class TestBug7DuplicateNestedAndScopedExtraction:
+    """중첩 + 동일 이름 조합, 그리고 only 로 범위를 좁힌 추출."""
+
+    def test_same_name_nested_keeps_outer_block(self, tmp_path: Path) -> None:
+        text = (
+            "# === ANCHOR: A_START ===\n"
+            "outer_head = 1\n"
+            "# === ANCHOR: A_START ===\n"
+            "inner = 2\n"
+            "# === ANCHOR: A_END ===\n"
+            "outer_tail = 3\n"
+            "# === ANCHOR: A_END ===\n"
+        )
+        p = _write(tmp_path, "dup_nested.py", text)
+        blocks = extract_anchor_blocks(p)
+        # 마지막에 닫히는 바깥 블록이 최종 값이어야 한다 (안쪽만 남으면 안 됨)
+        assert "outer_head = 1" in blocks["A"]
+        assert "outer_tail = 3" in blocks["A"]
+
+    def test_only_limits_materialized_blocks(self, tmp_path: Path) -> None:
+        text = (
+            "# === ANCHOR: OUTER_START ===\n"
+            "a = 1\n"
+            "# === ANCHOR: INNER_START ===\n"
+            "b = 2\n"
+            "# === ANCHOR: INNER_END ===\n"
+            "# === ANCHOR: OUTER_END ===\n"
+        )
+        p = _write(tmp_path, "scoped.py", text)
+        assert set(extract_anchor_blocks(p, only={"INNER"})) == {"INNER"}
+        assert extract_anchor_blocks(p, only={"INNER"})["INNER"] == "b = 2"
+        # only 를 주지 않으면 기존대로 전부 반환
+        assert set(extract_anchor_blocks(p)) == {"OUTER", "INNER"}
+
+    def test_only_with_unknown_name_returns_empty(self, tmp_path: Path) -> None:
+        text = (
+            "# === ANCHOR: OUTER_START ===\n"
+            "a = 1\n"
+            "# === ANCHOR: OUTER_END ===\n"
+        )
+        p = _write(tmp_path, "scoped2.py", text)
+        assert extract_anchor_blocks(p, only={"NOPE"}) == {}

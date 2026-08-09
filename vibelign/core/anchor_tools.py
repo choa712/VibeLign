@@ -878,28 +878,41 @@ def extract_anchor_line_ranges(path: Path) -> dict[str, tuple[int, int]]:
 
 
 # === ANCHOR: ANCHOR_TOOLS_EXTRACT_ANCHOR_BLOCKS_START ===
-def extract_anchor_blocks(path: Path) -> dict[str, str]:
-    """각 앵커의 START~END 사이 코드를 추출. {anchor_name: code}"""
+def extract_anchor_blocks(
+    path: Path, only: AllowedExts | None = None
+) -> dict[str, str]:
+    """각 앵커의 START~END 사이 코드를 추출. {anchor_name: code}
+
+    only 를 주면 그 이름의 블록만 본문을 만든다. 중첩 앵커는 바깥 블록이
+    안쪽 본문을 다시 담으므로, 전체를 만들면 중첩 깊이에 비례해 메모리가
+    늘어난다. 특정 앵커 하나만 필요한 호출자(MCP anchor_read_content)는
+    only 를 넘겨 요청한 블록만 만들게 한다.
+    """
     text = safe_read_text(path)
     if not text:
         return {}
     lines = text.splitlines()
     blocks: dict[str, str] = {}
-    # 이름별 START 위치를 기록해 END 와 이름으로 짝짓는다.
+    # 이름별 START 위치를 스택으로 기록해 END 와 이름으로 짝짓는다.
     # 단일 current_anchor 로 추적하면 `vib anchor --auto` 가 삽입하는
     # 모듈 앵커 ⊃ 심볼 앵커 중첩에서 바깥 블록이 소실된다.
+    # 같은 이름이 겹쳐 열릴 수 있으므로(A_START A_START A_END A_END)
+    # 이름당 하나만 들고 있으면 바깥 START 를 잃는다 → 리스트로 쌓는다.
     # extract_anchor_line_ranges 와 동일한 매칭 규칙을 쓴다.
-    open_starts: dict[str, int] = {}
+    open_starts: dict[str, list[int]] = {}
     for i, line in enumerate(lines):
         marker = _parse_anchor_marker(line)
         if marker is None:
             continue
         name, is_start = marker
         if is_start:
-            open_starts[name] = i
+            open_starts.setdefault(name, []).append(i)
             continue
-        start = open_starts.pop(name, None)
-        if start is not None:
+        stack = open_starts.get(name)
+        if not stack:
+            continue
+        start = stack.pop()  # 가장 안쪽 START 부터 닫는다
+        if only is None or name in only:
             blocks[name] = "\n".join(lines[start + 1 : i]).strip()
     return blocks
 

@@ -234,7 +234,10 @@ def handle_anchor_read_content(
             "data": None,
         }
         return _text(text_content, json.dumps(err, ensure_ascii=False))
-    blocks = extract_anchor_blocks(fp)
+    # 요청한 이름과 마커 이름 폴백 후보만 본문을 만든다 (중첩 깊이만큼
+    # 커지는 전체 materialization 을 피한다).
+    wanted = {anchor_name, re.sub(r"_(START|END)$", "", anchor_name)}
+    blocks = extract_anchor_blocks(fp, only=wanted)
     body = blocks.get(anchor_name)
     if body is None:
         # 마커 이름(FOO_START)으로 요청한 경우를 위한 폴백.
