@@ -130,6 +130,32 @@ def _suppress_os_error() -> Iterator[None]:
 # === ANCHOR: ATOMIC_WRITE__SUPPRESS_OS_ERROR_END ===
 
 
+# === ANCHOR: ATOMIC_WRITE__WARN_UNSERIALIZED_START ===
+_warned_unserialized = False
+
+
+def _warn_unserialized(reason: str) -> None:
+    """직렬화 없이 진행한다는 사실을 한 번은 알린다.
+
+    조용히 넘어가면 사용자는 보호가 걸려 있다고 믿는다. 여기서 막지 않는
+    이유는 그 환경에서 도구 자체를 못 쓰게 되기 때문이고, 그렇다면 최소한
+    보이게는 해야 한다. 세션당 한 번만 — 매 쓰기마다 찍으면 소음이 된다.
+    """
+    global _warned_unserialized
+    if _warned_unserialized:
+        return
+    _warned_unserialized = True
+    print(
+        f"⚠️  VibeLign: 파일 잠금 없이 진행합니다 — {reason}. "
+        "여러 세션이 동시에 쓰면 PROJECT_CONTEXT.md 와 handoff.json 이 "
+        "어긋날 수 있습니다.",
+        file=sys.stderr,
+    )
+
+
+# === ANCHOR: ATOMIC_WRITE__WARN_UNSERIALIZED_END ===
+
+
 # === ANCHOR: ATOMIC_WRITE_FILE_LOCK_START ===
 @contextmanager
 def file_lock(lock_path: Path, *, timeout: float = 10.0) -> Iterator[bool]:
@@ -154,8 +180,9 @@ def file_lock(lock_path: Path, *, timeout: float = 10.0) -> Iterator[bool]:
     acquired = False
     try:
         handle = open(lock_path, "a+b")
-    except OSError:
+    except OSError as exc:
         handle = None
+        _warn_unserialized(f"잠금 파일을 열 수 없습니다 ({exc})")
     if handle is not None:
         outcome = _try_lock(handle, timeout)
         if outcome == "contended":
@@ -167,6 +194,8 @@ def file_lock(lock_path: Path, *, timeout: float = 10.0) -> Iterator[bool]:
                 "섞인 상태를 남기지 않으려고 중단합니다."
             )
         acquired = outcome == "acquired"
+        if not acquired:
+            _warn_unserialized("이 파일시스템이 잠금을 지원하지 않습니다")
     # yield 는 정확히 한 번. 이 자리를 try/except OSError 로 감싸면 with 본문이
     # 던진 OSError(디스크 가득참·권한)가 여기로 되돌아와 두 번째 yield 를
     # 실행하고, 원래 오류가 "generator didn't stop after throw()" 로 뒤바뀐다.

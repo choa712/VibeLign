@@ -431,13 +431,35 @@ class TestAtomicWrite:
             with file_lock(tmp_path / "busy.lock", timeout=0.1):
                 raise AssertionError("본문이 실행되면 안 된다")
 
-    def test_unsupported_locking_proceeds(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    def test_unsupported_locking_proceeds_but_warns(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """잠금을 지원하지 않는 환경에서는 막지 않는다 — 막으면 도구를 못 쓴다."""
+        """잠금 미지원 환경에서는 막지 않되 조용히 넘기지도 않는다.
+
+        막으면 그 환경에서 도구를 못 쓰고, 조용히 넘기면 사용자는 보호가
+        걸려 있다고 믿는다.
+        """
         monkeypatch.setattr(atomic_write_mod, "_lock_once", lambda _handle: None)
+        monkeypatch.setattr(atomic_write_mod, "_warned_unserialized", False)
         with file_lock(tmp_path / "nofs.lock", timeout=0.1) as acquired:
             assert acquired is False
+        assert "잠금 없이 진행" in capsys.readouterr().err
+
+    def test_unserialized_warning_is_printed_once(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.setattr(atomic_write_mod, "_lock_once", lambda _handle: None)
+        monkeypatch.setattr(atomic_write_mod, "_warned_unserialized", False)
+        for _ in range(3):
+            with file_lock(tmp_path / "nofs.lock", timeout=0.1):
+                pass
+        assert capsys.readouterr().err.count("잠금 없이 진행") == 1
 
     def test_timeout_error_is_an_oserror(self) -> None:
         # 호출부가 except OSError 로 받으므로 계층이 유지돼야 한다.
