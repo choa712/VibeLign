@@ -633,6 +633,54 @@ class TestAtomicWrite:
         )
         assert ran == ["recorded"]
 
+    def test_staging_failure_leaves_no_temp_files(self, tmp_path: Path) -> None:
+        """앞서 준비된 임시 파일을 남기면 안 된다.
+
+        handoff 임시 파일에는 세션 내용이 그대로 들어 있어 그냥 쓰레기가 아니다.
+        """
+        ctx = tmp_path / "PROJECT_CONTEXT.md"
+        real_stage = atomic_write_mod.stage_text
+        calls = {"n": 0}
+
+        def fail_second(path: Path, text: str, **kwargs: object) -> Path:
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise OSError("두 번째 스테이징 실패")
+            return real_stage(path, text, **kwargs)  # type: ignore[arg-type]
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr("vibelign.commands.vib_transfer_cmd.stage_text", fail_second)
+            with pytest.raises(OSError):
+                _ = commit_project_context(
+                    tmp_path,
+                    ctx,
+                    lambda: "본문",
+                    handoff_data=_handoff(),  # type: ignore[arg-type]
+                )
+
+        leftovers = [
+            p.name
+            for p in MetaPaths(tmp_path).vibelign_dir.iterdir()
+            if p.name.endswith(".tmp")
+        ]
+        assert leftovers == []
+
+    def test_agents_md_symlink_is_followed(self, tmp_path: Path) -> None:
+        """AGENTS.md 를 공유 정책 파일로 링크해 두는 설정이 흔하다."""
+        from vibelign.commands.vib_transfer_cmd import (
+            _inject_agents_handoff_instruction,
+        )
+
+        target = tmp_path / "shared-agents.md"
+        _ = target.write_text("# 공유 정책\n", encoding="utf-8")
+        link = tmp_path / "AGENTS.md"
+        link.symlink_to(target)
+
+        _inject_agents_handoff_instruction(tmp_path)
+
+        assert link.is_symlink()
+        assert "공유 정책" in target.read_text(encoding="utf-8")
+
     def test_partial_commit_error_is_an_oserror(self) -> None:
         # 기존 호출부의 except OSError 가 계속 받아야 한다.
         assert issubclass(atomic_write_mod.PartialCommitError, OSError)

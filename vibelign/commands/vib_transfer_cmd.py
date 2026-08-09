@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from collections.abc import Callable
+from contextlib import suppress
 from typing import Protocol, TypedDict, cast
 
 from vibelign.commands import transfer_git_context
@@ -1195,16 +1196,24 @@ def commit_project_context(
         # 같은 경로를 봐야 하므로 여기서 미리 해석한다. root 를 넘겨야
         # 프로젝트 밖을 가리키는 링크가 거부된다 (안 넘기면 링크 자체를 교체).
         staged: list[tuple[Path, Path]] = []
-        if handoff_data is not None:
-            handoff_target = resolve_write_target(meta.handoff_path, root)
-            staged.append(
-                (
-                    stage_text(handoff_target, _handoff_payload(handoff_data)),
-                    handoff_target,
+        try:
+            if handoff_data is not None:
+                handoff_target = resolve_write_target(meta.handoff_path, root)
+                staged.append(
+                    (
+                        stage_text(handoff_target, _handoff_payload(handoff_data)),
+                        handoff_target,
+                    )
                 )
-            )
-        context_target = resolve_write_target(out_path, root)
-        staged.append((stage_text(context_target, content), context_target))
+            context_target = resolve_write_target(out_path, root)
+            staged.append((stage_text(context_target, content), context_target))
+        except BaseException:
+            # 앞서 준비된 임시 파일을 남기면 안 된다. handoff 임시 파일에는
+            # 세션 내용이 그대로 들어 있어 그냥 쓰레기가 아니다.
+            for tmp_path, _dest in staged:
+                with suppress(OSError):
+                    tmp_path.unlink()
+            raise
         # 준비가 다 끝난 뒤 replace 만 연달아 — 사이에 I/O 가 없다.
         commit_staged(staged)
         # 파일이 실제로 착지한 뒤에 상태를 기록한다. 앞에 두면 본문 생성이나
@@ -1479,7 +1488,12 @@ def _inject_agents_handoff_instruction(root: Path) -> None:
     text = agents_path.read_text(encoding="utf-8")
     if _AGENTS_HANDOFF_MARKER in text:
         return  # 이미 있음
-    atomic_write_text(agents_path, text.rstrip() + "\n\n" + _AGENTS_HANDOFF_BLOCK)
+    # root 를 넘겨야 링크를 따라간다 — AGENTS.md 를 공유 정책 파일로 링크해
+    # 두는 설정이 흔한데, 안 넘기면 링크가 일반 파일로 바뀌며 조용히 끊긴다.
+    # (프로젝트 밖을 가리키면 resolve_write_target 이 거부한다)
+    atomic_write_text(
+        agents_path, text.rstrip() + "\n\n" + _AGENTS_HANDOFF_BLOCK, root=root
+    )
 
 
 def inject_agents_handoff_instruction(root: Path) -> None:
