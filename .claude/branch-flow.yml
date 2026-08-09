@@ -1,0 +1,50 @@
+# Branch Flow — VibeLign
+#
+# strategy 이하는 user-scope(~/.claude/branch-flow.yml) 와 같은 값이다.
+# 이 파일을 만든 목적은 merge_gate.accepted_risks 하나이며, 리뷰 강도를
+# 낮추지 않는다 (default_level: strict — 정책 파일이 없을 때의 폴백과 동일).
+
+strategy: simple
+
+base: main
+
+protected:
+  - main
+
+feature:
+  naming: "feature/{description}"
+  allow_rebase: true
+  allow_force_push: true
+  allow_reset: true
+
+merge:
+  auto_merge: true
+  delete_branch: true
+  require_ci: false
+
+recovery:
+  protected_branch: revert-only
+  feature_branch: any
+
+merge_gate:
+  # 정책 파일이 없을 때의 폴백과 같은 값. change_types 를 두지 않으므로
+  # 어떤 경로도 strict 아래로 내려가지 않는다.
+  default_level: strict
+
+  accepted_risks:
+    # 앵커 파서 PR 의 적대 리뷰가 tool_install.rs 전체를 훑다가 발견한
+    # 기존 결함이다. 확인 결과:
+    #   - curl|bash / irm|iex 는 origin/main 에 이미 있다
+    #   - 앵커 PR 들이 이 파일에서 바꾼 것은 앵커 주석 4줄뿐이다
+    #     (2 insertions, 4 deletions — 설치 로직 미변경)
+    # 설치 경로 수정은 릴리스 파이프라인·플랫폼별 검증이 얽혀 있어 별도
+    # 작업이어야 하므로 이슈로 분리하고, 그 기간만 수용한다.
+    #
+    # 파일 단위로 좁힌 이유: 이 PR 이 그 파일의 로직을 건드리지 않으므로
+    # 해당 파일에서 나오는 CRITICAL 은 정의상 이 PR 밖이다. 다른 파일의
+    # CRITICAL 은 그대로 차단된다 (부분 waiver 로는 통과 불가).
+    - id: "tool-install-remote-shell-exec"
+      match: "tool_install\\.rs"
+      reason: "origin/main 기존 결함(설치 스크립트 무검증 실행). 앵커 PR 은 이 파일의 앵커 주석만 변경. 이슈 #8 에서 버전 고정·SHA-256 검증·파이프 제거로 처리."
+      accepted_by: "choa712"
+      expires: "2026-11-08"
