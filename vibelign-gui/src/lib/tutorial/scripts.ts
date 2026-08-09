@@ -1,5 +1,4 @@
 // === ANCHOR: SCRIPTS_START ===
-// ANCHOR: TUTORIAL_SCRIPTS_START
 import type { Tutorial, TutorialId } from "./types";
 
 const TODO: Tutorial = {
@@ -130,5 +129,4 @@ export function getTutorial(id: TutorialId): Tutorial | undefined {
   return TUTORIALS.find((t) => t.id === id);
 }
 // === ANCHOR: SCRIPTS_GETTUTORIAL_END ===
-// ANCHOR: TUTORIAL_SCRIPTS_END
 // === ANCHOR: SCRIPTS_END ===

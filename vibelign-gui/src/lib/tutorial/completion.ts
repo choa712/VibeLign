@@ -1,5 +1,4 @@
 // === ANCHOR: COMPLETION_START ===
-// ANCHOR: TUTORIAL_COMPLETION_START
 import type { GuideSignals } from "../nav/guide";
 import type { StepDone } from "./types";
 
@@ -27,5 +26,4 @@ export function isStepComplete(done: StepDone, s: GuideSignals): boolean {
   }
 }
 // === ANCHOR: COMPLETION_ISSTEPCOMPLETE_END ===
-// ANCHOR: TUTORIAL_COMPLETION_END
 // === ANCHOR: COMPLETION_END ===

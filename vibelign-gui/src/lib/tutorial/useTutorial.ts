@@ -1,5 +1,4 @@
 // === ANCHOR: USETUTORIAL_START ===
-// ANCHOR: TUTORIAL_USE_TUTORIAL_START
 import { useCallback, useEffect, useState } from "react";
 import type { Tutorial, TutorialId, TutorialStep } from "./types";
 import { getTutorial } from "./scripts";
@@ -85,5 +84,4 @@ export function useTutorial(): TutorialState {
   return { active, stepIndex, step, isComplete, start, advance, exit };
 }
 // === ANCHOR: USETUTORIAL_USETUTORIAL_END ===
-// ANCHOR: TUTORIAL_USE_TUTORIAL_END
 // === ANCHOR: USETUTORIAL_END ===

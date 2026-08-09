@@ -1,5 +1,4 @@
 // === ANCHOR: SPOTLIGHT_START ===
-// ANCHOR: TUTORIAL_SPOTLIGHT_START
 export interface SpotRect {
   top: number;
   left: number;
@@ -28,5 +27,4 @@ export function spotlightStyle(rect: SpotRect | null, pad = 8): SpotStyle {
   };
 }
 // === ANCHOR: SPOTLIGHT_SPOTLIGHTSTYLE_END ===
-// ANCHOR: TUTORIAL_SPOTLIGHT_END
 // === ANCHOR: SPOTLIGHT_END ===

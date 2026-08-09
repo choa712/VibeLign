@@ -1,5 +1,4 @@
 // === ANCHOR: DESIGN_PREVIEW_START ===
-// ANCHOR: DESIGN_PREVIEW_START
 use std::path::Path;
 
 const MAX_MOCKUP_BYTES: usize = 512 * 1024;
@@ -534,7 +533,6 @@ pub(crate) fn delete_custom_style(project_dir: String, style_id: String) -> Resu
     write_custom_styles(dir, &list)
 }
 
-// ANCHOR: DESIGN_PREVIEW_END
 
 #[cfg(test)]
 mod custom_style_tests {

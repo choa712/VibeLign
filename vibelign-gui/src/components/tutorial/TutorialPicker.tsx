@@ -1,5 +1,4 @@
 // === ANCHOR: TUTORIALPICKER_START ===
-// ANCHOR: TUTORIAL_PICKER_START
 import { TUTORIALS } from "../../lib/tutorial/scripts";
 import type { TutorialId } from "../../lib/tutorial/types";
 
@@ -28,5 +27,4 @@ export default function TutorialPicker({ onPick, onClose }: TutorialPickerProps)
     </div>
   );
 }
-// ANCHOR: TUTORIAL_PICKER_END
 // === ANCHOR: TUTORIALPICKER_END ===

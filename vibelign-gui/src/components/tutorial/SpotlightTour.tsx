@@ -1,5 +1,4 @@
 // === ANCHOR: SPOTLIGHTTOUR_START ===
-// ANCHOR: SPOTLIGHT_TOUR_START
 import { useEffect, useRef, useState } from "react";
 import type { GuideSignals } from "../../lib/nav/guide";
 import type { Page } from "../../lib/nav/stages";
@@ -132,5 +131,4 @@ export default function SpotlightTour({
     </div>
   );
 }
-// ANCHOR: SPOTLIGHT_TOUR_END
 // === ANCHOR: SPOTLIGHTTOUR_END ===
