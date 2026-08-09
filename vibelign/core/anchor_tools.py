@@ -1,5 +1,5 @@
 # === ANCHOR: ANCHOR_TOOLS_START ===
-from collections.abc import Collection
+from collections.abc import Collection, Iterator
 from pathlib import Path
 import hashlib
 import json
@@ -9,6 +9,7 @@ from typing import TypeAlias, TypedDict, cast
 
 from vibelign.core.project_map import ProjectMapSnapshot
 from vibelign.core.project_scan import iter_source_files, line_count, safe_read_text
+from vibelign.core.structure_policy import ANCHOR_MARKER_PATTERN
 
 
 from vibelign.terminal_render import cli_print
@@ -78,7 +79,7 @@ COMMENT_PREFIX = {
     ".hpp": "//",
     ".cs": "//",
 }
-ANCHOR_RE = re.compile(r"===\s*ANCHOR:\s*([A-Z0-9_]+)\s*===")
+ANCHOR_RE = re.compile(ANCHOR_MARKER_PATTERN)
 PY_SYMBOL_RE = re.compile(
     r"^(?:async\s+def|def|class)\s+([A-Za-z_][A-Za-z0-9_]*)", re.MULTILINE
 )
@@ -827,6 +828,30 @@ def get_anchor_intent(root: Path, anchor_name: str) -> AnchorMetaEntry:
 # === ANCHOR: ANCHOR_TOOLS_GET_ANCHOR_INTENT_END ===
 
 
+# === ANCHOR: ANCHOR_TOOLS__PARSE_ANCHOR_MARKER_START ===
+def _parse_anchor_marker(line: str) -> tuple[str, bool] | None:
+    """앵커 마커 라인을 (이름, is_start) 로 해석. 마커가 아니면 None.
+
+    앵커 이름 자체에 START/END 가 포함될 수 있으므로(`VIB_START_CMD`,
+    `HEAD_EXCLUSIVE_END`) 토큰 전체를 먼저 잡고 접미사로 판별한다.
+    `([A-Z0-9_]+)_START` 부분 매칭으로 판별하면 END 마커인
+    `VIB_START_CMD_END` 가 이름 `VIB` 의 START 로 오인된다.
+    extract_anchors 와 동일한 이름 정규화 결과를 낸다.
+    """
+    match = ANCHOR_RE.search(line)
+    if not match:
+        return None
+    token = match.group(1)
+    if token.endswith("_START"):
+        return token[: -len("_START")], True
+    if token.endswith("_END"):
+        return token[: -len("_END")], False
+    return None
+
+
+# === ANCHOR: ANCHOR_TOOLS__PARSE_ANCHOR_MARKER_END ===
+
+
 # === ANCHOR: ANCHOR_TOOLS_EXTRACT_ANCHOR_LINE_RANGES_START ===
 def extract_anchor_line_ranges(path: Path) -> dict[str, tuple[int, int]]:
     """각 앵커의 START~END 줄 번호 반환. {anchor_name: (start_line, end_line)} (1-based)"""
@@ -834,47 +859,89 @@ def extract_anchor_line_ranges(path: Path) -> dict[str, tuple[int, int]]:
     if not text:
         return {}
     ranges: dict[str, tuple[int, int]] = {}
-    starts: dict[str, int] = {}
+    # 같은 이름이 겹쳐 열릴 수 있으므로 이름당 스택으로 쌓는다.
+    # extract_anchor_blocks 와 동일한 규칙이어야 두 함수 결과가 일치한다.
+    starts: dict[str, list[int]] = {}
     for i, line in enumerate(text.splitlines(), start=1):
-        m_start = re.search(r"ANCHOR:\s*([A-Z0-9_]+)_START", line)
-        if m_start:
-            name = re.sub(r"_(START|END)$", "", m_start.group(1)).rstrip("_")
-            starts[name] = i
+        marker = _parse_anchor_marker(line)
+        if marker is None:
             continue
-        m_end = re.search(r"ANCHOR:\s*([A-Z0-9_]+)_END", line)
-        if m_end:
-            name = re.sub(r"_(START|END)$", "", m_end.group(1)).rstrip("_")
-            if name in starts:
-                ranges[name] = (starts.pop(name), i)
+        name, is_start = marker
+        if is_start:
+            starts.setdefault(name, []).append(i)
+            continue
+        stack = starts.get(name)
+        if stack:
+            ranges[name] = (stack.pop(), i)
     return ranges
 
 
 # === ANCHOR: ANCHOR_TOOLS_EXTRACT_ANCHOR_LINE_RANGES_END ===
 
 
+# === ANCHOR: ANCHOR_TOOLS_ITER_ANCHOR_BLOCKS_START ===
+def iter_anchor_blocks(path: Path) -> Iterator[tuple[str, str]]:
+    """앵커 블록을 (이름, 코드) 로 하나씩 내보낸다.
+
+    중첩 앵커는 바깥 블록이 안쪽 본문을 다시 담으므로, 전부 dict 로 만들면
+    중첩 깊이에 비례해 메모리가 늘어난다 (깊이 1200 실측 peak 41MB).
+    모든 블록을 훑되 한 번에 하나만 들고 있으면 되는 호출자(intent 생성)는
+    이 함수를 쓴다. 결과는 extract_anchor_blocks 와 동일하다.
+    """
+    text = safe_read_text(path)
+    if not text:
+        return
+    lines = text.splitlines()
+    for name, (start_line, end_line) in extract_anchor_line_ranges(path).items():
+        yield name, "\n".join(lines[start_line : end_line - 1]).strip()
+
+
+# === ANCHOR: ANCHOR_TOOLS_ITER_ANCHOR_BLOCKS_END ===
+
+
 # === ANCHOR: ANCHOR_TOOLS_EXTRACT_ANCHOR_BLOCKS_START ===
-def extract_anchor_blocks(path: Path) -> dict[str, str]:
-    """각 앵커의 START~END 사이 코드를 추출. {anchor_name: code}"""
+def extract_anchor_blocks(
+    path: Path, only: AllowedExts | None = None
+) -> dict[str, str]:
+    """각 앵커의 START~END 사이 코드를 추출. {anchor_name: code}
+
+    only 를 주면 그 이름의 블록만 본문을 만든다. 중첩 앵커는 바깥 블록이
+    안쪽 본문을 다시 담으므로, 전체를 만들면 중첩 깊이에 비례해 메모리가
+    늘어난다. 특정 앵커 하나만 필요한 호출자(MCP anchor_read_content)는
+    only 를 넘겨 요청한 블록만 만들게 한다.
+    """
     text = safe_read_text(path)
     if not text:
         return {}
+    lines = text.splitlines()
     blocks: dict[str, str] = {}
-    current_anchor: str | None = None
-    current_lines: list[str] = []
-    for line in text.splitlines():
-        m_start = re.search(r"ANCHOR:\s*([A-Z0-9_]+)_START", line)
-        if m_start:
-            current_anchor = re.sub(r"_(START|END)$", "", m_start.group(1)).rstrip("_")
-            current_lines = []
+    # 이름별 START 위치를 스택으로 기록해 END 와 이름으로 짝짓는다.
+    # 단일 current_anchor 로 추적하면 `vib anchor --auto` 가 삽입하는
+    # 모듈 앵커 ⊃ 심볼 앵커 중첩에서 바깥 블록이 소실된다.
+    # 같은 이름이 겹쳐 열릴 수 있으므로(A_START A_START A_END A_END)
+    # 이름당 하나만 들고 있으면 바깥 START 를 잃는다 → 리스트로 쌓는다.
+    # extract_anchor_line_ranges 와 동일한 매칭 규칙을 쓴다.
+    open_starts: dict[str, list[int]] = {}
+    # 구간만 먼저 확정하고 본문은 마지막에 이름당 한 번만 만든다.
+    # 같은 이름이 겹쳐 열리면 END 마다 join 이 돌아 2차 비용이 된다
+    # (깊이 4000 실측 0.097s) — 어차피 뒤 END 가 덮어쓰므로 낭비다.
+    spans: dict[str, tuple[int, int]] = {}
+    for i, line in enumerate(lines):
+        marker = _parse_anchor_marker(line)
+        if marker is None:
             continue
-        m_end = re.search(r"ANCHOR:\s*([A-Z0-9_]+)_END", line)
-        if m_end and current_anchor:
-            blocks[current_anchor] = "\n".join(current_lines).strip()
-            current_anchor = None
-            current_lines = []
+        name, is_start = marker
+        if is_start:
+            open_starts.setdefault(name, []).append(i)
             continue
-        if current_anchor is not None:
-            current_lines.append(line)
+        stack = open_starts.get(name)
+        if not stack:
+            continue
+        start = stack.pop()  # 가장 안쪽 START 부터 닫는다
+        if only is None or name in only:
+            spans[name] = (start, i)
+    for name, (start, end) in spans.items():
+        blocks[name] = "\n".join(lines[start + 1 : end]).strip()
     return blocks
 
 
@@ -977,7 +1044,7 @@ def generate_code_based_intents(root: Path, paths: list[Path]) -> int:
     existing = load_anchor_meta(root)
     count = 0
     for path in paths:
-        for anchor, code in extract_anchor_blocks(path).items():
+        for anchor, code in iter_anchor_blocks(path):
             aliases, description = generate_code_based_aliases(anchor, code)
             if not aliases:
                 continue
@@ -1172,7 +1239,7 @@ def generate_anchor_intents_with_ai(
     cached_hit = 0
     backfill_anchors: list[str] = []
     for path in paths:
-        for anchor, code in extract_anchor_blocks(path).items():
+        for anchor, code in iter_anchor_blocks(path):
             entry = existing.get(anchor, {})
             current_hash = _anchor_content_hash(code)
             hashes[anchor] = current_hash
@@ -1322,8 +1389,37 @@ def validate_anchor_file(path: Path) -> list[str]:
             problems.append(f"{name}_END 에 대응하는 START 가 없습니다")
     if not start_markers and not end_markers:
         problems.append("앵커가 없습니다")
+    problems.extend(find_legacy_anchor_markers(text))
     return problems
 
 
 # === ANCHOR: ANCHOR_TOOLS_VALIDATE_ANCHOR_FILE_END ===
+
+
+# === ANCHOR: ANCHOR_TOOLS_FIND_LEGACY_ANCHOR_MARKERS_START ===
+# 등호로 감싸지 않은 옛 마커. 정본 파서는 이제 이 형식을 인정하지 않으므로,
+# 예전 프로젝트가 조용히 보호 구역을 잃지 않도록 검증에서 드러낸다.
+_LEGACY_MARKER_RE = re.compile(
+    r"^[ \t]*(?://|#)[ \t]*ANCHOR:[ \t]*([A-Z0-9_]+)_(?:START|END)[ \t]*$"
+)
+
+
+def find_legacy_anchor_markers(text: str) -> list[str]:
+    """구 형식(등호 없는) 앵커 마커를 찾아 경고 문구로 돌려준다."""
+    names: list[str] = []
+    for line in text.splitlines():
+        match = _LEGACY_MARKER_RE.match(line)
+        if match and match.group(1) not in names:
+            names.append(match.group(1))
+    if not names:
+        return []
+    listed = ", ".join(names[:5]) + (" 외" if len(names) > 5 else "")
+    return [
+        f"구 형식 앵커 마커 {len(names)}개가 있습니다 ({listed}) — "
+        "등호로 감싼 정본 형식이 아니라 어떤 파서도 읽지 않습니다. "
+        "정본 형식으로 바꾸거나 제거하세요"
+    ]
+
+
+# === ANCHOR: ANCHOR_TOOLS_FIND_LEGACY_ANCHOR_MARKERS_END ===
 # === ANCHOR: ANCHOR_TOOLS_END ===

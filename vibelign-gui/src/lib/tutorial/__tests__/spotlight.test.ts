@@ -1,3 +1,4 @@
+// === ANCHOR: SPOTLIGHT_TEST_START ===
 import { describe, it, expect } from "vitest";
 import { spotlightStyle } from "../spotlight";
 
@@ -20,3 +21,4 @@ describe("spotlightStyle", () => {
     expect(s.width).toBe(26);
   });
 });
+// === ANCHOR: SPOTLIGHT_TEST_END ===

@@ -1,4 +1,4 @@
-// ANCHOR: TUTORIAL_TYPES_START
+// === ANCHOR: TUTORIAL_TYPES_START ===
 import type { Page } from "../nav/stages";
 
 export type TutorialId = "todo" | "guestbook" | "quiz";
@@ -39,4 +39,4 @@ export interface Tutorial {
   goal: string;
   steps: TutorialStep[];
 }
-// ANCHOR: TUTORIAL_TYPES_END
+// === ANCHOR: TUTORIAL_TYPES_END ===

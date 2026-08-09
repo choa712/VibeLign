@@ -1,4 +1,4 @@
-// ANCHOR: SPOTLIGHT_TOUR_START
+// === ANCHOR: SPOTLIGHTTOUR_START ===
 import { useEffect, useRef, useState } from "react";
 import type { GuideSignals } from "../../lib/nav/guide";
 import type { Page } from "../../lib/nav/stages";
@@ -16,6 +16,7 @@ interface SpotlightTourProps {
   onNavigate: (page: Page) => void;
 }
 
+// === ANCHOR: SPOTLIGHTTOUR_READRECT_START ===
 function readRect(target?: string): SpotRect | null {
   if (!target) return null;
   const el = document.querySelector(`[data-tour="${target}"]`);
@@ -23,6 +24,7 @@ function readRect(target?: string): SpotRect | null {
   const r = el.getBoundingClientRect();
   return { top: r.top, left: r.left, width: r.width, height: r.height };
 }
+// === ANCHOR: SPOTLIGHTTOUR_READRECT_END ===
 
 export default function SpotlightTour({
   tutorial, stepIndex, step, signals, onAdvance, onExit, onNavigate,
@@ -46,6 +48,7 @@ export default function SpotlightTour({
   useEffect(() => {
     let raf = 0;
     let prev: SpotRect | null = null;
+    // === ANCHOR: SPOTLIGHTTOUR_TICK_START ===
     const tick = () => {
       const next = readRect(step.target);
       const changed =
@@ -56,6 +59,7 @@ export default function SpotlightTour({
       if (changed) { prev = next; setRect(next); }
       raf = requestAnimationFrame(tick);
     };
+    // === ANCHOR: SPOTLIGHTTOUR_TICK_END ===
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [step.id, step.target]);
@@ -81,14 +85,18 @@ export default function SpotlightTour({
   const viewportH = typeof window !== "undefined" ? window.innerHeight : 800;
   const placeBubbleTop = rect != null && rect.top + rect.height / 2 > viewportH / 2;
 
+  // === ANCHOR: SPOTLIGHTTOUR_HANDLECOPY_START ===
   function handleCopy() {
     if (step.copyText) navigator.clipboard.writeText(step.copyText).catch(() => {});
     onAdvance();
   }
+  // === ANCHOR: SPOTLIGHTTOUR_HANDLECOPY_END ===
 
+  // === ANCHOR: SPOTLIGHTTOUR_HANDLERECOPY_START ===
   function handleReCopy() {
     if (step.copyText) navigator.clipboard.writeText(step.copyText).catch(() => {});
   }
+  // === ANCHOR: SPOTLIGHTTOUR_HANDLERECOPY_END ===
 
   return (
     <div className="tour-root" role="dialog" aria-label="튜토리얼">
@@ -123,4 +131,4 @@ export default function SpotlightTour({
     </div>
   );
 }
-// ANCHOR: SPOTLIGHT_TOUR_END
+// === ANCHOR: SPOTLIGHTTOUR_END ===

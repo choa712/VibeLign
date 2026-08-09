@@ -1,3 +1,4 @@
+// === ANCHOR: SCRIPTS_TEST_START ===
 import { describe, it, expect } from "vitest";
 import { TUTORIALS, getTutorial } from "../scripts";
 
@@ -49,3 +50,4 @@ describe("tutorial scripts", () => {
     }
   });
 });
+// === ANCHOR: SCRIPTS_TEST_END ===

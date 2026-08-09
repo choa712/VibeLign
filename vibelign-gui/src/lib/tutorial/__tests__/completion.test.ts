@@ -1,3 +1,4 @@
+// === ANCHOR: COMPLETION_TEST_START ===
 import { describe, it, expect } from "vitest";
 import { isStepComplete } from "../completion";
 import type { GuideSignals } from "../../nav/guide";
@@ -46,3 +47,4 @@ describe("isStepComplete", () => {
     expect(isStepComplete("manual", full)).toBe(false);
   });
 });
+// === ANCHOR: COMPLETION_TEST_END ===

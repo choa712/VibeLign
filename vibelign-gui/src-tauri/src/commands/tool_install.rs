@@ -1,5 +1,4 @@
 // === ANCHOR: TOOL_INSTALL_START ===
-// ANCHOR: TOOL_INSTALL_START
 use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -222,9 +221,8 @@ pub(crate) async fn install_tool(
     .await
     .map_err(|_| SPAWN_FAIL.to_string())?
 }
-// ANCHOR: TOOL_INSTALL_END
 
-// ANCHOR: TOOL_UNINSTALL_START
+// === ANCHOR: TOOL_UNINSTALL_START ===
 /// resolve된 실행파일 경로(Option)를 받아 있으면 삭제. 파일 1개만 remove_file — 비재귀·셸 미경유.
 /// None 이면 이미 없으므로 no-op.
 fn remove_resolved_binary(resolved: Option<std::path::PathBuf>) -> std::io::Result<()> {
@@ -305,7 +303,7 @@ pub(crate) async fn uninstall_tool(
     .await
     .map_err(|_| SPAWN_FAIL.to_string())?
 }
-// ANCHOR: TOOL_UNINSTALL_END
+// === ANCHOR: TOOL_UNINSTALL_END ===
 
 #[cfg(test)]
 mod tests {

@@ -1,5 +1,4 @@
 // === ANCHOR: DOCS_ACCESS_START ===
-// ANCHOR: DOCS_ACCESS_START
 //! Extra-source allowlist guard for Tauri read operations.
 //!
 //! This module is the **single entry point** for `is_allowed_doc_path` logic.
@@ -236,7 +235,6 @@ pub fn is_canvas_eligible_path(relative_path: &str) -> bool {
     true
 }
 
-// ANCHOR: DOCS_ACCESS_END
 
 #[cfg(test)]
 mod tests {

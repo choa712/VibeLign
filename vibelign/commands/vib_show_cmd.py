@@ -40,11 +40,17 @@ def run_vib_show(args: Namespace) -> None:
         print(f"'{rel}' 에 앵커가 없어요")
         return
 
-    normalized = anchor_name.upper().rstrip("_")
-    if normalized.endswith("_START") or normalized.endswith("_END"):
-        normalized = normalized.rsplit("_", 1)[0]
+    # 정확 일치를 먼저 시도한다. 곧바로 정규화하면 이름 자체가 _END/_ 로 끝나는
+    # 앵커(HEAD_EXCLUSIVE_END, __INIT__)를 영영 조회할 수 없다.
+    requested = anchor_name.upper()
+    matches = [s for s in spans if str(s.get("name", "")).upper() == requested]
 
-    matches = [s for s in spans if str(s.get("name", "")).upper() == normalized]
+    if not matches:
+        # 마커 이름(FOO_START)으로 요청한 경우를 위한 폴백
+        normalized = requested.rstrip("_")
+        if normalized.endswith("_START") or normalized.endswith("_END"):
+            normalized = normalized.rsplit("_", 1)[0]
+        matches = [s for s in spans if str(s.get("name", "")).upper() == normalized]
     if not matches:
         available = ", ".join(sorted({str(s.get("name", "")) for s in spans}))
         print(f"앵커 '{anchor_name}' 를 '{rel}' 에서 찾을 수 없어요")
@@ -69,7 +75,8 @@ def run_vib_show(args: Namespace) -> None:
     start_idx = max(0, start_val - 1)
     end_idx = min(len(lines), end_line)
 
-    header = f"{rel}:{start_val}-{end_line}  (앵커: {normalized})"
+    resolved_name = str(span.get("name", "")) or anchor_name
+    header = f"{rel}:{start_val}-{end_line}  (앵커: {resolved_name})"
     print(header)
     print("-" * len(header))
     width = len(str(end_line))

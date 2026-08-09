@@ -1,3 +1,4 @@
+// === ANCHOR: SPOTLIGHTTOUR_TEST_START ===
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { cleanup, render, screen, fireEvent } from "@testing-library/react";
 import SpotlightTour from "../SpotlightTour";
@@ -27,6 +28,7 @@ afterEach(() => {
   cleanup();
 });
 
+// === ANCHOR: SPOTLIGHTTOUR_TEST_SETUP_START ===
 function setup(stepIndex: number, s: GuideSignals = signals, extra = {}) {
   const onAdvance = vi.fn();
   const onExit = vi.fn();
@@ -45,6 +47,7 @@ function setup(stepIndex: number, s: GuideSignals = signals, extra = {}) {
   );
   return { onAdvance, onExit, onNavigate, rerender };
 }
+// === ANCHOR: SPOTLIGHTTOUR_TEST_SETUP_END ===
 
 describe("SpotlightTour", () => {
   it("say와 why, 진행률을 보여준다", () => {
@@ -148,3 +151,4 @@ describe("SpotlightTour", () => {
     expect(onAdvance).not.toHaveBeenCalled();
   });
 });
+// === ANCHOR: SPOTLIGHTTOUR_TEST_END ===

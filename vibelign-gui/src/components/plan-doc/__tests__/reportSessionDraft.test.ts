@@ -1,13 +1,17 @@
+// === ANCHOR: REPORTSESSIONDRAFT_TEST_START ===
 import { describe, expect, test } from "vitest";
 
 import { applyReportSessionDraftToEmitPayload } from "../reportSessionDraft";
 import type { ReportSessionDraft } from "../reportSessionDraft";
 import type { EmitPayload, RModel } from "../../../lib/vib/reportModel";
 
+// === ANCHOR: REPORTSESSIONDRAFT_TEST_EMPTYMODEL_START ===
 function emptyModel(): RModel {
   return { title: "T", report_type: "work", date: "2026-06-23", source_plan_path: "plan.md", sections: [] };
 }
+// === ANCHOR: REPORTSESSIONDRAFT_TEST_EMPTYMODEL_END ===
 
+// === ANCHOR: REPORTSESSIONDRAFT_TEST_BASEPAYLOAD_START ===
 function basePayload(): EmitPayload {
   return {
     ok: true,
@@ -22,6 +26,7 @@ function basePayload(): EmitPayload {
     assistance: {} as EmitPayload["assistance"],
   };
 }
+// === ANCHOR: REPORTSESSIONDRAFT_TEST_BASEPAYLOAD_END ===
 
 const MARKDOWN = [
   "- **초보 사용자 (코알못)**: 규칙을 모릅니다.",
@@ -47,6 +52,7 @@ describe("applyReportSessionDraftToEmitPayload", () => {
     // renderer can convert **bold**/*em* to <strong>/<em> (html_renderer._render_inline).
     const bullets = blocks.find((b) => b.kind === "bullets");
     expect(bullets).toBeDefined();
+    // === ANCHOR: REPORTSESSIONDRAFT_TEST_JOINED_START ===
     const joined = (bullets?.items ?? []).join("\n");
     expect(joined).toContain("**초보 사용자 (코알못)**: 규칙을 모릅니다.");
     expect(bullets?.items.some((i) => i.includes("↳ *완화 방안*: 기본값을 초보 모드로"))).toBe(true);
@@ -60,6 +66,7 @@ describe("applyReportSessionDraftToEmitPayload", () => {
       expect(b.text).not.toContain("##");
       expect(b.text.startsWith("- ")).toBe(false);
     }
+    // === ANCHOR: REPORTSESSIONDRAFT_TEST_JOINED_END ===
 
     // base and polished both receive the section.
     expect(out.polished.sections.at(-1)?.heading).toBe("사용자 확인 보완 초안");
@@ -87,3 +94,4 @@ describe("applyReportSessionDraftToEmitPayload", () => {
     expect(out.base.sections).toHaveLength(0);
   });
 });
+// === ANCHOR: REPORTSESSIONDRAFT_TEST_END ===
