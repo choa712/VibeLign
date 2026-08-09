@@ -60,6 +60,22 @@ class MetaPaths:
         return self.vibelign_dir / "work_memory.json"
 
     @property
+    def handoff_path(self) -> Path:
+        """Session Handoff 원본 데이터 (issue #6).
+
+        PROJECT_CONTEXT.md 안에 끼워 두면 재생성 때마다 경계를 다시 찾아야
+        하는데, 신뢰할 수 없는 자유 텍스트를 생성 문서 안에서 in-band 구분자로
+        감싸는 방식은 구분자가 무엇이든 위조된다(경계 추론 3종이 모두 깨졌다).
+        원본을 밖에 두면 경계 파싱이 아예 사라지고 PROJECT_CONTEXT.md 는
+        순수 생성물이 된다.
+        """
+        return self.vibelign_dir / "handoff.json"
+
+    @property
+    def context_lock_path(self) -> Path:
+        return self.vibelign_dir / "project_context.lock"
+
+    @property
     def scan_cache_path(self) -> Path:
         return self.vibelign_dir / "scan_cache.json"
 
