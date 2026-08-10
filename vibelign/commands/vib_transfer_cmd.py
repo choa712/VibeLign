@@ -1183,6 +1183,10 @@ def commit_project_context(
     (구버전 인라인 handoff 보관 경로, 실제로 쓴 본문) 을 돌려준다.
     """
     meta = MetaPaths(root)
+    # 경계 검사를 가장 먼저 한다. 잠금 파일과 보관 파일도 .vibelign 안에
+    # 만들어지므로, 그 디렉터리가 프로젝트 밖을 가리키면 아래 대상 검증에
+    # 닿기 전에 이미 밖에 파일이 생긴다.
+    _ = resolve_write_target(meta.vibelign_dir, root)
     with file_lock(meta.context_lock_path):
         archive = _archive_legacy_inline_handoff(root, out_path)
         # 본문을 먼저 만든다 — 여기서 실패하면 아무것도 바뀌지 않는다.
@@ -1481,7 +1485,22 @@ _AGENTS_HANDOFF_BLOCK = """{marker}
 
 
 def _inject_agents_handoff_instruction(root: Path) -> None:
-    """AGENTS.md가 있으면 handoff 읽기 지시를 추가 (중복 방지)."""
+    """AGENTS.md가 있으면 handoff 읽기 지시를 추가 (중복 방지).
+
+    이 단계는 저장이 끝난 뒤의 부수 작업이다. 여기서 던지면 호출부가 이미
+    성공한 저장을 실패로 보고하게 되므로, 실패는 삼키고 알리기만 한다
+    (읽을 수 없는 AGENTS.md, 프로젝트 밖을 가리키는 링크 등).
+    """
+    try:
+        _inject_agents_handoff_instruction_unsafe(root)
+    except OSError as exc:
+        clack_info(
+            f"주의: AGENTS.md 에 handoff 안내를 추가하지 못했습니다 ({exc}). "
+            "저장 자체는 정상입니다."
+        )
+
+
+def _inject_agents_handoff_instruction_unsafe(root: Path) -> None:
     agents_path = root / "AGENTS.md"
     if not agents_path.exists():
         return

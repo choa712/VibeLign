@@ -665,6 +665,43 @@ class TestAtomicWrite:
         ]
         assert leftovers == []
 
+    def test_escaping_vibelign_dir_is_refused_before_any_write(
+        self, tmp_path: Path
+    ) -> None:
+        """경계 검사는 잠금·보관 파일을 만들기 전에 끝나야 한다.
+
+        .vibelign 자체가 밖을 가리키면, 대상 경로를 검증할 즈음엔 이미
+        project_context.lock 과 보관 파일이 바깥에 생겨 있다.
+        """
+        outside = tmp_path / "evil"
+        outside.mkdir()
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / ".vibelign").symlink_to(outside)
+        ctx = root / "PROJECT_CONTEXT.md"
+        _ = ctx.write_text("## Session Handoff\n기존\n", encoding="utf-8")
+
+        with pytest.raises(OSError, match="프로젝트 밖"):
+            _ = commit_project_context(root, ctx, lambda: "본문")
+
+        assert list(outside.iterdir()) == []  # 잠금도 보관 파일도 안 생겼다
+
+    def test_agents_failure_does_not_fail_the_save(self, tmp_path: Path) -> None:
+        """저장이 끝난 뒤의 부수 작업 실패가 저장을 실패로 만들면 안 된다."""
+        from vibelign.commands.vib_transfer_cmd import (
+            _inject_agents_handoff_instruction,
+        )
+
+        outside = tmp_path.parent / "outside-agents.md"
+        _ = outside.write_text("# 밖\n", encoding="utf-8")
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / "AGENTS.md").symlink_to(outside)
+
+        _inject_agents_handoff_instruction(root)  # 예외가 새어나오면 실패
+
+        assert outside.read_text(encoding="utf-8") == "# 밖\n"
+
     def test_agents_md_symlink_is_followed(self, tmp_path: Path) -> None:
         """AGENTS.md 를 공유 정책 파일로 링크해 두는 설정이 흔하다."""
         from vibelign.commands.vib_transfer_cmd import (
