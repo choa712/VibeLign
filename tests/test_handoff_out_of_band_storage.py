@@ -49,6 +49,19 @@ class TestRoundTrip:
     def test_missing_file_returns_none(self, tmp_path: Path) -> None:
         assert load_handoff_data(tmp_path) is None
 
+    def test_reading_outside_root_is_refused(self, tmp_path: Path) -> None:
+        """쓰기만 막으면 부족하다 — 바깥 JSON 값이 컨텍스트로 실려 나간다."""
+        outside = tmp_path / "evil"
+        outside.mkdir()
+        _ = (outside / "handoff.json").write_text(
+            '{"source": "외부 비밀"}', encoding="utf-8"
+        )
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / ".vibelign").symlink_to(outside)
+
+        assert load_handoff_data(root) is None
+
     def test_corrupt_file_returns_none_instead_of_raising(self, tmp_path: Path) -> None:
         path = MetaPaths(tmp_path).handoff_path
         path.parent.mkdir(parents=True, exist_ok=True)

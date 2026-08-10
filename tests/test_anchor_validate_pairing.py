@@ -91,6 +91,22 @@ class TestMultiplicity:
         assert validate_anchor_file(p) == []
         assert find_crossing_anchors("\n".join(lines) + "\n") == []
 
+    def test_crossing_diagnostics_are_bounded(self) -> None:
+        """겹친 앵커 수에 비례한 메시지가 그 수만큼 나오면 O(N^2) 이 된다.
+
+        악성 소스 하나로 vib scan 이 메모리를 태울 수 있다 (8000 앵커 실측
+        2.24억 자). 보여주는 상대 수와 findings 수 양쪽에 상한을 둔다.
+        """
+        n = 4000
+        lines = [_m(f"A{i}_START") for i in range(n)]
+        lines += [_m(f"A{i}_END") for i in range(n)]  # 전부 교차
+        problems = find_crossing_anchors("\n".join(lines) + "\n")
+
+        assert len(problems) <= 60, f"findings 상한 없음: {len(problems)}"
+        total = sum(len(x) for x in problems)
+        assert total < 100_000, f"진단 크기 폭발: {total:,}자"
+        assert any("생략" in x for x in problems)
+
     def test_proper_nesting_has_no_crossing(self) -> None:
         text = "\n".join([_m("M_START"), _m("M_F_START"), "x", _m("M_F_END"), _m("M_END")])
         assert find_crossing_anchors(text) == []

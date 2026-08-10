@@ -1107,8 +1107,18 @@ def save_handoff_data(root: Path, data: HandoffData) -> None:
 
 
 def load_handoff_data(root: Path) -> HandoffData | None:
-    """보관된 Session Handoff 원본을 읽는다. 없거나 깨졌으면 None."""
-    path = MetaPaths(root).handoff_path
+    """보관된 Session Handoff 원본을 읽는다. 없거나 깨졌으면 None.
+
+    읽을 때도 경계를 확인한다. 악의적 체크아웃이 handoff.json 을 바깥의
+    읽을 수 있는 JSON 으로 링크해 두면, 그 내용이 PROJECT_CONTEXT.md 에
+    그대로 실려 나간다 — 쓰기만 막아서는 부족하다.
+    """
+    meta = MetaPaths(root)
+    try:
+        _ = resolve_write_target(meta.vibelign_dir, root)
+        path = resolve_write_target(meta.handoff_path, root)
+    except OSError:
+        return None
     try:
         raw = cast(object, json.loads(path.read_text(encoding="utf-8")))
     except (OSError, json.JSONDecodeError):

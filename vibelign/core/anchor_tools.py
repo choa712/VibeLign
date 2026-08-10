@@ -1546,6 +1546,12 @@ def find_legacy_anchor_markers(text: str) -> list[str]:
 
 
 # === ANCHOR: ANCHOR_TOOLS_FIND_CROSSING_ANCHORS_START ===
+# 진단 크기 상한. 없으면 겹친 앵커 수에 비례한 메시지가 그 수만큼 나와
+# O(N^2) 로 부풀고, 악성 소스 하나로 vib scan 이 메모리를 태울 수 있다.
+_CROSSING_SHOWN = 5
+_CROSSING_MAX_FINDINGS = 50
+
+
 def find_crossing_anchors(text: str) -> list[str]:
     """교차 앵커를 찾는다 — 차단이 아니라 경고다.
 
@@ -1571,15 +1577,27 @@ def find_crossing_anchors(text: str) -> list[str]:
             continue
         for idx in range(len(open_starts) - 1, -1, -1):
             if open_starts[idx][0] == name:
-                crossing = [n for n, _ in open_starts[idx + 1 :]]
-                if crossing:
+                # 교차 상대를 전부 나열하면 안 된다. 앵커가 N 개 겹친 파일에서
+                # 메시지 길이가 N 에 비례하고 그런 메시지가 N 개 나와 O(N^2) 이
+                # 된다 (8000 앵커 실측 2.2억 자). 진단은 몇 개만 보여도 충분하다.
+                crossing_count = len(open_starts) - idx - 1
+                if crossing_count:
+                    shown = [n for n, _ in open_starts[idx + 1 : idx + 1 + _CROSSING_SHOWN]]
+                    listed = ", ".join(shown)
+                    if crossing_count > len(shown):
+                        listed += f" 외 {crossing_count - len(shown)}개"
                     problems.append(
-                        f"{line_no}번째 줄: {name}_END 가 "
-                        f"{', '.join(crossing)} 와 교차합니다 — "
+                        f"{line_no}번째 줄: {name}_END 가 {listed} 와 교차합니다 — "
                         "앵커는 완전히 포개지거나 완전히 떨어져 있어야 합니다"
                     )
                 del open_starts[idx]
                 break
+        if len(problems) >= _CROSSING_MAX_FINDINGS:
+            problems.append(
+                f"교차 앵커가 {_CROSSING_MAX_FINDINGS}건을 넘어 이후는 생략합니다 — "
+                "이 파일의 앵커 구조를 먼저 정리하세요"
+            )
+            break
     return problems
 
 
