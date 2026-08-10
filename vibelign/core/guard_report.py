@@ -8,18 +8,26 @@ JsonValue = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
 JsonObject = Mapping[str, object]
 
 
+# === ANCHOR: GUARD_REPORT_DOCTORLIKE_START ===
 class DoctorLike(Protocol):
     level: str
     score: int
     stats: dict[str, object]
 
+    # === ANCHOR: GUARD_REPORT_TO_DICT_START ===
     def to_dict(self) -> JsonObject: ...
+    # === ANCHOR: GUARD_REPORT_TO_DICT_END ===
+# === ANCHOR: GUARD_REPORT_DOCTORLIKE_END ===
 
 
+# === ANCHOR: GUARD_REPORT_EXPLAINLIKE_START ===
 class ExplainLike(Protocol):
     risk_level: str
 
+    # === ANCHOR: GUARD_REPORT_TO_DICT_START ===
     def to_dict(self) -> JsonObject: ...
+    # === ANCHOR: GUARD_REPORT_TO_DICT_END ===
+# === ANCHOR: GUARD_REPORT_EXPLAINLIKE_END ===
 
 
 @dataclass
@@ -37,10 +45,10 @@ class GuardReport:
 
     # === ANCHOR: GUARD_REPORT_TO_DICT_START ===
     def to_dict(self) -> dict[str, object]:
-        # === ANCHOR: GUARD_REPORT_GUARDREPORT_END ===
         return asdict(self)
-
     # === ANCHOR: GUARD_REPORT_TO_DICT_END ===
+# === ANCHOR: GUARD_REPORT_GUARDREPORT_END ===
+
 
 
 # === ANCHOR: GUARD_REPORT__DOCTOR_LEVEL_LABEL_START ===
@@ -50,9 +58,9 @@ def _doctor_level_label(level: str) -> str:
         "WARNING": "주의",
         "HIGH": "위험",
     }.get(level, level)
-
-
 # === ANCHOR: GUARD_REPORT__DOCTOR_LEVEL_LABEL_END ===
+
+
 
 
 # === ANCHOR: GUARD_REPORT__RISK_LABEL_START ===
@@ -62,9 +70,9 @@ def _risk_label(level: str) -> str:
         "MEDIUM": "보통",
         "HIGH": "높음",
     }.get(level, level)
-
-
 # === ANCHOR: GUARD_REPORT__RISK_LABEL_END ===
+
+
 
 
 # === ANCHOR: GUARD_REPORT__OVERALL_LABEL_START ===
@@ -74,9 +82,9 @@ def _overall_label(level: str) -> str:
         "WARNING": "한 번 더 확인 필요",
         "HIGH": "지금은 멈추는 편이 안전함",
     }.get(level, level)
-
-
 # === ANCHOR: GUARD_REPORT__OVERALL_LABEL_END ===
+
+
 
 
 # === ANCHOR: GUARD_REPORT_COMBINE_GUARD_START ===
@@ -116,7 +124,5 @@ def combine_guard(doctor: DoctorLike, explain: ExplainLike) -> GuardReport:
         dict(doctor.to_dict()),
         dict(explain.to_dict()),
     )
-
-
 # === ANCHOR: GUARD_REPORT_COMBINE_GUARD_END ===
 # === ANCHOR: GUARD_REPORT_END ===

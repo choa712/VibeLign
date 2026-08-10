@@ -22,7 +22,7 @@ from vibelign.core.structure_policy import (
 # anchor_tools 와 반드시 같은 패턴을 써야 한다. 갈라지면 ripgrep 설치
 # 여부에 따라 앵커 인덱스가 달라진다 (이 모듈 docstring 의 "기능 차이는
 # 없고 속도 차이만 있다" 계약 위반).
-_ANCHOR_RE = re.compile(ANCHOR_MARKER_PATTERN)
+_ANCHOR_RE = re.compile(ANCHOR_MARKER_PATTERN, re.MULTILINE)
 
 # 모듈 로드 시 한 번만 체크 (Ubuntu는 fd 대신 fdfind 로 설치됨)
 _FD: str | None = shutil.which("fd") or shutil.which("fdfind")
@@ -98,6 +98,10 @@ def grep_anchors_rg(root: Path) -> dict[str, list[str]] | None:
             "--with-filename",
             "--no-line-number",
             "--no-heading",
+            # 경로와 매치 사이 구분자를 NUL 로. ':' 로 나누면 Windows 의
+            # 드라이브 문자(C:\...)에서 첫 ':' 가 잘못 잡혀 모든 앵커가
+            # 파일 "C" 하나에 몰린다.
+            "--null",
             "-o",
             ANCHOR_MARKER_PATTERN,
         ]
@@ -113,10 +117,10 @@ def grep_anchors_rg(root: Path) -> dict[str, list[str]] | None:
     for line in (result.stdout or "").splitlines():
         if not line:
             continue
-        # format: /abs/path/file.py:ANCHOR: FOO_START
-        sep = line.index(":")
-        filepath = line[:sep]
-        match_text = line[sep + 1 :]
+        # format: /abs/path/file.py\0# === ANCHOR: FOO_START ===
+        filepath, sep, match_text = line.partition("\0")
+        if not sep:
+            continue
         m = _ANCHOR_RE.search(match_text)
         if not m:
             continue

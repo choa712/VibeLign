@@ -28,6 +28,7 @@ from vibelign.core.risk_analyzer import analyze_project
 from vibelign.core.structure_policy import (
     WINDOWS_SUBPROCESS_FLAGS,
     classify_structure_path,
+    has_anchor_markers,
     small_fix_line_threshold,
 )
 from vibelign.terminal_render import print_ai_response
@@ -111,7 +112,6 @@ _PLAN_REQUIRED_RECOMMENDATION = (
     "구조 영향 가능성이 높다면 먼저 `vib plan \"작업 내용\"` 또는 GUI 기획방에서 계획을 정리하세요."
 )
 _ANCHOR_REQUIRED_RECOMMENDATION = "신규 소스 파일에는 먼저 앵커를 추가하세요. `vib anchor --auto` 또는 `vib watch --auto-fix`를 사용할 수 있어요."
-_ANCHOR_PATTERN = re.compile(r"ANCHOR:\s*[A-Z0-9_]+_(START|END)")
 _SOURCE_EXTENSIONS = set(COMMENT_PREFIX.keys())
 
 
@@ -323,9 +323,10 @@ def _anchor_violations(
             continue
         if Path(rel_path).suffix.lower() not in _SOURCE_EXTENSIONS:
             continue
-        if _ANCHOR_PATTERN.search(
-            _new_file_text(root, rel_path, staged_only=staged_only)
-        ):
+        # 정본 형식만 인정한다. 예전 이 자리의 느슨한 정규식은 구 형식과
+        # 문자열 리터럴 속 마커까지 통과시켜, 실제 보호가 0인 신규 파일이
+        # 앵커 요구를 통과했다 (precheck 와 같은 결함이었다).
+        if has_anchor_markers(_new_file_text(root, rel_path, staged_only=staged_only)):
             continue
         violations.append(rel_path)
     return violations

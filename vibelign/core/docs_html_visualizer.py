@@ -28,9 +28,9 @@ class DocsHtmlArtifact:
 
     # === ANCHOR: DOCS_HTML_VISUALIZER_TO_DICT_START ===
     def to_dict(self) -> dict[str, Any]:
-# === ANCHOR: DOCS_HTML_VISUALIZER_DOCSHTMLARTIFACT_END ===
         return asdict(self)
     # === ANCHOR: DOCS_HTML_VISUALIZER_TO_DICT_END ===
+# === ANCHOR: DOCS_HTML_VISUALIZER_DOCSHTMLARTIFACT_END ===
 
 
 # === ANCHOR: DOCS_HTML_VISUALIZER__TITLE_FROM_TEXT_START ===
@@ -143,7 +143,6 @@ def _markdownish_to_raw_html(text: str) -> str:
             continue
         if stripped.startswith("<") and stripped.endswith(">"):
             flush_structural_blocks()
-# === ANCHOR: DOCS_HTML_VISUALIZER__MARKDOWNISH_TO_RAW_HTML_END ===
             blocks.append(stripped)
             continue
         flush_list()
@@ -154,6 +153,7 @@ def _markdownish_to_raw_html(text: str) -> str:
     if in_code:
         flush_code()
     return "\n".join(blocks)
+# === ANCHOR: DOCS_HTML_VISUALIZER__MARKDOWNISH_TO_RAW_HTML_END ===
 
 
 # === ANCHOR: DOCS_HTML_VISUALIZER_BUILD_RAW_HTML_DOCUMENT_START ===
@@ -161,7 +161,6 @@ def build_raw_html_document(source_path: Path, text: str) -> str:
     title = _title_from_text(source_path, text)
     body = _markdownish_to_raw_html(text)
     return f"""<!doctype html>
-# === ANCHOR: DOCS_HTML_VISUALIZER_BUILD_RAW_HTML_DOCUMENT_END ===
 <html lang=\"ko\">
 <head>
   <meta charset=\"utf-8\" />
@@ -196,6 +195,7 @@ def build_raw_html_document(source_path: Path, text: str) -> str:
   </main>
 </body>
 </html>"""
+# === ANCHOR: DOCS_HTML_VISUALIZER_BUILD_RAW_HTML_DOCUMENT_END ===
 
 
 # === ANCHOR: DOCS_HTML_VISUALIZER_BUILD_DOCS_HTML_ARTIFACT_START ===

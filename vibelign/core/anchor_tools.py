@@ -1,15 +1,19 @@
 # === ANCHOR: ANCHOR_TOOLS_START ===
-from collections.abc import Collection, Iterator
+from collections.abc import Callable, Collection, Iterator
 from pathlib import Path
+import ast
 import hashlib
+import heapq
 import json
 import re
 import sys
+import tempfile
 from typing import TypeAlias, TypedDict, cast
 
+from vibelign.core.atomic_write import atomic_write_text
 from vibelign.core.project_map import ProjectMapSnapshot
 from vibelign.core.project_scan import iter_source_files, line_count, safe_read_text
-from vibelign.core.structure_policy import ANCHOR_MARKER_PATTERN
+from vibelign.core.structure_policy import ANCHOR_MARKER_PATTERN, has_anchor_markers
 
 
 from vibelign.terminal_render import cli_print
@@ -79,7 +83,9 @@ COMMENT_PREFIX = {
     ".hpp": "//",
     ".cs": "//",
 }
-ANCHOR_RE = re.compile(ANCHOR_MARKER_PATTERN)
+# MULTILINE 필수: 패턴이 ^/$ 로 줄 고정돼 있어 전문(finditer) 검색에서
+# 플래그가 없으면 파일의 첫 줄만 매치된다.
+ANCHOR_RE = re.compile(ANCHOR_MARKER_PATTERN, re.MULTILINE)
 PY_SYMBOL_RE = re.compile(
     r"^(?:async\s+def|def|class)\s+([A-Za-z_][A-Za-z0-9_]*)", re.MULTILINE
 )
@@ -141,7 +147,10 @@ def preview_anchor_targets(
         if allowed_exts is not None and path.suffix.lower() not in allowed_exts:
             continue
         text = safe_read_text(path)
-        if text and "=== ANCHOR:" not in text:
+        # 부분 문자열 검사는 안 된다 — 문자열 리터럴에 마커를 적어둔 파일이
+        # "이미 앵커가 있다"로 잡혀 영영 대상에서 빠진다 (실제로 테스트 파일
+        # 14개가 그렇게 보호 없이 남아 있었다).
+        if text and not has_anchor_markers(text):
             targets.append(path)
     return targets
 
@@ -238,6 +247,48 @@ def recommend_anchor_targets(
 
 # === ANCHOR: ANCHOR_TOOLS__PYTHON_SYMBOL_BLOCKS_START ===
 def _python_symbol_blocks(text: str) -> list[SymbolBlock]:
+    """심볼별 (시작줄, 끝줄, 이름, 들여쓰기). 끝줄은 본문의 마지막 줄이다.
+
+    AST 를 먼저 쓴다. 들여쓰기만 보고 끝을 찾으면 여러 줄 시그니처에서 닫는
+    괄호가 def 와 같은 열에 있어 그 앞줄을 본문 끝으로 오인한다 — END 마커가
+    시그니처 한가운데 박히고, 그 블록은 함수 본문이 아니라 인자 목록 일부가
+    된다. 실제로 이 리포의 교차 앵커 39건 중 상당수가 그렇게 생겼다.
+
+    구문 오류로 파싱이 안 되는 파일은 기존 들여쓰기 스캔으로 폴백한다.
+    """
+    parsed = _python_symbol_blocks_ast(text)
+    if parsed is not None:
+        return parsed
+    return _python_symbol_blocks_by_indent(text)
+
+
+def _python_symbol_blocks_ast(text: str) -> list[SymbolBlock] | None:
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError):
+        return None
+    lines = text.splitlines()
+    blocks: list[SymbolBlock] = []
+    for node in ast.walk(tree):
+        if not isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        ):
+            continue
+        # node.lineno 는 데코레이터가 아니라 def/class 줄을 가리킨다 (3.8+).
+        start = node.lineno - 1
+        end = (node.end_lineno or node.lineno) - 1
+        if not (0 <= start < len(lines)):
+            continue
+        end = min(end, len(lines) - 1)
+        while end > start and not lines[end].strip():
+            end -= 1
+        indent_match = re.match(r"[ \t]*", lines[start])
+        blocks.append((start, end, node.name, indent_match.group(0) if indent_match else ""))
+    blocks.sort(key=lambda item: item[0])
+    return blocks
+
+
+def _python_symbol_blocks_by_indent(text: str) -> list[SymbolBlock]:
     lines = text.splitlines()
     blocks: list[SymbolBlock] = []
     for idx, line in enumerate(lines):
@@ -351,6 +402,12 @@ def _js_scan_line(line: str, state: dict) -> int:
 
 
 # === ANCHOR: ANCHOR_TOOLS__JS_SYMBOL_BLOCKS_START ===
+def _js_statement_ends(line: str) -> bool:
+    """줄 끝이 문장 종료(세미콜론)인가 — 줄 끝 주석은 걷어내고 본다."""
+    code = line.split("//", 1)[0].rstrip()
+    return code.endswith(";")
+
+
 def _js_symbol_blocks(text: str) -> list[SymbolBlock]:
     lines = text.splitlines()
     blocks: list[SymbolBlock] = []
@@ -389,6 +446,18 @@ def _js_symbol_blocks(text: str) -> list[SymbolBlock]:
             if state["opened"] and depth <= 0:
                 closed = True
                 break
+            # 중괄호 없이 세미콜론으로 끝나는 문장(표현식 본문 화살표 함수 등)은
+            # 여기서 멈춘다. closed 를 세우지 않으므로 이 심볼은 건너뛴다 —
+            # 한 줄짜리 표현식에 앵커를 달지 않는 기존 계약 그대로다.
+            # 멈추지 않으면 `const f = (x) => x + 1;` 이 다음 중괄호 블록까지
+            # 삼켜 END 마커가 남의 함수 안에 박히고 교차가 된다.
+            if (
+                not state["opened"]
+                and not state["stack"]
+                and not state["block_comment"]
+                and _js_statement_ends(lines[probe])
+            ):
+                break
         if not state["opened"] or not closed:
             continue
         while end_idx > idx and not lines[end_idx].strip():
@@ -412,8 +481,12 @@ def insert_python_symbol_anchors(path: Path) -> bool:
     if not blocks:
         return False
     existing = set(extract_anchors(path))
-    changed = False
-    for start_idx, end_idx, symbol_name, indent in reversed(blocks):
+    # 모든 삽입 위치를 먼저 모은 뒤 위치 내림차순으로 삽입한다. 하나씩
+    # 끼워넣으면 중첩 심볼(클래스 안의 메서드 등)의 마커가 바깥 심볼의 end
+    # 위치를 밀어, 바깥 END 가 안쪽 블록 앞으로 들어가며 교차가 생긴다.
+    # (JS 쪽은 이미 이렇게 고쳐져 있었고 Python 쪽만 남아 있었다)
+    inserts: list[tuple[int, int, str]] = []
+    for start_idx, end_idx, symbol_name, indent in blocks:
         anchor_name = build_symbol_anchor_name(path, symbol_name)
         if anchor_name in existing:
             continue
@@ -421,12 +494,16 @@ def insert_python_symbol_anchors(path: Path) -> bool:
         end_marker = f"{indent}# === ANCHOR: {anchor_name}_END ==="
         if start_idx > 0 and lines[start_idx - 1].strip() == start_marker.strip():
             continue
-        insert_end_at = min(end_idx + 1, len(lines))
-        lines.insert(insert_end_at, end_marker)
-        lines.insert(start_idx, start_marker)
-        changed = True
-    if not changed:
+        # kind: END=0, START=1. 내림차순으로 삽입하므로 같은 위치에서는
+        # 나중에 넣은 쪽이 앞에 온다 — 앞 블록의 END 가 다음 블록의 START
+        # 보다 앞서야 하므로 END 의 kind 가 더 작아야 한다. 반대로 두면
+        # 한 줄짜리 메서드가 연달아 있을 때 START/END 가 엇갈려 교차가 된다.
+        inserts.append((start_idx, 1, start_marker))
+        inserts.append((min(end_idx + 1, len(lines)), 0, end_marker))
+    if not inserts:
         return False
+    for pos, _kind, marker in sorted(inserts, key=lambda x: (x[0], x[1]), reverse=True):
+        lines.insert(pos, marker)
     try:
         _ = path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
     except OSError as e:
@@ -462,8 +539,12 @@ def insert_js_symbol_anchors(path: Path) -> bool:
         end_marker = f"{indent}// === ANCHOR: {anchor_name}_END ==="
         if start_idx > 0 and lines[start_idx - 1].strip() == start_marker.strip():
             continue
-        inserts.append((start_idx, 0, start_marker))
-        inserts.append((min(end_idx + 1, len(lines)), 1, end_marker))
+        # kind: END=0, START=1. 내림차순으로 삽입하므로 같은 위치에서는
+        # 나중에 넣은 쪽이 앞에 온다 — 앞 블록의 END 가 다음 블록의 START
+        # 보다 앞서야 하므로 END 의 kind 가 더 작아야 한다. 반대로 두면
+        # 한 줄짜리 메서드가 연달아 있을 때 START/END 가 엇갈려 교차가 된다.
+        inserts.append((start_idx, 1, start_marker))
+        inserts.append((min(end_idx + 1, len(lines)), 0, end_marker))
     if not inserts:
         return False
     for pos, _kind, marker in sorted(inserts, key=lambda x: (x[0], x[1]), reverse=True):
@@ -584,15 +665,13 @@ def extract_anchor_spans(path: Path) -> list[dict[str, object]]:
     lines = text.splitlines()
     pending: dict[str, list[int]] = {}
     spans: list[dict[str, object]] = []
-    seen_counts: dict[str, int] = {}
+    name_for = _occurrence_namer(lines)
     for match in ANCHOR_RE.finditer(text):
         raw = match.group(1)
         line_no = text.count("\n", 0, match.start()) + 1
         if raw.endswith("_START"):
             base = re.sub(r"_START$", "", raw)
-            seen_counts[base] = seen_counts.get(base, 0) + 1
-            occurrence = seen_counts[base]
-            display_name = base if occurrence == 1 else f"{base}_{occurrence}"
+            display_name = name_for(base)
             pending.setdefault(base, []).append(len(spans))
             span: dict[str, object] = {"name": display_name, "start": line_no, "end": None}
             sig = _find_signature(lines, line_no)  # line_no is 1-based, lines is 0-based → lines[line_no] = next line
@@ -861,22 +940,78 @@ def extract_anchor_line_ranges(path: Path) -> dict[str, tuple[int, int]]:
     ranges: dict[str, tuple[int, int]] = {}
     # 같은 이름이 겹쳐 열릴 수 있으므로 이름당 스택으로 쌓는다.
     # extract_anchor_blocks 와 동일한 규칙이어야 두 함수 결과가 일치한다.
-    starts: dict[str, list[int]] = {}
-    for i, line in enumerate(text.splitlines(), start=1):
+    starts: dict[str, list[tuple[int, str]]] = {}
+    lines = text.splitlines()
+    name_for = _occurrence_namer(lines)
+    for i, line in enumerate(lines, start=1):
         marker = _parse_anchor_marker(line)
         if marker is None:
             continue
         name, is_start = marker
         if is_start:
-            starts.setdefault(name, []).append(i)
+            starts.setdefault(name, []).append((i, name_for(name)))
             continue
         stack = starts.get(name)
         if stack:
-            ranges[name] = (stack.pop(), i)
+            start_line, display = stack.pop()
+            ranges[display] = (start_line, i)
     return ranges
 
 
 # === ANCHOR: ANCHOR_TOOLS_EXTRACT_ANCHOR_LINE_RANGES_END ===
+
+
+# === ANCHOR: ANCHOR_TOOLS__OCCURRENCE_NAMER_START ===
+def _all_marker_names(lines: list[str]) -> set[str]:
+    names: set[str] = set()
+    for line in lines:
+        marker = _parse_anchor_marker(line)
+        if marker is not None:
+            names.add(marker[0])
+    return names
+
+
+def _occurrence_namer(lines: list[str]) -> Callable[[str], str]:
+    """같은 이름이 여러 번 열릴 때 두 번째부터 NAME_2, NAME_3 로 구분한다.
+
+    extract_anchor_spans 가 project map·MCP 에 이 이름을 광고하는데,
+    blocks/ranges 가 기본 이름만 만들면 광고된 NAME_2 를 요청했을 때
+    "anchor not found" 가 돌아온다 — PR #1 이 고친 결함과 같은 부류다.
+
+    파일에 진짜 A_2 앵커가 따로 있는데 A 의 두 번째 occurrence 도 A_2 가 되면
+    키가 겹쳐 한쪽이 조용히 덮인다 — MCP 가 요청과 다른 코드를 돌려준다.
+    그래서 파일의 실제 마커 이름 전체를 먼저 모아 예약어로 두고, 겹치는
+    후보는 건너뛴다. 세 함수(spans/blocks/ranges)가 같은 규칙을 써야
+    한 곳이 광고한 이름을 다른 곳이 못 찾는 일이 안 생긴다.
+    """
+    reserved = _all_marker_names(lines)
+    used: set[str] = set()
+    seen: dict[str, int] = {}
+    # 이름별로 "다음에 시도할 번호" 를 기억한다. 매번 occurrence 부터 다시
+    # 훑으면 A_2..A_N 이 이미 예약된 파일에서 N 번째 중복마다 N 칸을 다시
+    # 걸어 전체가 O(N²) 이 된다 (실측: N 500→2000 에서 15.9배). 후보는 항상
+    # 증가 방향으로만 소비되므로 커서를 들고 가면 전체가 선형이 된다.
+    cursor: dict[str, int] = {}
+
+    def assign(name: str) -> str:
+        seen[name] = seen.get(name, 0) + 1
+        occurrence = seen[name]
+        if occurrence == 1:
+            used.add(name)
+            return name
+        candidate_index = max(occurrence, cursor.get(name, 2))
+        while True:
+            candidate = f"{name}_{candidate_index}"
+            if candidate not in reserved and candidate not in used:
+                used.add(candidate)
+                cursor[name] = candidate_index + 1
+                return candidate
+            candidate_index += 1
+
+    return assign
+
+
+# === ANCHOR: ANCHOR_TOOLS__OCCURRENCE_NAMER_END ===
 
 
 # === ANCHOR: ANCHOR_TOOLS_ITER_ANCHOR_BLOCKS_START ===
@@ -926,20 +1061,23 @@ def extract_anchor_blocks(
     # 같은 이름이 겹쳐 열리면 END 마다 join 이 돌아 2차 비용이 된다
     # (깊이 4000 실측 0.097s) — 어차피 뒤 END 가 덮어쓰므로 낭비다.
     spans: dict[str, tuple[int, int]] = {}
+    name_for = _occurrence_namer(lines)
     for i, line in enumerate(lines):
         marker = _parse_anchor_marker(line)
         if marker is None:
             continue
         name, is_start = marker
         if is_start:
-            open_starts.setdefault(name, []).append(i)
+            open_starts.setdefault(name, []).append((i, name_for(name)))
             continue
         stack = open_starts.get(name)
         if not stack:
             continue
-        start = stack.pop()  # 가장 안쪽 START 부터 닫는다
-        if only is None or name in only:
-            spans[name] = (start, i)
+        start, display = stack.pop()  # 가장 안쪽 START 부터 닫는다
+        # 걸러낼 때도 표시 이름으로 본다 — 호출자가 광고된 NAME_2 를
+        # 요청했는데 기본 이름으로만 비교하면 빈 결과가 돌아간다.
+        if only is None or display in only:
+            spans[display] = (start, i)
     for name, (start, end) in spans.items():
         blocks[name] = "\n".join(lines[start + 1 : end]).strip()
     return blocks
@@ -1359,7 +1497,11 @@ def strip_anchors(path: Path) -> bool:
     if not text:
         return False
     lines = text.splitlines()
-    cleaned = [line for line in lines if not re.search(r"===\s*ANCHOR:", line)]
+    # 줄 전체가 마커인 줄만 지운다. 예전엔 `=== ANCHOR:` 를 포함한 아무 줄이나
+    # 지웠는데, `vib scan --auto` 가 검증 문제 파일에 이 함수를 돌리므로
+    # 문자열 리터럴에 마커 예시를 담은 정상 코드가 통째로 사라졌다.
+    # 검증 항목이 늘어날수록 이 삭제 경로에 들어오는 파일도 늘어난다.
+    cleaned = [line for line in lines if not is_anchor_marker_line(line)]
     if len(cleaned) == len(lines):
         return False
     try:
@@ -1373,23 +1515,83 @@ def strip_anchors(path: Path) -> bool:
 # === ANCHOR: ANCHOR_TOOLS_STRIP_ANCHORS_END ===
 
 
+# === ANCHOR: ANCHOR_TOOLS_STRIP_UNREADABLE_MARKERS_START ===
+def strip_unreadable_markers(path: Path) -> bool:
+    """어떤 파서도 읽지 않는 마커 줄만 지운다. 정본 앵커는 건드리지 않는다.
+
+    `vib scan --auto` 의 기본 수리 수단이다. strip_anchors + 재삽입은 파일의
+    **모든** 앵커를 지우고 일반 모듈 앵커로 갈아끼우므로, 구 형식 마커 하나
+    때문에 사용자가 붙여둔 DATA_START/DATA_END 같은 이름과 그 메타데이터가
+    통째로 사라진다. 읽히지 않는 줄만 걷어내면 보호 구간은 그대로 남는다.
+    """
+    text = safe_read_text(path)
+    if not text:
+        return False
+    lines = text.splitlines()
+    cleaned = [
+        line
+        for line in lines
+        if _parse_anchor_marker(line) is not None or not is_anchor_marker_line(line)
+    ]
+    if len(cleaned) == len(lines):
+        return False
+    try:
+        _ = path.write_text("\n".join(cleaned).rstrip() + "\n", encoding="utf-8")
+    except OSError as exc:
+        print(f"경고: {path} 마커 정리 실패: {exc}")
+        return False
+    return True
+
+
+# === ANCHOR: ANCHOR_TOOLS_STRIP_UNREADABLE_MARKERS_END ===
+
+
 # === ANCHOR: ANCHOR_TOOLS_VALIDATE_ANCHOR_FILE_START ===
 def validate_anchor_file(path: Path) -> list[str]:
+    """마커를 순서대로 훑어 짝을 맞추고, 남은 START·고아 END 를 보고한다.
+
+    이름의 집합 포함 여부만 보면 개수와 중첩을 놓친다. 같은 이름의 START 2개 +
+    END 1개가 오류 없이 통과했는데, 추출은 안쪽 블록만 선택하므로 바깥 구간이
+    보호 없이 남는다 — 검증이 통과했으니 사용자는 알 수 없다.
+
+    중첩 자체는 정상이다(모듈 앵커 ⊃ 심볼 앵커). 짝이 안 맞는 경우만 보고한다.
+    짝 맞춤 규칙은 extract_anchor_blocks 와 같아야 한다: END 는 같은 이름의
+    가장 안쪽 START 를 닫는다. 다르면 "검증은 통과했는데 추출은 다른 구간"이 된다.
+    """
     text = safe_read_text(path)
     if not text:
         return ["파일 내용을 읽을 수 없습니다."]
-    start_markers: list[str] = re.findall(r"ANCHOR:\s*([A-Z0-9_]+)_START\s*===", text)
-    end_markers: list[str] = re.findall(r"ANCHOR:\s*([A-Z0-9_]+)_END\s*===", text)
     problems: list[str] = []
-    for name in start_markers:
-        if name not in end_markers:
-            problems.append(f"{name}_START 에 대응하는 END 가 없습니다")
-    for name in end_markers:
-        if name not in start_markers:
-            problems.append(f"{name}_END 에 대응하는 START 가 없습니다")
-    if not start_markers and not end_markers:
+    open_starts: list[tuple[str, int]] = []
+    saw_marker = False
+    for line_no, line in enumerate(text.splitlines(), 1):
+        marker = _parse_anchor_marker(line)
+        if marker is None:
+            continue
+        saw_marker = True
+        name, is_start = marker
+        if is_start:
+            open_starts.append((name, line_no))
+            continue
+        for idx in range(len(open_starts) - 1, -1, -1):
+            if open_starts[idx][0] == name:
+                del open_starts[idx]
+                break
+        else:
+            problems.append(
+                f"{line_no}번째 줄: {name}_END 에 대응하는 START 가 없습니다"
+            )
+    for name, line_no in open_starts:
+        problems.append(f"{line_no}번째 줄: {name}_START 에 대응하는 END 가 없습니다")
+    if not saw_marker:
         problems.append("앵커가 없습니다")
     problems.extend(find_legacy_anchor_markers(text))
+    problems.extend(find_malformed_anchor_markers(text))
+    # 교차는 이제 차단 사유다. 생성기가 스스로 만들어내던 동안에는 경고로만
+    # 뒀다 — 차단하면 `vib anchor --auto` 를 돌린 모든 프로젝트가 깨졌다.
+    # 원인 3종을 고치고 `vib anchor --repair` 로 기존 파일을 정리해 이 리포의
+    # 39건이 0이 된 뒤에야 올린다 (issue #7).
+    problems.extend(find_crossing_anchors(text))
     return problems
 
 
@@ -1422,4 +1624,287 @@ def find_legacy_anchor_markers(text: str) -> list[str]:
 
 
 # === ANCHOR: ANCHOR_TOOLS_FIND_LEGACY_ANCHOR_MARKERS_END ===
+
+
+# === ANCHOR: ANCHOR_TOOLS_REPAIR_CROSSING_ANCHORS_START ===
+class RepairOutcome(TypedDict):
+    path: str
+    status: str  # repaired | skipped | unchanged
+    reason: str
+    lost_names: list[str]
+
+
+def repair_crossing_anchors(
+    root: Path, path: Path, *, dry_run: bool = False
+) -> RepairOutcome:
+    """교차 앵커가 있는 파일의 마커를 올바른 위치로 다시 놓는다.
+
+    마커를 걷어내고 고쳐진 생성기로 다시 넣는다. 이름은 파일명·심볼명에서
+    결정론적으로 나오므로 보통 그대로 복원되고, anchor_meta.json 의 intent 도
+    이름을 키로 하니 살아남는다.
+
+    **이름이 하나라도 사라지면 쓰지 않고 건너뛴다.** 사람이 직접 붙인 이름이나
+    심볼 이름이 바뀐 뒤 남은 앵커는 재생성으로 되살릴 수 없고, 그걸 잃으면
+    intent 와 보호 구역이 함께 날아간다. 그런 파일은 사람이 판단할 몫이다.
+    """
+    rel = str(path.relative_to(root)) if path.is_relative_to(root) else str(path)
+    original = safe_read_text(path)
+    if not original or not find_crossing_anchors(original):
+        return {"path": rel, "status": "unchanged", "reason": "교차 없음", "lost_names": []}
+
+    before = set(extract_anchors(path))
+    before_blocks = extract_anchor_blocks(path)
+    moved_ok = _crossing_participants(original)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        scratch = Path(tmp_dir) / path.name  # 파일명 유지 — 앵커 접두사가 여기서 나온다
+        # 연루된 앵커의 마커만 걷어내고 그 자리만 다시 잡는다. 파일 전체를
+        # 재생성하면 심볼과 짝이 없는 앵커(사람이 손으로 건 구역, 심볼명이
+        # 바뀐 뒤 남은 이름)가 전부 사라진다 — 낡은 이름 하나 때문에 고칠 수
+        # 있는 파일을 통째로 포기하게 된다.
+        _ = scratch.write_text(
+            _without_markers(original, moved_ok), encoding="utf-8"
+        )
+        if scratch.suffix.lower() == ".py":
+            _ = insert_python_symbol_anchors(scratch)
+        else:
+            _ = insert_js_symbol_anchors(scratch)
+        rebuilt = safe_read_text(scratch)
+        after = set(extract_anchors(scratch))
+        after_blocks = extract_anchor_blocks(scratch)
+
+    lost = sorted(before - after)
+    if lost:
+        return {
+            "path": rel,
+            "status": "skipped",
+            "reason": "재생성하면 되살릴 수 없는 앵커 이름이 사라집니다",
+            "lost_names": lost,
+        }
+    remaining = find_crossing_anchors(rebuilt)
+    if remaining:
+        return {
+            "path": rel,
+            "status": "skipped",
+            "reason": f"재생성 후에도 교차가 남습니다 ({len(remaining)}건)",
+            "lost_names": [],
+        }
+    # 이름이 남았다고 같은 구역인 건 아니다. 사람이 붙인 앵커의 이름이 우연히
+    # 생성 규칙과 같으면, 이름은 살아남으면서 보호 구역만 조용히 다른 곳으로
+    # 옮겨간다. 교차에 연루된 앵커만 구역이 바뀌어야 하고 나머지는 그대로여야 한다.
+    # 마커 줄은 빼고 비교한다. 바깥 앵커의 본문에는 안쪽 마커 줄이 섞여
+    # 들어가므로, 그대로 비교하면 안쪽이 옮겨진 것만으로 바깥까지 "구역이
+    # 바뀌었다" 가 된다. 우리가 지켜야 할 것은 **보호되는 코드**가 같은가다.
+    drifted = sorted(
+        name
+        for name, body in before_blocks.items()
+        if name not in moved_ok
+        and _code_only(after_blocks.get(name)) != _code_only(body)
+    )
+    if drifted:
+        return {
+            "path": rel,
+            "status": "skipped",
+            "reason": (
+                "교차와 무관한 앵커의 보호 구역이 바뀝니다 — "
+                f"{', '.join(drifted[:5])}"
+            ),
+            "lost_names": [],
+        }
+    if rebuilt == original:
+        return {"path": rel, "status": "unchanged", "reason": "바뀔 내용 없음", "lost_names": []}
+    if not dry_run:
+        try:
+            # 원자적 교체. write_text 는 먼저 비우고 쓰므로, 도중에 죽으면
+            # 소스가 잘린 채 남는다 — 마커만 옮기려다 코드를 잃는다.
+            atomic_write_text(path, rebuilt, root=root)
+        except OSError as exc:
+            return {
+                "path": rel,
+                "status": "skipped",
+                "reason": f"쓰기 실패: {exc}",
+                "lost_names": [],
+            }
+    return {"path": rel, "status": "repaired", "reason": "", "lost_names": []}
+
+
+# === ANCHOR: ANCHOR_TOOLS_REPAIR_CROSSING_ANCHORS_END ===
+
+
+# === ANCHOR: ANCHOR_TOOLS_FIND_CROSSING_ANCHORS_START ===
+# 진단 크기 상한. 없으면 겹친 앵커 수에 비례한 메시지가 그 수만큼 나와
+# O(N^2) 로 부풀고, 악성 소스 하나로 vib scan 이 메모리를 태울 수 있다.
+_CROSSING_SHOWN = 5
+_CROSSING_MAX_FINDINGS = 50
+
+
+def _without_markers(text: str, names: Collection[str]) -> str:
+    """지정한 이름의 마커 줄만 걷어낸다. 나머지 앵커는 그대로 둔다."""
+    kept: list[str] = []
+    for line in text.splitlines():
+        marker = _parse_anchor_marker(line)
+        if marker is not None and marker[0] in names:
+            continue
+        kept.append(line)
+    return "\n".join(kept) + "\n"
+
+
+def _code_only(body: str | None) -> str:
+    """앵커 본문에서 마커 줄을 걷어낸 실제 코드."""
+    if body is None:
+        return ""
+    return "\n".join(
+        line for line in body.splitlines() if not is_anchor_marker_line(line)
+    ).strip()
+
+
+def _crossing_participants(text: str) -> set[str]:
+    """교차에 연루된 앵커 이름. 이들만 구역이 바뀌어도 된다."""
+    names: set[str] = set()
+    for problem in find_crossing_anchors(text):
+        for token in re.findall(r"[A-Z][A-Z0-9_]+", problem):
+            names.add(re.sub(r"_(START|END)$", "", token))
+    return names
+
+
+def find_crossing_anchors(text: str) -> list[str]:
+    """교차 앵커를 찾는다 — 차단이 아니라 경고다.
+
+    A_START B_START A_END B_END 에서 블록 A 는 B 의 여는 마커만 품는다.
+    A 를 고치면 B 의 경계가 깨지는데 짝은 맞으니 검증은 통과한다. 완전히
+    포개지거나(중첩) 완전히 떨어져 있어야 안전하다.
+
+    차단하지 않는 이유: `vib anchor --auto` 의 심볼 앵커 삽입이 여러 줄
+    시그니처에서 END 를 잘못된 위치에 넣어 이 형태를 스스로 만들어낸다.
+    이 리포만 175개 파일이 해당한다. 지금 차단으로 올리면 --auto 를 한 번이라도
+    돌린 모든 프로젝트의 validate 가 깨진다. 생성기를 먼저 고치고 그 다음
+    차단으로 승격하는 순서가 맞다 (soft → hard 승격).
+    """
+    problems: list[str] = []
+    # 이름 → 아직 열려 있는 항목들의 슬롯 번호. 예전엔 END 마다 열린 목록을
+    # 역순으로 전부 훑었는데, 짝 없는 END 가 많은 파일에서 매번 끝까지 훑어
+    # O(N^2) 이 된다 (그 경로에선 교차가 안 잡혀 findings 상한도 안 걸린다).
+    open_by_name: dict[str, list[int]] = {}
+    slots: dict[int, tuple[str, int]] = {}
+    # "이 슬롯보다 뒤에 아직 열린 게 있는가" 를 O(log n) 으로 답하기 위한
+    # 최대 힙 (죽은 항목은 꺼낼 때 걸러낸다).
+    alive_max: list[int] = []
+    next_slot = 0
+    for line_no, line in enumerate(text.splitlines(), 1):
+        marker = _parse_anchor_marker(line)
+        if marker is None:
+            continue
+        name, is_start = marker
+        if is_start:
+            slots[next_slot] = (name, line_no)
+            open_by_name.setdefault(name, []).append(next_slot)
+            heapq.heappush(alive_max, -next_slot)
+            next_slot += 1
+            continue
+        stack = open_by_name.get(name)
+        if stack:
+            idx = stack.pop()
+            del slots[idx]
+            while alive_max and -alive_max[0] not in slots:
+                _ = heapq.heappop(alive_max)
+            if alive_max and -alive_max[0] > idx:
+                later = [
+                    slots[-slot][0]
+                    for slot in sorted(alive_max)
+                    if -slot > idx and -slot in slots
+                ][:_CROSSING_SHOWN]
+                listed = ", ".join(later)
+                if listed:
+                    problems.append(
+                        f"{line_no}번째 줄: {name}_END 가 {listed} 등과 교차합니다 — "
+                        "앵커는 완전히 포개지거나 완전히 떨어져 있어야 합니다"
+                    )
+        if len(problems) >= _CROSSING_MAX_FINDINGS:
+            problems.append(
+                f"교차 앵커가 {_CROSSING_MAX_FINDINGS}건을 넘어 이후는 생략합니다 — "
+                "이 파일의 앵커 구조를 먼저 정리하세요"
+            )
+            break
+    return problems
+
+
+# === ANCHOR: ANCHOR_TOOLS_FIND_CROSSING_ANCHORS_END ===
+
+
+# === ANCHOR: ANCHOR_TOOLS_FIND_MALFORMED_ANCHOR_MARKERS_START ===
+# "쓰다 만" 마커. 정본도 legacy 도 아니면 어떤 파서도 읽지 않는데, 사용자는
+# 마커를 적어뒀으니 보호되고 있다고 믿는다. 그 침묵이 이 규칙군의 실패 모드다.
+#
+# 산문과 구분하기 위해 주석 접두사를 걷어낸 나머지가 곧바로 마커 시도로
+# 시작할 때만 잡는다. "# format: ... ANCHOR: FOO_START" 같은 설명문은
+# 나머지가 'format:' 으로 시작하므로 걸리지 않는다.
+# 여는 중괄호를 허용하는 이유: JSX 의 `{/* ... */}` 형태로 마커를 적는
+# 사람이 있는데, 생성기는 그 형태를 만들지 않으므로 정본 파서가 읽지 않는다.
+# 조용히 무시하면 그 파일은 보호받는 줄 알고 방치된다.
+_COMMENT_LEAD_RE = re.compile(r"^[ \t]*\{?[ \t]*(?://+|#+|/\*+|\*+)[ \t]*")
+_MARKER_ATTEMPT_RE = re.compile(r"^=*[ \t]*ANCHOR:[ \t]*[A-Z0-9_]+(?:_START|_END)\b")
+# 방향 접미사가 빠진 마커(`=== ANCHOR: FOO ===`). 형식은 정본인데 START/END 가
+# 없어 파서가 경계로 쓰지 못한다 — 흔한 오타이고, 역시 조용히 무시된다.
+_DIRECTIONLESS_MARKER_RE = re.compile(
+    r"^=+[ \t]*ANCHOR:[ \t]*([A-Z0-9_]+)[ \t]*=+[ \t\r]*$"
+)
+
+
+# 줄에 마커 말고는 아무것도 없을 때만 매치한다. 삭제 판정 전용이라
+# 경고용 탐지기(find_malformed_anchor_markers)보다 훨씬 엄격해야 한다 —
+# 저쪽은 "마커를 쓰려다 만 흔적"을 넓게 잡는 게 목적이지만, 이쪽이 넓으면
+# `{/* === ANCHOR: X_START === */}<Component />` 같은 줄에서 컴포넌트까지
+# 지운다. 되돌릴 수 없는 손실이므로 애매하면 남긴다.
+_MARKER_ONLY_LINE_RE = re.compile(
+    r"^[ \t]*\{?[ \t]*(?://+|#+|/\*+)[ \t]*"  # 줄 시작의 주석 접두사
+    r"=*[ \t]*ANCHOR:[ \t]*[A-Z0-9_]+[ \t]*=*"  # 마커 본체 (등호 유무 허용)
+    r"[ \t]*(?:\*/\}?|-->)?[ \t\r]*$"  # 닫는 토큰까지만, 그 뒤엔 아무것도 없음
+)
+
+
+def is_anchor_marker_line(line: str) -> bool:
+    """이 줄이 오직 앵커 마커로만 이루어져 있는가 (정본·구 형식·훼손 포함).
+
+    마커를 지우는 쪽(strip_anchors)이 쓴다. "마커를 포함한 줄"이 아니라
+    "마커뿐인 줄"만 참이어야 한다 — 전자로 지우면 문자열 리터럴에 마커 예시를
+    담은 정상 코드나 마커 뒤에 붙은 실제 코드가 함께 사라진다.
+    """
+    if _parse_anchor_marker(line) is not None:
+        return True
+    return _MARKER_ONLY_LINE_RE.match(line) is not None
+
+
+def find_malformed_anchor_markers(text: str) -> list[str]:
+    """정본도 legacy 도 아닌, 훼손된 마커 시도를 찾아 경고 문구로 돌려준다."""
+    broken: list[str] = []
+    for line_no, line in enumerate(text.splitlines(), 1):
+        if _parse_anchor_marker(line) is not None:
+            continue
+        if _LEGACY_MARKER_RE.match(line):
+            continue
+        lead = _COMMENT_LEAD_RE.match(line)
+        if lead is None:
+            continue
+        rest = line[lead.end() :]
+        directionless = _DIRECTIONLESS_MARKER_RE.match(rest)
+        if directionless is not None:
+            name = directionless.group(1)
+            if not name.endswith(("_START", "_END")):
+                broken.append(f"{line_no}번째 줄({name}: _START/_END 누락)")
+                continue
+        if not _MARKER_ATTEMPT_RE.match(rest):
+            continue
+        broken.append(f"{line_no}번째 줄")
+    if not broken:
+        return []
+    listed = ", ".join(broken[:5]) + (" 외" if len(broken) > 5 else "")
+    return [
+        f"형식이 깨진 앵커 마커 {len(broken)}개가 있습니다 ({listed}) — "
+        "줄 전체가 마커여야 하고 앞뒤를 등호 3개로 감싸야 합니다. "
+        "지금 형태로는 어떤 파서도 읽지 않습니다"
+    ]
+
+
+# === ANCHOR: ANCHOR_TOOLS_FIND_MALFORMED_ANCHOR_MARKERS_END ===
+
+
 # === ANCHOR: ANCHOR_TOOLS_END ===

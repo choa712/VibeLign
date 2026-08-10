@@ -9,9 +9,9 @@ from typing import Protocol, cast
 # === ANCHOR: MCP_TRANSFER_HANDLERS_TEXTCONTENTFACTORY_START ===
 class TextContentFactory(Protocol):
     # === ANCHOR: MCP_TRANSFER_HANDLERS___CALL___START ===
-# === ANCHOR: MCP_TRANSFER_HANDLERS_TEXTCONTENTFACTORY_END ===
     def __call__(self, *, type: str, text: str) -> object: ...
     # === ANCHOR: MCP_TRANSFER_HANDLERS___CALL___END ===
+# === ANCHOR: MCP_TRANSFER_HANDLERS_TEXTCONTENTFACTORY_END ===
 
 
 # === ANCHOR: MCP_TRANSFER_HANDLERS__TEXT_START ===
@@ -20,12 +20,14 @@ def _text(factory: TextContentFactory, text: str) -> list[object]:
 # === ANCHOR: MCP_TRANSFER_HANDLERS__TEXT_END ===
 
 
+# === ANCHOR: MCP_TRANSFER_HANDLERS__STRING_LIST_START ===
 def _string_list(value: object) -> list[str]:
     if isinstance(value, str) and value:
         return [value]
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, str) and item]
+# === ANCHOR: MCP_TRANSFER_HANDLERS__STRING_LIST_END ===
 
 
 # === ANCHOR: MCP_TRANSFER_HANDLERS_HANDLE_HANDOFF_CREATE_START ===
@@ -33,7 +35,6 @@ def handle_handoff_create(
     root: Path,
     arguments: dict[str, object],
     text_content: TextContentFactory,
-# === ANCHOR: MCP_TRANSFER_HANDLERS_HANDLE_HANDOFF_CREATE_END ===
 ) -> list[object]:
     from vibelign.commands.vib_transfer_cmd import (
         HandoffData,
@@ -115,11 +116,33 @@ def handle_handoff_create(
     )
 
     handoff_data = enrich_handoff_with_work_memory(root, handoff_data)
-    persist_handoff_memory(root, handoff_data)
 
-    content = build_context_content(root, handoff_data=handoff_data)
+    from vibelign.commands.vib_transfer_cmd import commit_project_context
+    from vibelign.core.atomic_write import PartialCommitError
+
+    # CLI 경로와 반드시 같은 함수를 쓴다. 여기서 원본을 보관하지 않으면
+    # MCP 로 만든 handoff 만 다음 체크포인트에 사라진다 (issue #6).
+    # 보관·저장·쓰기의 순서와 잠금은 commit_project_context 안에 있다.
+    # work_memory 갱신도 같은 잠금 안에서 — 밖에서 하면 동시 실행 시
+    # 읽고-고쳐-쓰기가 겹쳐 한쪽 갱신이 통째로 사라진다.
     ctx_path = root / "PROJECT_CONTEXT.md"
-    _ = ctx_path.write_text(content, encoding="utf-8")
+    try:
+        _archive, _content = commit_project_context(
+            root,
+            ctx_path,
+            lambda: build_context_content(root, handoff_data=handoff_data),
+            handoff_data=handoff_data,
+            after_commit=lambda: persist_handoff_memory(root, handoff_data),
+        )
+    except PartialCommitError as exc:
+        # 정본은 이미 갱신됐다 — "중단" 으로 보고하면 호출한 AI 가 원래
+        # 상태가 그대로라고 믿는다.
+        return _text(text_content, f"Session Handoff 일부만 반영됨: {exc}")
+    except OSError as exc:
+        # 잠금 경합(TimeoutError) 이나 기존 파일 읽기 실패. 둘 다 "덮지 않고
+        # 멈춘" 상태이므로 그대로 알린다 — 도구 호출이 트레이스백으로
+        # 죽으면 호출한 AI 는 무엇이 저장됐는지 알 수 없다.
+        return _text(text_content, f"Session Handoff 저장 중단: {exc}")
     inject_agents_handoff_instruction(root)
     return _text(
         text_content,
@@ -127,6 +150,7 @@ def handle_handoff_create(
         + f"  파일: {ctx_path}\n"
         + "  새 AI에게 PROJECT_CONTEXT.md 상단의 Session Handoff 블록을 읽혀주세요.",
     )
+# === ANCHOR: MCP_TRANSFER_HANDLERS_HANDLE_HANDOFF_CREATE_END ===
 
 
 # === ANCHOR: MCP_TRANSFER_HANDLERS_HANDLE_PROJECT_CONTEXT_GET_START ===
@@ -134,7 +158,6 @@ def handle_project_context_get(
     root: Path,
     arguments: dict[str, object],
     text_content: TextContentFactory,
-# === ANCHOR: MCP_TRANSFER_HANDLERS_HANDLE_PROJECT_CONTEXT_GET_END ===
 ) -> list[object]:
     from vibelign.commands.vib_transfer_cmd import build_context_content
 
@@ -148,6 +171,7 @@ def handle_project_context_get(
         content = build_context_content(root, compact=compact, full=full)
 
     return _text(text_content, content)
+# === ANCHOR: MCP_TRANSFER_HANDLERS_HANDLE_PROJECT_CONTEXT_GET_END ===
 
 
 # === ANCHOR: MCP_TRANSFER_HANDLERS_HANDLE_TRANSFER_SET_DECISION_START ===

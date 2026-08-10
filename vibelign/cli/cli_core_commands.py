@@ -1,6 +1,6 @@
+# === ANCHOR: CLI_CORE_COMMANDS_START ===
 from __future__ import annotations
 
-# === ANCHOR: CLI_CORE_COMMANDS_START ===
 import argparse
 from collections.abc import Callable
 from typing import Protocol
@@ -17,9 +17,9 @@ class SubparserFactory(Protocol):
         description: str | None = None,
         epilog: str | None = None,
         **kwargs: object,
-        # === ANCHOR: CLI_CORE_COMMANDS_SUBPARSERFACTORY_END ===
-        # === ANCHOR: CLI_CORE_COMMANDS_ADD_PARSER_END ===
     ) -> argparse.ArgumentParser: ...
+    # === ANCHOR: CLI_CORE_COMMANDS_ADD_PARSER_END ===
+# === ANCHOR: CLI_CORE_COMMANDS_SUBPARSERFACTORY_END ===
 
 
 # === ANCHOR: CLI_CORE_COMMANDS_REGISTER_CORE_COMMANDS_START ===
@@ -27,7 +27,6 @@ def register_core_commands(
     sub: SubparserFactory,
     lazy_command: Callable[[str, str], Callable[[object], None]],
     run_init: Callable[[object], None],
-    # === ANCHOR: CLI_CORE_COMMANDS_REGISTER_CORE_COMMANDS_END ===
 ) -> None:
     p = sub.add_parser(
         "install",
@@ -359,6 +358,5 @@ def register_core_commands(
     p_remove.set_defaults(
         func=lazy_command("vibelign.commands.vib_doc_sources_cmd", "run_vib_doc_sources_remove")
     )
-
-
+# === ANCHOR: CLI_CORE_COMMANDS_REGISTER_CORE_COMMANDS_END ===
 # === ANCHOR: CLI_CORE_COMMANDS_END ===

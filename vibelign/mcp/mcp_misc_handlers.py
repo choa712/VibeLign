@@ -11,9 +11,9 @@ from vibelign.core.meta_paths import MetaPaths
 # === ANCHOR: MCP_MISC_HANDLERS_TEXTCONTENTFACTORY_START ===
 class TextContentFactory(Protocol):
     # === ANCHOR: MCP_MISC_HANDLERS___CALL___START ===
-# === ANCHOR: MCP_MISC_HANDLERS_TEXTCONTENTFACTORY_END ===
     def __call__(self, *, type: str, text: str) -> object: ...
     # === ANCHOR: MCP_MISC_HANDLERS___CALL___END ===
+# === ANCHOR: MCP_MISC_HANDLERS_TEXTCONTENTFACTORY_END ===
 
 
 # === ANCHOR: MCP_MISC_HANDLERS__TEXT_START ===
@@ -27,13 +27,13 @@ def handle_explain_get(
     root: Path,
     arguments: dict[str, object],
     text_content: TextContentFactory,
-# === ANCHOR: MCP_MISC_HANDLERS_HANDLE_EXPLAIN_GET_END ===
 ) -> list[object]:
     from vibelign.commands.vib_explain_cmd import build_explain_envelope
 
     since_minutes = int(cast(int | str, arguments.get("since_minutes", 120)))
     envelope = build_explain_envelope(root, since_minutes=since_minutes)
     return _text(text_content, json.dumps(envelope, indent=2, ensure_ascii=False))
+# === ANCHOR: MCP_MISC_HANDLERS_HANDLE_EXPLAIN_GET_END ===
 
 
 # === ANCHOR: MCP_MISC_HANDLERS_HANDLE_ANCHOR_LIST_START ===

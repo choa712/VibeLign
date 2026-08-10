@@ -46,7 +46,51 @@ WINDOWS_SUBPROCESS_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32
 # 공백은 같은 줄 안에서만 허용한다(\s 는 개행도 먹는다). Python 은 전문
 # 검색(finditer), ripgrep 과 마커 파서는 줄 단위라, 개행을 허용하면 줄을
 # 넘겨 쓴 마커가 경로마다 다르게 인식돼 인덱스·span·block 이 어긋난다.
-ANCHOR_MARKER_PATTERN = r"===[ \t]*ANCHOR:[ \t]*([A-Z0-9_]+)[ \t]*==="
+#
+# 줄 단위로 고정한다: "줄 전체가 마커인 주석"만 경계로 인정한다. 고정하지
+# 않으면 소스 텍스트 안에 박힌 마커 모양 문자열이 진짜 경계가 돼 블록이
+# 의도보다 짧게 잘리고 바깥 구간이 보호 없이 남는다 — 게다가 START/END
+# 쌍은 맞아 보이므로 validate 가 조용히 통과한다. 이 리포에서만 테스트
+# 파일의 문자열 리터럴 776건이 그렇게 팬텀 앵커로 잡히고 있었다.
+# 끝의 \r 은 CRLF 체크아웃(Windows)용 — 없으면 그쪽에서 전부 인식 실패한다.
+# 쓰는 쪽은 re.MULTILINE 을 반드시 켜야 한다(^/$ 가 줄 단위여야 함).
+# rg 는 줄 지향이라 플래그 없이 그대로 동작한다.
+ANCHOR_MARKER_PATTERN = (
+    r"^[ \t]*(?://|#)[ \t]*===[ \t]*ANCHOR:[ \t]*([A-Z0-9_]+)[ \t]*===[ \t\r]*$"
+)
+
+_ANCHOR_MARKER_RE = re.compile(ANCHOR_MARKER_PATTERN, re.MULTILINE)
+
+
+def has_anchor_markers(text: str) -> bool:
+    """정본 형식 앵커 마커가 하나라도 있는가.
+
+    "앵커가 있는가" 판정이 모듈마다 제각각(부분 문자열 검사, 느슨한 정규식)이면
+    같은 파일이 어느 경로로 보느냐에 따라 보호됨/안 됨으로 갈린다. 실제로
+    preview_anchor_targets 는 `"=== ANCHOR:" in text` 부분 문자열로 판정해,
+    문자열 리터럴에 마커를 적어둔 테스트 파일 14개를 "이미 앵커가 있다"고 보고
+    영영 대상에서 제외했다 — 그 파일들은 보호 없이 남아 있었다.
+
+    짝이 맞는 START/END 가 최소 한 쌍 있어야 참이다. 방향 없는 `ANCHOR: FOO`
+    나 END 만 있는 `ANCHOR: FAKE_END` 는 block/range 파서가 경계로 쓰지 못한다.
+    그런 걸 참으로 보면 precheck·guard 는 통과시키는데 실제 보호 구간은
+    0인 상태가 된다 — 정확히 이 규칙군이 막으려는 침묵이다.
+
+    패턴을 소유한 이 모듈에 둔다. 상위 모듈(anchor_tools)에 두면
+    watch_rules·risk_analyzer 가 쓰려 할 때 순환 임포트가 된다.
+    """
+    if not text:
+        return False
+    opened: set[str] = set()
+    for match in _ANCHOR_MARKER_RE.finditer(text):
+        raw = match.group(1)
+        if raw.endswith("_START"):
+            opened.add(raw[: -len("_START")])
+        elif raw.endswith("_END") and raw[: -len("_END")] in opened:
+            # 순서가 중요하다. END 가 START 보다 앞에 오면 추출되는 블록이
+            # 없으므로, 이름만 양쪽에 있다고 참으로 보면 안 된다.
+            return True
+    return False
 
 GENERATED_ARTIFACT_DIR_NAMES: frozenset[str] = frozenset(
     {"dist", "build", "target", ".next", ".pnpm-store", "node_modules"}

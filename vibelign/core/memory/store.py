@@ -4,12 +4,15 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timezone
 from importlib import import_module
 from pathlib import Path
 from typing import Callable, Literal, Protocol, cast
 
+from vibelign.core.atomic_write import file_lock
 from vibelign.core.memory.models import (
     MEMORY_SCHEMA_VERSION,
     MemoryObservedContext,
@@ -130,6 +133,13 @@ def ensure_memory_agent_fields(
     *,
     updated_by: str = "vib memory agent",
 ) -> bool:
+    # 이 함수도 load → 수정 → save 다. 잠금 밖에 두면 add_memory_* 와 겹칠 때
+    # 한쪽 갱신이 사라진다 (MCP·CLI 양쪽에서 불린다).
+    with memory_transaction(path):
+        return _ensure_memory_agent_fields_locked(path, updated_by=updated_by)
+
+
+def _ensure_memory_agent_fields_locked(path: Path, *, updated_by: str) -> bool:
     state = load_memory_state(path)
     if state.read_only:
         return False
@@ -169,6 +179,22 @@ def ensure_memory_agent_fields(
     return True
 
 
+@contextmanager
+def memory_transaction(path: Path) -> Iterator[None]:
+    """읽고-고쳐-쓰기를 직렬화한다.
+
+    add_memory_* 는 전부 load → 수정 → save 다. 잠금이 없으면 두 호출이
+    겹칠 때 나중 save 가 먼저 것의 변경을 통째로 덮는다 — 둘 다 성공했다고
+    보고하는데 한쪽 기록은 사라진다 (MCP 도구는 동시에 불릴 수 있다).
+
+    unique tmp + replace 는 파일이 깨지는 것만 막을 뿐, 이 갱신 유실은 못 막는다.
+    잠금을 못 얻는 환경에서는 file_lock 이 알아서 경고하고 진행한다.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with file_lock(path.with_name(f"{path.name}.lock")):
+        yield
+
+
 def save_memory_state(path: Path, state: MemoryState) -> None:
     if state.read_only or state.schema_version > MEMORY_SCHEMA_VERSION:
         raise ValueError("memory schema is newer than this VibeLign supports; refusing to write")
@@ -198,17 +224,18 @@ def add_memory_decision(path: Path, message: str, *, updated_by: str = "vib memo
     text = _string(message)
     if not text:
         return
-    state = load_memory_state(path)
-    now = _utc_now()
-    decision = MemoryTextField(
-        text=text,
-        last_updated=now,
-        updated_by=updated_by,
-        source="explicit",
-    )
-    decisions = [item for item in state.decisions if item.text != text] + [decision]
-    active_intent = state.active_intent or replace(decision, proposed=True)
-    save_memory_state(path, replace(state, decisions=decisions, active_intent=active_intent))
+    with memory_transaction(path):
+        state = load_memory_state(path)
+        now = _utc_now()
+        decision = MemoryTextField(
+            text=text,
+            last_updated=now,
+            updated_by=updated_by,
+            source="explicit",
+        )
+        decisions = [item for item in state.decisions if item.text != text] + [decision]
+        active_intent = state.active_intent or replace(decision, proposed=True)
+        save_memory_state(path, replace(state, decisions=decisions, active_intent=active_intent))
 
 
 def set_memory_active_intent(
@@ -220,29 +247,31 @@ def set_memory_active_intent(
     text = _string(message)
     if not text:
         return
-    state = load_memory_state(path)
-    active_intent = MemoryTextField(
-        text=text,
-        last_updated=_utc_now(),
-        updated_by=updated_by,
-        source="explicit",
-        proposed=False,
-    )
-    save_memory_state(path, replace(state, active_intent=active_intent))
+    with memory_transaction(path):
+        state = load_memory_state(path)
+        active_intent = MemoryTextField(
+            text=text,
+            last_updated=_utc_now(),
+            updated_by=updated_by,
+            source="explicit",
+            proposed=False,
+        )
+        save_memory_state(path, replace(state, active_intent=active_intent))
 
 
 def set_memory_next_action(path: Path, message: str, *, updated_by: str = "vib transfer --handoff") -> None:
     text = _string(message)
     if not text:
         return
-    state = load_memory_state(path)
-    next_action = MemoryTextField(
-        text=text,
-        last_updated=_utc_now(),
-        updated_by=updated_by,
-        source="explicit",
-    )
-    save_memory_state(path, replace(state, next_action=next_action))
+    with memory_transaction(path):
+        state = load_memory_state(path)
+        next_action = MemoryTextField(
+            text=text,
+            last_updated=_utc_now(),
+            updated_by=updated_by,
+            source="explicit",
+        )
+        save_memory_state(path, replace(state, next_action=next_action))
 
 
 def add_memory_relevant_file(
@@ -257,18 +286,19 @@ def add_memory_relevant_file(
     reason = _string(why)
     if not safe_path or not reason:
         return
-    state = load_memory_state(path)
-    relevant_file = MemoryRelevantFile(
-        path=safe_path,
-        why=reason,
-        source="explicit" if source == "explicit" else "observed",
-        last_updated=_utc_now(),
-        updated_by=updated_by,
-    )
-    relevant_files = [
-        item for item in state.relevant_files if item.path != safe_path
-    ] + [relevant_file]
-    save_memory_state(path, replace(state, relevant_files=relevant_files))
+    with memory_transaction(path):
+        state = load_memory_state(path)
+        relevant_file = MemoryRelevantFile(
+            path=safe_path,
+            why=reason,
+            source="explicit" if source == "explicit" else "observed",
+            last_updated=_utc_now(),
+            updated_by=updated_by,
+        )
+        relevant_files = [
+            item for item in state.relevant_files if item.path != safe_path
+        ] + [relevant_file]
+        save_memory_state(path, replace(state, relevant_files=relevant_files))
 
 
 def add_memory_verification(
@@ -280,18 +310,19 @@ def add_memory_verification(
     text = _string(message)
     if not text:
         return
-    state = load_memory_state(path)
-    key = _verification_key(text)
-    verification = MemoryVerification(
-        command=text,
-        last_updated=_utc_now(),
-        updated_by=updated_by,
-        scope_unknown=True,
-    )
-    verification_items = [
-        item for item in state.verification if _verification_key(item.command) != key
-    ] + [verification]
-    save_memory_state(path, replace(state, verification=verification_items))
+    with memory_transaction(path):
+        state = load_memory_state(path)
+        key = _verification_key(text)
+        verification = MemoryVerification(
+            command=text,
+            last_updated=_utc_now(),
+            updated_by=updated_by,
+            scope_unknown=True,
+        )
+        verification_items = [
+            item for item in state.verification if _verification_key(item.command) != key
+        ] + [verification]
+        save_memory_state(path, replace(state, verification=verification_items))
 
 
 def add_memory_observed_context(
@@ -307,18 +338,19 @@ def add_memory_observed_context(
     safe_path = _safe_relative_path(context_path) if context_path else ""
     if not text:
         return
-    state = load_memory_state(path)
-    event = MemoryObservedContext(
-        kind=event_kind,
-        summary=text,
-        path=safe_path,
-        timestamp=_utc_now(),
-        source_tool=_string(source_tool) or "legacy_work_memory",
-    )
-    save_memory_state(
-        path,
-        replace(state, observed_context=state.observed_context + [event]),
-    )
+    with memory_transaction(path):
+        state = load_memory_state(path)
+        event = MemoryObservedContext(
+            kind=event_kind,
+            summary=text,
+            path=safe_path,
+            timestamp=_utc_now(),
+            source_tool=_string(source_tool) or "legacy_work_memory",
+        )
+        save_memory_state(
+            path,
+            replace(state, observed_context=state.observed_context + [event]),
+        )
 
 
 def compact_memory_state(state: MemoryState) -> MemoryState:

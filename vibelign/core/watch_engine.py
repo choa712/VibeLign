@@ -14,6 +14,7 @@ from vibelign.core.watch_state import FileSnapshot
 print = cli_print
 
 
+# === ANCHOR: WATCH_ENGINE_WATCHCONFIG_START ===
 class WatchConfig(TypedDict, total=False):
     root: str
     strict: bool
@@ -21,61 +22,97 @@ class WatchConfig(TypedDict, total=False):
     debounce_ms: int
     write_log: bool
     auto_fix: bool
+# === ANCHOR: WATCH_ENGINE_WATCHCONFIG_END ===
 
 
+# === ANCHOR: WATCH_ENGINE_WATCHPAYLOAD_START ===
 class WatchPayload(TypedDict, total=False):
     level: str
     path: str
     message: str
     why: str
     action: str
+# === ANCHOR: WATCH_ENGINE_WATCHPAYLOAD_END ===
 
 
+# === ANCHOR: WATCH_ENGINE__WATCHDOGHANDLERBASE_START ===
 class _WatchdogHandlerBase:
+    # === ANCHOR: WATCH_ENGINE___INIT___START ===
     def __init__(self) -> None:
         pass
+    # === ANCHOR: WATCH_ENGINE___INIT___END ===
+# === ANCHOR: WATCH_ENGINE__WATCHDOGHANDLERBASE_END ===
 
 
+# === ANCHOR: WATCH_ENGINE__WATCHDOGOBSERVER_START ===
 class _WatchdogObserver(Protocol):
+    # === ANCHOR: WATCH_ENGINE_SCHEDULE_START ===
     def schedule(
         self, event_handler: object, path: str, recursive: bool = False
     ) -> object: ...
+    # === ANCHOR: WATCH_ENGINE_SCHEDULE_END ===
 
+    # === ANCHOR: WATCH_ENGINE_START_START ===
     def start(self) -> object: ...
+    # === ANCHOR: WATCH_ENGINE_START_END ===
 
+    # === ANCHOR: WATCH_ENGINE_STOP_START ===
     def stop(self) -> object: ...
+    # === ANCHOR: WATCH_ENGINE_STOP_END ===
 
+    # === ANCHOR: WATCH_ENGINE_JOIN_START ===
     def join(self) -> object: ...
+    # === ANCHOR: WATCH_ENGINE_JOIN_END ===
+# === ANCHOR: WATCH_ENGINE__WATCHDOGOBSERVER_END ===
 
 
+# === ANCHOR: WATCH_ENGINE__WATCHDOGOBSERVERFACTORY_START ===
 class _WatchdogObserverFactory(Protocol):
+    # === ANCHOR: WATCH_ENGINE___CALL___START ===
     def __call__(self) -> _WatchdogObserver: ...
+    # === ANCHOR: WATCH_ENGINE___CALL___END ===
+# === ANCHOR: WATCH_ENGINE__WATCHDOGOBSERVERFACTORY_END ===
 
 
+# === ANCHOR: WATCH_ENGINE__WATCHSRCEVENT_START ===
 class _WatchSrcEvent(Protocol):
     is_directory: bool
     src_path: str
+# === ANCHOR: WATCH_ENGINE__WATCHSRCEVENT_END ===
 
 
+# === ANCHOR: WATCH_ENGINE__WATCHMOVEDEVENT_START ===
 class _WatchMovedEvent(Protocol):
     is_directory: bool
     src_path: str
     dest_path: str
+# === ANCHOR: WATCH_ENGINE__WATCHMOVEDEVENT_END ===
 
 
+# === ANCHOR: WATCH_ENGINE__WATCHPATHLIKE_START ===
 class _WatchPathLike(Protocol):
     @property
+    # === ANCHOR: WATCH_ENGINE_PARTS_START ===
     def parts(self) -> tuple[str, ...]: ...
+    # === ANCHOR: WATCH_ENGINE_PARTS_END ===
 
     @property
+    # === ANCHOR: WATCH_ENGINE_NAME_START ===
     def name(self) -> str: ...
+    # === ANCHOR: WATCH_ENGINE_NAME_END ===
 
     @property
+    # === ANCHOR: WATCH_ENGINE_SUFFIX_START ===
     def suffix(self) -> str: ...
+    # === ANCHOR: WATCH_ENGINE_SUFFIX_END ===
 
+    # === ANCHOR: WATCH_ENGINE_IS_FILE_START ===
     def is_file(self) -> bool: ...
+    # === ANCHOR: WATCH_ENGINE_IS_FILE_END ===
+# === ANCHOR: WATCH_ENGINE__WATCHPATHLIKE_END ===
 
 
+# === ANCHOR: WATCH_ENGINE__NORMALIZE_OBJECT_DICT_START ===
 def _normalize_object_dict(raw: object) -> dict[str, object] | None:
     if not isinstance(raw, dict):
         return None
@@ -84,25 +121,33 @@ def _normalize_object_dict(raw: object) -> dict[str, object] | None:
     for key, value in source.items():
         normalized[str(key)] = value
     return normalized
+# === ANCHOR: WATCH_ENGINE__NORMALIZE_OBJECT_DICT_END ===
 
 
+# === ANCHOR: WATCH_ENGINE__CONFIG_TEXT_START ===
 def _config_text(config: WatchConfig, key: str, default: str) -> str:
     value = config.get(key, default)
     return str(value) if value else default
+# === ANCHOR: WATCH_ENGINE__CONFIG_TEXT_END ===
 
 
+# === ANCHOR: WATCH_ENGINE__CONFIG_BOOL_START ===
 def _config_bool(config: WatchConfig, key: str, default: bool = False) -> bool:
     return bool(config.get(key, default))
+# === ANCHOR: WATCH_ENGINE__CONFIG_BOOL_END ===
 
 
+# === ANCHOR: WATCH_ENGINE__CONFIG_INT_START ===
 def _config_int(config: WatchConfig, key: str, default: int) -> int:
     value = config.get(key, default)
     try:
         return int(value)
     except (TypeError, ValueError):
         return default
+# === ANCHOR: WATCH_ENGINE__CONFIG_INT_END ===
 
 
+# === ANCHOR: WATCH_ENGINE_IS_WATCHABLE_PATH_START ===
 def is_watchable_path(path: _WatchPathLike) -> bool:
     if not path.is_file():
         return False
@@ -113,8 +158,10 @@ def is_watchable_path(path: _WatchPathLike) -> bool:
     if path.suffix.lower() in WATCH_EXCLUDED_SUFFIXES:
         return False
     return True
+# === ANCHOR: WATCH_ENGINE_IS_WATCHABLE_PATH_END ===
 
 
+# === ANCHOR: WATCH_ENGINE_IS_WATCHABLE_EVENT_PATH_START ===
 def is_watchable_event_path(path: Path) -> bool:
     if any(_is_excluded_dir_part(part) for part in path.parts):
         return False
@@ -123,22 +170,28 @@ def is_watchable_event_path(path: Path) -> bool:
     if path.suffix.lower() in WATCH_EXCLUDED_SUFFIXES:
         return False
     return True
+# === ANCHOR: WATCH_ENGINE_IS_WATCHABLE_EVENT_PATH_END ===
 
 
+# === ANCHOR: WATCH_ENGINE_IS_WORK_MEMORY_RECORDABLE_REL_PATH_START ===
 def is_work_memory_recordable_rel_path(rel_path: str) -> bool:
     path = Path(rel_path)
     if any(_is_excluded_dir_part(part) for part in path.parts):
         return False
     return path.name.lower() not in WORK_MEMORY_EXCLUDED_NAMES_LOWER
+# === ANCHOR: WATCH_ENGINE_IS_WORK_MEMORY_RECORDABLE_REL_PATH_END ===
 
 
+# === ANCHOR: WATCH_ENGINE__IS_EXCLUDED_DIR_PART_START ===
 def _is_excluded_dir_part(part: str) -> bool:
     normalized = part.lower()
     return normalized in WATCH_EXCLUDED_DIRS_LOWER or any(
         normalized.endswith(suffix) for suffix in WATCH_EXCLUDED_DIR_SUFFIXES
     )
+# === ANCHOR: WATCH_ENGINE__IS_EXCLUDED_DIR_PART_END ===
 
 
+# === ANCHOR: WATCH_ENGINE__IMPORT_WATCHDOG_CLASSES_START ===
 def _import_watchdog_classes() -> tuple[
     type[_WatchdogHandlerBase], _WatchdogObserverFactory
 ]:
@@ -151,6 +204,7 @@ def _import_watchdog_classes() -> tuple[
         _WatchdogObserverFactory, getattr(observers_module, "Observer")
     )
     return handler_base, observer_factory
+# === ANCHOR: WATCH_ENGINE__IMPORT_WATCHDOG_CLASSES_END ===
 
 
 WATCH_EXCLUDED_DIRS = {
@@ -241,9 +295,9 @@ def safe_read(path: Path) -> str:
         return path.read_text(encoding="utf-8", errors="ignore")
     except Exception:
         return ""
-
-
 # === ANCHOR: WATCH_ENGINE_SAFE_READ_END ===
+
+
 
 
 # === ANCHOR: WATCH_ENGINE_HANDLE_DELETED_PATH_START ===
@@ -286,9 +340,9 @@ def handle_deleted_path(
             relevant_reason="Recently deleted in watch.",
         )
     return rel
-
-
 # === ANCHOR: WATCH_ENGINE_HANDLE_DELETED_PATH_END ===
+
+
 
 
 # === ANCHOR: WATCH_ENGINE_RUN_WATCH_START ===
@@ -332,7 +386,6 @@ def run_watch(config: WatchConfig) -> None:
             log_path: Path | None,
             auto_fix: bool,
             debounce_ms: int = 800,
-            # === ANCHOR: WATCH_ENGINE___INIT___END ===
         ):
             super().__init__()
             self.root: Path = root
@@ -352,12 +405,13 @@ def run_watch(config: WatchConfig) -> None:
             from vibelign.core.protected_files import get_protected
 
             self.protected: set[str] = get_protected(root)
+        # === ANCHOR: WATCH_ENGINE___INIT___END ===
 
         # === ANCHOR: WATCH_ENGINE__ELIGIBLE_START ===
         def _eligible(self, path: Path) -> bool:
             return is_watchable_path(path)
-
         # === ANCHOR: WATCH_ENGINE__ELIGIBLE_END ===
+
 
         # === ANCHOR: WATCH_ENGINE__DEBOUNCED_START ===
         def _debounced(self, path: Path) -> bool:
@@ -366,8 +420,8 @@ def run_watch(config: WatchConfig) -> None:
             prev: float = self.last_seen.get(key, 0.0)
             self.last_seen[key] = now
             return (now - prev) < self.debounce_ms
-
         # === ANCHOR: WATCH_ENGINE__DEBOUNCED_END ===
+
 
         # === ANCHOR: WATCH_ENGINE__HANDLE_AUTO_FIX_START ===
         def _handle_auto_fix(self, path: Path) -> bool:
@@ -392,8 +446,8 @@ def run_watch(config: WatchConfig) -> None:
             }
             emit(auto_fix_event, json_mode=self.json_mode, log_path=self.log_path)
             return True
-
         # === ANCHOR: WATCH_ENGINE__HANDLE_AUTO_FIX_END ===
+
 
         # === ANCHOR: WATCH_ENGINE__SCHEDULE_GLOBAL_UPDATE_START ===
         def _schedule_global_update(self, rel_path: str) -> None:
@@ -406,8 +460,8 @@ def run_watch(config: WatchConfig) -> None:
                     self._run_global_update,
                 )
                 self.global_timer.start()
-
         # === ANCHOR: WATCH_ENGINE__SCHEDULE_GLOBAL_UPDATE_END ===
+
 
         # === ANCHOR: WATCH_ENGINE__RUN_GLOBAL_UPDATE_START ===
         def _run_global_update(self) -> None:
@@ -418,8 +472,8 @@ def run_watch(config: WatchConfig) -> None:
             if not changed:
                 return
             self._refresh_project_map(changed)
-
         # === ANCHOR: WATCH_ENGINE__RUN_GLOBAL_UPDATE_END ===
+
 
         # === ANCHOR: WATCH_ENGINE__REFRESH_PROJECT_MAP_START ===
         def _refresh_project_map(
@@ -598,8 +652,8 @@ def run_watch(config: WatchConfig) -> None:
                 "action": "",
             }
             emit(done_event, json_mode=self.json_mode, log_path=self.log_path)
-
         # === ANCHOR: WATCH_ENGINE__REFRESH_PROJECT_MAP_END ===
+
 
         # === ANCHOR: WATCH_ENGINE__PROCESS_START ===
         def _process(self, src_path: str, event_kind: str = "modified") -> None:
@@ -664,24 +718,23 @@ def run_watch(config: WatchConfig) -> None:
                     action="Review the latest change and refresh transfer handoff if needed.",
                     relevant_reason=f"Recently {normalized_kind} in watch.",
                 )
-            # === ANCHOR: WATCH_ENGINE_VIBELIGNWATCHHANDLER_END ===
             self._schedule_global_update(rel)
-
         # === ANCHOR: WATCH_ENGINE__PROCESS_END ===
+
 
         # === ANCHOR: WATCH_ENGINE_ON_MODIFIED_START ===
         def on_modified(self, event: _WatchSrcEvent) -> None:
             if not event.is_directory:
                 self._process(event.src_path, event_kind="modified")
-
         # === ANCHOR: WATCH_ENGINE_ON_MODIFIED_END ===
+
 
         # === ANCHOR: WATCH_ENGINE_ON_CREATED_START ===
         def on_created(self, event: _WatchSrcEvent) -> None:
             if not event.is_directory:
                 self._process(event.src_path, event_kind="created")
-
         # === ANCHOR: WATCH_ENGINE_ON_CREATED_END ===
+
 
         # === ANCHOR: WATCH_ENGINE_ON_MOVED_START ===
         def on_moved(self, event: _WatchMovedEvent) -> None:
@@ -700,8 +753,8 @@ def run_watch(config: WatchConfig) -> None:
                     if deleted_rel:
                         self._schedule_global_update(deleted_rel)
                 self._process(event.dest_path, event_kind="moved")
-
         # === ANCHOR: WATCH_ENGINE_ON_MOVED_END ===
+
 
         # === ANCHOR: WATCH_ENGINE_ON_DELETED_START ===
         def on_deleted(self, event: _WatchSrcEvent) -> None:
@@ -719,8 +772,9 @@ def run_watch(config: WatchConfig) -> None:
                     )
                     if deleted_rel:
                         self._schedule_global_update(deleted_rel)
-
         # === ANCHOR: WATCH_ENGINE_ON_DELETED_END ===
+    # === ANCHOR: WATCH_ENGINE_VIBELIGNWATCHHANDLER_END ===
+
 
     root = Path(_config_text(config, "root", "."))
     strict = _config_bool(config, "strict", False)
@@ -729,7 +783,6 @@ def run_watch(config: WatchConfig) -> None:
     write_log = _config_bool(config, "write_log", False)
     auto_fix = _config_bool(config, "auto_fix", False)
     vg_dir = root / ".vibelign"
-    # === ANCHOR: WATCH_ENGINE_RUN_WATCH_END ===
     state_path = vg_dir / "watch_state.json"
     log_path = vg_dir / "watch.log" if write_log else None
 
@@ -755,6 +808,5 @@ def run_watch(config: WatchConfig) -> None:
     except KeyboardInterrupt:
         _ = observer.stop()
     _ = observer.join()
-
-
+# === ANCHOR: WATCH_ENGINE_RUN_WATCH_END ===
 # === ANCHOR: WATCH_ENGINE_END ===

@@ -92,9 +92,9 @@ class VisualImageProvider(Protocol):
 
     # === ANCHOR: REPORT_VISUAL_CARDS_GENERATE_START ===
     def generate(self, request: VisualImageRequest) -> VisualImageMetadata:
-# === ANCHOR: REPORT_VISUAL_CARDS_VISUALIMAGEPROVIDER_END ===
         ...
     # === ANCHOR: REPORT_VISUAL_CARDS_GENERATE_END ===
+# === ANCHOR: REPORT_VISUAL_CARDS_VISUALIMAGEPROVIDER_END ===
 
 
 @dataclass(frozen=True)
@@ -113,7 +113,6 @@ def build_report_visual_cards(
     model: ReportModel,
     provider: VisualImageProvider | None = None,
     source_text: str | None = None,
-# === ANCHOR: REPORT_VISUAL_CARDS_BUILD_REPORT_VISUAL_CARDS_END ===
 ) -> VisualCardsDict:
     seeds = _card_seeds(model, source_text)
     provider_name = provider.provider_name if provider is not None else DRAFT_PROVIDER_NAME
@@ -144,6 +143,7 @@ def build_report_visual_cards(
         "cards": cards,
         "assets": [card["image"] for card in cards],
     }
+# === ANCHOR: REPORT_VISUAL_CARDS_BUILD_REPORT_VISUAL_CARDS_END ===
 
 
 # === ANCHOR: REPORT_VISUAL_CARDS__DRAFT_IMAGE_START ===
@@ -229,12 +229,12 @@ def _first_seed_for_category(
     seeds: list[_CardSeed],
     selected: list[_CardSeed],
     category: str,
-# === ANCHOR: REPORT_VISUAL_CARDS__FIRST_SEED_FOR_CATEGORY_END ===
 ) -> _CardSeed | None:
     for seed in seeds:
         if seed.category == category and seed not in selected:
             return seed
     return None
+# === ANCHOR: REPORT_VISUAL_CARDS__FIRST_SEED_FOR_CATEGORY_END ===
 
 
 # === ANCHOR: REPORT_VISUAL_CARDS__SEED_CATEGORY_START ===
@@ -282,7 +282,6 @@ def _card(
     visual_prompt: str,
     negative_prompt: str,
     image: VisualImageMetadata,
-# === ANCHOR: REPORT_VISUAL_CARDS__CARD_END ===
 ) -> VisualCardDict:
     return {
         "id": card_id,
@@ -302,6 +301,7 @@ def _card(
         "image": image,
         "approved": False,
     }
+# === ANCHOR: REPORT_VISUAL_CARDS__CARD_END ===
 
 
 # === ANCHOR: REPORT_VISUAL_CARDS__OVERLAY_TITLE_START ===

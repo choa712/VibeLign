@@ -1,0 +1,39 @@
+# Branch Flow — VibeLign
+#
+# 이 파일의 목적은 merge_gate.accepted_risks 하나다.
+#
+# strategy·merge·recovery 는 일부러 두지 않는다. 처음엔 user-scope 값을
+# 복사했는데, 그러면 auto_merge/require_ci 같은 설정이 리포 정책으로 굳어
+# waiver 와 맞물려 위험을 키운다 (적대 리뷰 지적). 브랜치 전략은 예전처럼
+# user-scope(~/.claude/branch-flow.yml) 를 그대로 쓴다.
+
+merge_gate:
+  # 정책 파일이 없을 때의 폴백과 같은 값. change_types 를 두지 않으므로
+  # 어떤 경로도 strict 아래로 내려가지 않는다.
+  default_level: strict
+
+  accepted_risks:
+    # 앵커 파서 PR 의 적대 리뷰가 tool_install.rs 전체를 훑다가 발견한
+    # 기존 결함이다. 확인 결과:
+    #   - curl|bash / irm|iex 는 origin/main 에 이미 있다
+    #   - 앵커 PR 들이 이 파일에서 바꾼 것은 앵커 주석 4줄뿐이다
+    #     (2 insertions, 4 deletions — 설치 로직 미변경)
+    # 설치 경로 수정은 릴리스 파이프라인·플랫폼별 검증이 얽혀 있어 별도
+    # 작업이어야 하므로 이슈로 분리하고, 그 기간만 수용한다.
+    #
+    # 정체성 결속은 정규식이 아니라 **테스트**가 맡는다.
+    # tests/test_waived_risk_blob_pinning.py 가 tool_install.rs 의 SHA-256 을
+    # 검토 시점 값으로 고정한다. 그 파일에 새 변경이 들어오면 테스트가 깨지고
+    # waiver 의 전제("검토한 그 기존 결함")를 다시 따지게 된다.
+    #
+    # 그래서 여기 정규식은 "무엇에 관한 지적인가"만 가른다. 파이프 형태까지
+    # 좁혔더니 리뷰어가 표현을 바꿀 때마다 매칭이 어긋났다 — 좁히는 방향은
+    # 이 게이트(제목 문자열 정규식)로는 신뢰할 수 없다. 대신 파일 + 원격 셸
+    # 실행 어휘로 주제를 고정하고, 정체성은 위 테스트가 지킨다.
+    #
+    # 만료 30일. 이슈 #8 이 처리되면 waiver 와 그 테스트를 함께 삭제할 것.
+    - id: "tool-install-remote-shell-exec"
+      match: "tool_install\\.rs.*(curl|irm|iex|bash|shell|remote)"
+      reason: "origin/main 기존 결함(설치 스크립트를 파이프로 무검증 실행). 앵커 PR 은 이 파일의 앵커 주석 4줄만 변경. 이슈 #8 에서 버전 고정·SHA-256 검증·파이프 제거로 처리. 제목 정규식이라 지문 결속 불가 — 만료를 30일로 제한."
+      accepted_by: "choa712"
+      expires: "2026-09-09"

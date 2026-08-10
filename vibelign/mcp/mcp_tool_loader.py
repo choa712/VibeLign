@@ -11,9 +11,9 @@ class ToolFactory(Protocol):
     # === ANCHOR: MCP_TOOL_LOADER___CALL___START ===
     def __call__(
         self, *, name: str, description: str, inputSchema: dict[str, object]
-# === ANCHOR: MCP_TOOL_LOADER_TOOLFACTORY_END ===
-    # === ANCHOR: MCP_TOOL_LOADER___CALL___END ===
     ) -> object: ...
+    # === ANCHOR: MCP_TOOL_LOADER___CALL___END ===
+# === ANCHOR: MCP_TOOL_LOADER_TOOLFACTORY_END ===
 
 
 # === ANCHOR: MCP_TOOL_LOADER_TOOLSPECSMODULE_START ===
@@ -26,7 +26,6 @@ class ToolSpecsModule(Protocol):
 def build_tools(
     tool_specs_module: ToolSpecsModule,
     tool_factory: ToolFactory,
-# === ANCHOR: MCP_TOOL_LOADER_BUILD_TOOLS_END ===
 ) -> list[object]:
     return [
         tool_factory(
@@ -36,4 +35,5 @@ def build_tools(
         )
         for spec in tool_specs_module.TOOL_SPECS
     ]
+# === ANCHOR: MCP_TOOL_LOADER_BUILD_TOOLS_END ===
 # === ANCHOR: MCP_TOOL_LOADER_END ===

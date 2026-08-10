@@ -66,19 +66,21 @@ def run_vib_scan(args: Namespace) -> None:
     clack_step("앵커 무결성 검사 중...")
     from vibelign.core.anchor_tools import (
         insert_module_anchors,
-        strip_anchors,
+        strip_unreadable_markers,
         validate_anchor_file,
     )
-    from vibelign.core.project_scan import iter_source_files
+    from vibelign.core.project_scan import iter_source_files, safe_read_text
+    from vibelign.core.structure_policy import has_anchor_markers
 
     problems: list[str] = []
     problem_paths: list[Path] = []
     for path in iter_source_files(root):
+        # 교차 앵커도 validate_anchor_file 이 문제로 낸다 (issue #7 승격).
         file_problems = [
             p for p in validate_anchor_file(path) if p != "앵커가 없습니다"
         ]
+        rel = str(path.relative_to(root))
         if file_problems:
-            rel = str(path.relative_to(root))
             for p in file_problems:
                 problems.append(f"{rel}: {p}")
             problem_paths.append(path)
@@ -87,13 +89,27 @@ def run_vib_scan(args: Namespace) -> None:
         for p in problems:
             clack_warn(f"  {p}")
         if getattr(args, "auto", False) and problem_paths:
-            clack_step("문제 파일 앵커 재삽입 중...")
+            clack_step("읽히지 않는 마커 정리 중...")
             fixed: list[str] = []
             for p in problem_paths:
-                _ = strip_anchors(p)
-                _ = insert_module_anchors(p)
-                fixed.append(str(p.relative_to(root)))
-            clack_success(f"앵커 재삽입 완료: {', '.join(fixed)}")
+                # 읽히지 않는 줄(구 형식·훼손)만 걷어낸다. 예전엔 여기서
+                # strip_anchors + 재삽입으로 파일의 **모든** 앵커를 갈아끼웠다.
+                # 그러면 구 형식 마커 하나 때문에 사용자가 붙여둔
+                # DATA_START/DATA_END 같은 이름과 메타데이터가 통째로 사라진다.
+                # 짝이 안 맞는 정본 마커는 이름 자체가 정보이므로 지우지 않고
+                # 보고만 한다 — 사람이 고칠 문제다.
+                changed = strip_unreadable_markers(p)
+                if not has_anchor_markers(safe_read_text(p)):
+                    changed = insert_module_anchors(p) or changed
+                if changed:
+                    fixed.append(str(p.relative_to(root)))
+            if fixed:
+                clack_success(f"마커 정리 완료: {', '.join(fixed)}")
+            else:
+                clack_info(
+                    "자동으로 고칠 수 있는 마커가 없습니다 — "
+                    "짝이 맞지 않는 앵커는 이름이 정보라 직접 고쳐주세요."
+                )
         else:
             clack_info(
                 "vib anchor --validate 로 상세 확인, 또는 vib scan --auto 로 자동 수정하세요"

@@ -9,6 +9,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from collections.abc import Callable
+from contextlib import suppress
 from typing import Protocol, TypedDict, cast
 
 from vibelign.commands import transfer_git_context
@@ -26,6 +28,16 @@ from vibelign.terminal_render import (
     clack_info,
     clack_outro,
 )
+
+from vibelign.core.atomic_write import (
+    PartialCommitError,
+    atomic_write_text,
+    commit_staged,
+    file_lock,
+    resolve_write_target,
+    stage_text,
+)
+from vibelign.core.meta_paths import MetaPaths
 
 # PROJECT_CONTEXT.md 에 추가되는 마커 (중복 생성 방지용)
 _TRANSFER_MARKER = "<!-- VibeLign Transfer Context -->"
@@ -1064,13 +1076,203 @@ def _build_current_work_section(
     )
 
 
+def _handoff_payload(data: HandoffData) -> str:
+    return (
+        json.dumps(
+            cast(dict[str, object], cast(object, data)),
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+            default=str,
+        )
+        + "\n"
+    )
+
+
+def save_handoff_data(root: Path, data: HandoffData) -> None:
+    """Session Handoff 원본을 .vibelign/handoff.json 에 보관한다 (issue #6).
+
+    PROJECT_CONTEXT.md 안에만 두면 재생성(=체크포인트)마다 사라졌다. 원본을
+    밖에 두면 재생성이 매번 여기서 다시 렌더링하므로 경계 파싱이 필요 없다.
+
+    PROJECT_CONTEXT.md 와 짝으로 갱신할 때는 commit_project_context 를 쓴다 —
+    따로 쓰면 하나만 갱신된 채 끝날 수 있다.
+
+    root 를 넘겨 경계를 강제한다. 공개 함수라 외부에서 바로 부를 수 있는데,
+    안 넘기면 `.vibelign` 이 프로젝트 밖을 가리킬 때 바깥 파일을 덮는다.
+    """
+    meta = MetaPaths(root)
+    _ = resolve_write_target(meta.vibelign_dir, root)
+    atomic_write_text(meta.handoff_path, _handoff_payload(data), root=root)
+
+
+def load_handoff_data(root: Path) -> HandoffData | None:
+    """보관된 Session Handoff 원본을 읽는다. 없거나 깨졌으면 None.
+
+    읽을 때도 경계를 확인한다. 악의적 체크아웃이 handoff.json 을 바깥의
+    읽을 수 있는 JSON 으로 링크해 두면, 그 내용이 PROJECT_CONTEXT.md 에
+    그대로 실려 나간다 — 쓰기만 막아서는 부족하다.
+    """
+    meta = MetaPaths(root)
+    try:
+        _ = resolve_write_target(meta.vibelign_dir, root)
+        path = resolve_write_target(meta.handoff_path, root)
+    except OSError:
+        return None
+    try:
+        raw = cast(object, json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    # 빈 객체는 "handoff 가 있다"로 치지 않는다. 있다고 보면 보관을 건너뛰는데
+    # 정작 렌더링되는 블록은 없어서, 파일 안에만 있던 유일한 인수인계가
+    # 보관 없이 덮인다.
+    if not cast(dict[str, object], raw):
+        return None
+    return cast(HandoffData, raw)
+
+
+def _archive_legacy_inline_handoff(root: Path, out_path: Path) -> Path | None:
+    """구버전 PROJECT_CONTEXT.md 안의 handoff 를 잃지 않게 통째로 보관한다.
+
+    블록만 잘라내지 않는 이유: 그 경계를 찾는 시도가 세 가지 방식 모두
+    깨졌다(첫 H1 매치는 본문 속 제목에서 잘리고, 마지막 매치는 생성 본문을
+    흡수하고, 전용 sentinel 은 자유 텍스트에 같은 문자열이 들어가면 뚫린다).
+    추측해서 일부만 남기느니 파일 전체를 남기고 사용자에게 알린다.
+    """
+    # "파일이 있다"가 아니라 "읽어낼 수 있다"로 판정한다. handoff.json 이
+    # 깨져 있으면 load 는 None 을 주고 재생성물에는 블록이 없는데, 존재만으로
+    # 보관을 건너뛰면 아직 멀쩡한 파일 안의 handoff 를 그대로 덮어쓴다.
+    if load_handoff_data(root) is not None:
+        return None
+    if not out_path.exists():
+        return None
+    try:
+        text = out_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        # 읽지 못했으면 "handoff 가 없다"가 아니라 "있는지 모른다"이다.
+        # 모르는 채로 덮으면 유일한 handoff 가 보관 없이 사라진다.
+        # 파일은 못 읽어도 상위 디렉터리 권한만 있으면 교체는 되기 때문에
+        # 조용히 넘기면 실제로 손실이 난다. 여기서 멈춘다.
+        raise OSError(
+            f"{out_path} 를 읽을 수 없어 기존 handoff 보관 여부를 확인할 수 "
+            "없습니다. 덮어쓰지 않고 중단합니다."
+        ) from exc
+    if "## Session Handoff" not in text:
+        return None
+    stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    meta = MetaPaths(root)
+    _ = resolve_write_target(meta.vibelign_dir, root)
+    archive = meta.vibelign_dir / f"handoff-legacy-{stamp}.md"
+    atomic_write_text(archive, text, root=root)
+    return archive
+
+
+def commit_project_context(
+    root: Path,
+    out_path: Path,
+    build_content: Callable[[], str],
+    *,
+    handoff_data: HandoffData | None = None,
+    after_commit: Callable[[], None] | None = None,
+) -> tuple[Path | None, str]:
+    """생성물과 handoff 원본을 한 잠금 안에서 함께 확정한다 (issue #2, #6).
+
+    셋을 따로 쓰면 동시 실행 시 handoff.json 은 B, PROJECT_CONTEXT.md 는 A 로
+    갈려 세션 상태가 어긋난다 — 새 AI 가 읽는 두 파일이 서로 다른 세션을
+    가리키게 된다. 순서도 여기서 고정한다: 보관 → 저장 → 쓰기. 저장이 먼저면
+    handoff.json 이 생겨 보관 조건이 막히고 구버전 handoff 가 그냥 사라진다.
+
+    잠금은 순서를 직렬화할 뿐이고, 잘린 파일이 남지 않게 하는 본체는 원자적
+    교체다. 잠금을 못 얻어도 저장은 진행한다 — 체크포인트가 잠금 때문에
+    실패하는 편이 더 나쁘다.
+
+    본문 생성도 잠금 안에서 한다. 밖에서 만들면 저장된 handoff 를 읽어 본문을
+    만든 사이에 다른 세션이 handoff.json 을 바꿀 수 있고, 그러면
+    handoff.json 은 B 인데 PROJECT_CONTEXT.md 는 A 가 된다 — 새 AI 가 읽는
+    두 파일이 서로 다른 세션을 가리킨다.
+
+    after_commit 은 파일이 착지한 뒤 같은 잠금 안에서 실행된다.
+    work_memory.json 처럼 읽고-고쳐-쓰는 상태를 여기 넣어야 동시 실행에서
+    갱신이 유실되지 않고, 저장이 실패했는데 기록만 남는 일도 없다.
+
+    (구버전 인라인 handoff 보관 경로, 실제로 쓴 본문) 을 돌려준다.
+    """
+    meta = MetaPaths(root)
+    # 경계 검사를 가장 먼저 한다. 잠금 파일과 보관 파일도 .vibelign 안에
+    # 만들어지므로, 그 디렉터리가 프로젝트 밖을 가리키면 아래 대상 검증에
+    # 닿기 전에 이미 밖에 파일이 생긴다.
+    _ = resolve_write_target(meta.vibelign_dir, root)
+    with file_lock(meta.context_lock_path):
+        archive = _archive_legacy_inline_handoff(root, out_path)
+        # 본문을 먼저 만든다 — 여기서 실패하면 아무것도 바뀌지 않는다.
+        content = build_content()
+        # 교체 순서: 정본(handoff.json) 먼저, 파생물(PROJECT_CONTEXT.md) 나중.
+        # 두 파일을 한꺼번에 원자적으로 바꾸는 건 저널 없이는 불가능하므로,
+        # 중간에 끊겼을 때 자가 복구되는 방향을 고른다:
+        #   정본 O / 파생물 X → 다음 재생성이 새 handoff 로 본문을 다시 만든다
+        #   정본 X / 파생물 O → 다음 재생성이 새 본문을 옛 handoff 로 되돌린다 (손실)
+        # 심볼릭 링크는 링크가 아니라 대상을 갈아끼운다 — stage 와 replace 가
+        # 같은 경로를 봐야 하므로 여기서 미리 해석한다. root 를 넘겨야
+        # 프로젝트 밖을 가리키는 링크가 거부된다 (안 넘기면 링크 자체를 교체).
+        staged: list[tuple[Path, Path]] = []
+        try:
+            if handoff_data is not None:
+                handoff_target = resolve_write_target(meta.handoff_path, root)
+                staged.append(
+                    (
+                        stage_text(handoff_target, _handoff_payload(handoff_data)),
+                        handoff_target,
+                    )
+                )
+            context_target = resolve_write_target(out_path, root)
+            staged.append((stage_text(context_target, content), context_target))
+        except BaseException:
+            # 앞서 준비된 임시 파일을 남기면 안 된다. handoff 임시 파일에는
+            # 세션 내용이 그대로 들어 있어 그냥 쓰레기가 아니다.
+            for tmp_path, _dest in staged:
+                with suppress(OSError):
+                    tmp_path.unlink()
+            raise
+        # 준비가 다 끝난 뒤 replace 만 연달아 — 사이에 I/O 가 없다.
+        commit_staged(staged)
+        # 파일이 실제로 착지한 뒤에 상태를 기록한다. 앞에 두면 본문 생성이나
+        # 스테이징이 실패했을 때 "저장 안 됨" 이라고 보고하면서 work_memory 에는
+        # 그 handoff 가 남는다 — 기록과 사실이 어긋난다. 잠금 안이므로
+        # 읽고-고쳐-쓰기 직렬화는 그대로다.
+        #
+        # 여기서 실패해도 저장 자체는 이미 성공했다. 예외를 그대로 올리면
+        # 호출부의 except OSError 가 "저장 중단" 으로 보고해 사용자가 다시
+        # 실행하게 만든다 — 사실과 반대다. 부수 기록 실패는 경고로 낮춘다.
+        if after_commit is not None:
+            try:
+                after_commit()
+            # OSError 만 잡으면 부족하다 — 메모리 스키마가 도중에 새 버전으로
+            # 바뀌면 save 가 ValueError 를 던지고, 그게 그대로 올라가 이미
+            # 성공한 저장이 실패로 보고된다. 부수 기록의 실패는 종류를 가리지
+            # 않고 경고로 낮춘다.
+            except Exception as exc:
+                clack_info(
+                    f"주의: 저장은 끝났지만 작업 기록 갱신에 실패했습니다 ({exc}). "
+                    "PROJECT_CONTEXT.md 와 handoff.json 은 정상입니다."
+                )
+    return archive, content
+
+
 def _build_context_content(
     root: Path,
     compact: bool = False,
     full: bool = False,
     handoff_data: HandoffData | None = None,
 ) -> str:
-    """PROJECT_CONTEXT.md 내용 생성."""
+    """PROJECT_CONTEXT.md 내용 생성.
+
+    handoff_data 를 주지 않으면 보관된 원본을 읽어 쓴다. 그래서 체크포인트가
+    이 함수를 인자 없이 불러도 handoff 블록이 사라지지 않는다 (issue #6).
+    """
+    if handoff_data is None:
+        handoff_data = load_handoff_data(root)
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     project_name = _detect_project_name(root)
@@ -1304,15 +1506,33 @@ _AGENTS_HANDOFF_BLOCK = """{marker}
 
 
 def _inject_agents_handoff_instruction(root: Path) -> None:
-    """AGENTS.md가 있으면 handoff 읽기 지시를 추가 (중복 방지)."""
+    """AGENTS.md가 있으면 handoff 읽기 지시를 추가 (중복 방지).
+
+    이 단계는 저장이 끝난 뒤의 부수 작업이다. 여기서 던지면 호출부가 이미
+    성공한 저장을 실패로 보고하게 되므로, 실패는 삼키고 알리기만 한다
+    (읽을 수 없는 AGENTS.md, 프로젝트 밖을 가리키는 링크 등).
+    """
+    try:
+        _inject_agents_handoff_instruction_unsafe(root)
+    except OSError as exc:
+        clack_info(
+            f"주의: AGENTS.md 에 handoff 안내를 추가하지 못했습니다 ({exc}). "
+            "저장 자체는 정상입니다."
+        )
+
+
+def _inject_agents_handoff_instruction_unsafe(root: Path) -> None:
     agents_path = root / "AGENTS.md"
     if not agents_path.exists():
         return
     text = agents_path.read_text(encoding="utf-8")
     if _AGENTS_HANDOFF_MARKER in text:
         return  # 이미 있음
-    _ = agents_path.write_text(
-        text.rstrip() + "\n\n" + _AGENTS_HANDOFF_BLOCK, encoding="utf-8"
+    # root 를 넘겨야 링크를 따라간다 — AGENTS.md 를 공유 정책 파일로 링크해
+    # 두는 설정이 흔한데, 안 넘기면 링크가 일반 파일로 바뀌며 조용히 끊긴다.
+    # (프로젝트 밖을 가리키면 resolve_write_target 이 거부한다)
+    atomic_write_text(
+        agents_path, text.rstrip() + "\n\n" + _AGENTS_HANDOFF_BLOCK, root=root
     )
 
 
@@ -1547,7 +1767,10 @@ def run_transfer(args: object) -> None:
         clack_info(f"오류: {exc}")
         return
 
-    if handoff and ai and (no_prompt or not sys.stdin.isatty()):
+    # dry_run 이면 이 분기로 빠지지 않는다 — 여기는 무조건 파일을 쓰므로
+    # `--handoff --ai --dry-run` 이 미리보기가 아니라 실행이 돼버린다.
+    # 아래 일반 경로가 dry_run 을 지킨다.
+    if handoff and ai and not dry_run and (no_prompt or not sys.stdin.isatty()):
         _run_ai_handoff_non_interactive(
             root,
             out_path,
@@ -1576,12 +1799,28 @@ def run_transfer(args: object) -> None:
             verification=verification,
             decision=decision,
         )
-        _persist_handoff_memory(root, handoff_data)
-        content = _build_context_content(root, handoff_data=handoff_data)
+        captured = handoff_data
+
+        # work_memory.json 은 읽고-고쳐-쓰기라 잠금 밖에서 하면 동시 실행 시
+        # 한쪽 갱신이 통째로 사라진다. commit 과 같은 잠금 안에서 실행한다.
+        # (dry-run 은 commit 자체를 하지 않으므로 여기도 실행되지 않는다)
+        def persist_memory() -> None:
+            _persist_handoff_memory(root, captured)
+
+        # handoff 경로는 명시 데이터로 본문을 만드므로 저장 데이터와 출처가
+        # 같다 — 잠금 안에서 다시 만들어도 결과가 달라지지 않는다.
+        def build_content() -> str:
+            return _build_context_content(root, handoff_data=captured)
     else:
         handoff_data = None
-        content = _build_context_content(root, compact=compact, full=full)
+        persist_memory = None
 
+        # 이쪽은 저장된 handoff.json 을 읽어 본문을 만든다. 잠금 안에서
+        # 만들어야 읽은 시점과 쓰는 시점 사이에 다른 세션이 끼어들지 않는다.
+        def build_content() -> str:
+            return _build_context_content(root, compact=compact, full=full)
+
+    content = build_content()
     tokens = _estimate_tokens(content)
 
     if dry_run:
@@ -1600,7 +1839,22 @@ def run_transfer(args: object) -> None:
         clack_outro("dry-run 완료 — 실제 저장하려면 --dry-run 없이 실행하세요.")
         return
 
-    _ = out_path.write_text(content, encoding="utf-8")
+    try:
+        _archive, content = commit_project_context(
+            root,
+            out_path,
+            build_content,
+            handoff_data=handoff_data,
+            after_commit=persist_memory,
+        )
+    except PartialCommitError as exc:
+        # "중단" 이라고 하면 안 된다 — 정본은 이미 갱신됐다.
+        clack_info(f"주의: {exc}")
+        return
+    except OSError as exc:
+        clack_info(f"오류: {exc}")
+        return
+    tokens = _estimate_tokens(content)
 
     if handoff:
         _inject_agents_handoff_instruction(root)
@@ -1657,8 +1911,44 @@ def _run_ai_handoff_non_interactive(
         MetaPaths(root).work_memory_path,
         cast(dict[str, object], cast(object, handoff_data)),
     )
-    content = _build_context_content(root, handoff_data=handoff_data)
-    _ = out_path.write_text(content, encoding="utf-8")
+    # 이 경로는 JSON 만 내보내는 계약이다. 예외가 새어나가면 호출한 AI 는
+    # 트레이스백을 받고 무엇이 저장됐는지 알 수 없다 — 잠금 경합·부분 커밋도
+    # 기계가 읽을 수 있는 형태로 알린다.
+    try:
+        _archive, _content = commit_project_context(
+            root,
+            out_path,
+            lambda: _build_context_content(root, handoff_data=handoff_data),
+            handoff_data=handoff_data,
+        )
+    except PartialCommitError as exc:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "mode": "handoff_ai_draft",
+                    "error": "partial_commit",
+                    "detail": str(exc),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+        return
+    except OSError as exc:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "mode": "handoff_ai_draft",
+                    "error": "commit_failed",
+                    "detail": str(exc),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+        return
     _inject_agents_handoff_instruction(root)
     payload: dict[str, object] = {
         "ok": True,

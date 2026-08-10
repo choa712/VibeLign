@@ -1,3 +1,4 @@
+# === ANCHOR: RISK_ANALYZER_START ===
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
@@ -10,6 +11,7 @@ from vibelign.core.project_scan import (
     safe_read_text,
     relpath_str,
 )
+from vibelign.core.structure_policy import has_anchor_markers
 from vibelign.core.structure_policy import is_core_entry_file
 from vibelign.core.structure_policy import is_trivial_package_init
 
@@ -66,6 +68,7 @@ IssueDict = dict[str, object]
 
 
 @dataclass
+# === ANCHOR: RISK_ANALYZER_RISKREPORT_START ===
 class RiskReport:
     level: str = "GOOD"
     score: int = 0
@@ -73,24 +76,34 @@ class RiskReport:
     suggestions: list[str] = field(default_factory=list)
     stats: dict[str, object] = field(default_factory=dict)
 
+    # === ANCHOR: RISK_ANALYZER_TO_DICT_START ===
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
+    # === ANCHOR: RISK_ANALYZER_TO_DICT_END ===
+# === ANCHOR: RISK_ANALYZER_RISKREPORT_END ===
 
 
+# === ANCHOR: RISK_ANALYZER_COUNT_MATCHES_START ===
 def count_matches(text: str, patterns: list[str]) -> int:
     return sum(len(re.findall(p, text, flags=re.MULTILINE)) for p in patterns)
+# === ANCHOR: RISK_ANALYZER_COUNT_MATCHES_END ===
 
 
+# === ANCHOR: RISK_ANALYZER_CONTAINS_ANY_START ===
 def contains_any(text: str, needles: list[str] | set[str]) -> bool:
     return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in needles)
+# === ANCHOR: RISK_ANALYZER_CONTAINS_ANY_END ===
 
 
+# === ANCHOR: RISK_ANALYZER_COUNT_DISTINCT_HINTS_START ===
 def count_distinct_hints(text: str, patterns: list[str]) -> int:
     return sum(
         1 for pattern in patterns if re.search(pattern, text, flags=re.IGNORECASE)
     )
+# === ANCHOR: RISK_ANALYZER_COUNT_DISTINCT_HINTS_END ===
 
 
+# === ANCHOR: RISK_ANALYZER_ADD_ISSUE_START ===
 def add_issue(
     report: RiskReport,
     *,
@@ -114,8 +127,10 @@ def add_issue(
     )
     report.suggestions.append(suggestion)
     report.score += score
+# === ANCHOR: RISK_ANALYZER_ADD_ISSUE_END ===
 
 
+# === ANCHOR: RISK_ANALYZER_ANALYZE_PROJECT_START ===
 def analyze_project(root: Path, strict: bool = False) -> RiskReport:
     report = RiskReport()
     files_scanned = sum(1 for _ in iter_project_files(root))
@@ -189,7 +204,7 @@ def analyze_project(root: Path, strict: bool = False) -> RiskReport:
                 severity="low",
                 check_type="oversized_file",
             )
-        if "=== ANCHOR:" not in text and not is_trivial_package_init(path, text):
+        if not has_anchor_markers(text) and not is_trivial_package_init(path, text):
             missing_anchor_files += 1
             add_issue(
                 report,
@@ -264,6 +279,7 @@ def analyze_project(root: Path, strict: bool = False) -> RiskReport:
         "HIGH" if report.score >= 12 else "WARNING" if report.score >= 4 else "GOOD"
     )
     return report
+# === ANCHOR: RISK_ANALYZER_ANALYZE_PROJECT_END ===
 
 
 _IMPORT_RE = re.compile(
@@ -271,6 +287,7 @@ _IMPORT_RE = re.compile(
 )
 
 
+# === ANCHOR: RISK_ANALYZER__RESOLVE_RELATIVE_IMPORT_START ===
 def _resolve_relative_import(mod: str, path: Path, root: Path) -> str | None:
     """Resolve a relative import like '.commands.foo' to 'pkg.commands.foo'."""
     if not mod.startswith("."):
@@ -295,8 +312,10 @@ def _resolve_relative_import(mod: str, path: Path, root: Path) -> str | None:
     if remainder:
         return f"{base}.{remainder}" if base else remainder
     return base or None
+# === ANCHOR: RISK_ANALYZER__RESOLVE_RELATIVE_IMPORT_END ===
 
 
+# === ANCHOR: RISK_ANALYZER__EXTRACT_INTERNAL_IMPORTS_START ===
 def _extract_internal_imports(root: Path, path: Path) -> list[str]:
     """Extract internal (project-local) import targets from a Python file."""
     text = safe_read_text(path)
@@ -314,8 +333,10 @@ def _extract_internal_imports(root: Path, path: Path) -> list[str]:
         if candidate.is_dir() or (root / f"{top}.py").exists():
             results.append(mod)
     return results
+# === ANCHOR: RISK_ANALYZER__EXTRACT_INTERNAL_IMPORTS_END ===
 
 
+# === ANCHOR: RISK_ANALYZER__CHECK_DEPENDENCY_RISKS_START ===
 def _check_dependency_risks(root: Path) -> list[IssueDict]:
     """Lightweight dependency-risk checks: circular imports, missing targets, suspicious chains."""
     issues: list[IssueDict] = []
@@ -376,3 +397,5 @@ def _check_dependency_risks(root: Path) -> list[IssueDict]:
                             )
 
     return issues
+# === ANCHOR: RISK_ANALYZER__CHECK_DEPENDENCY_RISKS_END ===
+# === ANCHOR: RISK_ANALYZER_END ===

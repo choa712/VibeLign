@@ -11,6 +11,7 @@ from vibelign.core import anchor_tools as anchor_tools_mod
 from vibelign.core.meta_paths import MetaPaths
 from vibelign.core.project_map import ProjectMapSnapshot, load_project_map
 from vibelign.core.project_root import resolve_project_root
+from vibelign.core.project_scan import iter_source_files, safe_read_text
 
 
 from vibelign.terminal_render import cli_print
@@ -105,6 +106,96 @@ def _split_csv(value: object) -> list[str] | None:
 
 def _validate_anchor_file(path: Path) -> Iterable[str]:
     return cast(Iterable[str], anchor_tools_mod.validate_anchor_file(path))
+
+
+def _unindexed_source_files(
+    root: Path, index: dict[str, object], allowed_exts: set[str] | None
+) -> list[tuple[Path, str]]:
+    """앵커 인덱스에 없는 소스 파일 (= 정본 앵커가 하나도 없는 파일)."""
+    found: list[tuple[Path, str]] = []
+    for path in iter_source_files(root):
+        if allowed_exts is not None and path.suffix.lower() not in allowed_exts:
+            continue
+        try:
+            rel = str(path.relative_to(root))
+        except ValueError:
+            continue
+        if rel in index:
+            continue
+        found.append((path, rel))
+    return sorted(found, key=lambda item: item[1])
+
+
+def _run_crossing_repair(
+    root: Path, allowed_exts: set[str] | None, *, dry_run: bool, json_mode: bool
+) -> None:
+    """교차 앵커가 있는 파일의 마커를 다시 놓는다.
+
+    마커 위치를 옮기는 것은 코드 변경이므로 무엇이 바뀌는지 먼저 보여준다.
+    되살릴 수 없는 이름이 사라지는 파일은 건너뛰고 이유를 밝힌다 — 사람이
+    붙인 앵커나 심볼명이 바뀐 뒤 남은 앵커는 재생성으로 복원되지 않는다.
+    """
+    outcomes: list[anchor_tools_mod.RepairOutcome] = []
+    for path in iter_source_files(root):
+        if allowed_exts is not None and path.suffix.lower() not in allowed_exts:
+            continue
+        outcome = anchor_tools_mod.repair_crossing_anchors(root, path, dry_run=dry_run)
+        if outcome["status"] != "unchanged":
+            outcomes.append(outcome)
+
+    repaired = [o for o in outcomes if o["status"] == "repaired"]
+    skipped = [o for o in outcomes if o["status"] == "skipped"]
+    if json_mode:
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "error": None,
+                    "data": {
+                        "dry_run": dry_run,
+                        "repaired": [o["path"] for o in repaired],
+                        "skipped": skipped,
+                    },
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
+        return
+
+    label = "[dry-run] 고칠 수 있는 파일" if dry_run else "마커 위치 수정 완료"
+    if repaired:
+        print(f"{label}: {len(repaired)}개")
+        for item in repaired:
+            print(f"- {item['path']}")
+    else:
+        print("교차 앵커가 있는 파일이 없거나, 자동으로 고칠 수 있는 파일이 없습니다.")
+    if skipped:
+        print("")
+        print(f"건너뛴 파일 {len(skipped)}개 (사람이 판단해야 합니다):")
+        for item in skipped:
+            print(f"- {item['path']}: {item['reason']}")
+            if item["lost_names"]:
+                names = ", ".join(item["lost_names"][:5])
+                more = (
+                    f" 외 {len(item['lost_names']) - 5}개"
+                    if len(item["lost_names"]) > 5
+                    else ""
+                )
+                print(f"    사라질 이름: {names}{more}")
+    if dry_run:
+        print("")
+        print("실제로 바꾸려면 --dry-run 없이 다시 실행하세요.")
+
+
+def _marker_format_problems(path: Path) -> list[str]:
+    """앵커가 없는 파일에서 '읽히지 않는 마커'만 골라낸다."""
+    text = safe_read_text(path)
+    if not text:
+        return []
+    return anchor_tools_mod.find_legacy_anchor_markers(
+        text
+    ) + anchor_tools_mod.find_malformed_anchor_markers(text)
 
 
 def _allowed_exts(value: str) -> set[str] | None:
@@ -426,6 +517,10 @@ def run_vib_anchor(args: object) -> None:
             print(line)
         return
 
+    if bool(getattr(args, "repair", False)):
+        _run_crossing_repair(root, allowed_exts, dry_run=dry_run, json_mode=json_mode)
+        return
+
     if validate:
         index = _write_anchor_index(root, meta, allowed_exts)
         problems: list[str] = []
@@ -433,13 +528,24 @@ def run_vib_anchor(args: object) -> None:
             path = root / rel
             for problem in _validate_anchor_file(path):
                 problems.append(f"{rel}: {problem}")
+        # 인덱스는 "정본 앵커가 있는 파일"만 담는다. 인덱스만 돌면 구 형식·훼손
+        # 마커만 가진 파일은 아예 순회되지 않아, 보호가 0인 프로젝트가 조용히
+        # validation passed 를 받는다. 앵커가 없는 파일도 훑되 "앵커가 없습니다"
+        # 는 보고하지 않는다 — 그건 vib anchor --suggest 의 몫이고, 여기서
+        # 쏟아내면 신규 프로젝트에서 신호가 묻힌다.
+        for path, rel in _unindexed_source_files(root, index, allowed_exts):
+            for problem in _marker_format_problems(path):
+                problems.append(f"{rel}: {problem}")
         if json_mode:
             print(
                 json.dumps(
                     {
                         "ok": not problems,
                         "error": None,
-                        "data": {"problems": problems, "anchor_index": index},
+                        "data": {
+                            "problems": problems,
+                            "anchor_index": index,
+                        },
                     },
                     indent=2,
                     ensure_ascii=False,
