@@ -10,6 +10,7 @@ import sys
 import tempfile
 from typing import TypeAlias, TypedDict, cast
 
+from vibelign.core.atomic_write import atomic_write_text
 from vibelign.core.project_map import ProjectMapSnapshot
 from vibelign.core.project_scan import iter_source_files, line_count, safe_read_text
 from vibelign.core.structure_policy import ANCHOR_MARKER_PATTERN, has_anchor_markers
@@ -1629,6 +1630,8 @@ def repair_crossing_anchors(
         return {"path": rel, "status": "unchanged", "reason": "교차 없음", "lost_names": []}
 
     before = set(extract_anchors(path))
+    before_blocks = extract_anchor_blocks(path)
+    moved_ok = _crossing_participants(original)
     with tempfile.TemporaryDirectory() as tmp_dir:
         scratch = Path(tmp_dir) / path.name  # 파일명 유지 — 앵커 접두사가 여기서 나온다
         _ = scratch.write_text(original, encoding="utf-8")
@@ -1640,6 +1643,7 @@ def repair_crossing_anchors(
             _ = insert_js_symbol_anchors(scratch)
         rebuilt = safe_read_text(scratch)
         after = set(extract_anchors(scratch))
+        after_blocks = extract_anchor_blocks(scratch)
 
     lost = sorted(before - after)
     if lost:
@@ -1657,11 +1661,35 @@ def repair_crossing_anchors(
             "reason": f"재생성 후에도 교차가 남습니다 ({len(remaining)}건)",
             "lost_names": [],
         }
+    # 이름이 남았다고 같은 구역인 건 아니다. 사람이 붙인 앵커의 이름이 우연히
+    # 생성 규칙과 같으면, 이름은 살아남으면서 보호 구역만 조용히 다른 곳으로
+    # 옮겨간다. 교차에 연루된 앵커만 구역이 바뀌어야 하고 나머지는 그대로여야 한다.
+    # 마커 줄은 빼고 비교한다. 바깥 앵커의 본문에는 안쪽 마커 줄이 섞여
+    # 들어가므로, 그대로 비교하면 안쪽이 옮겨진 것만으로 바깥까지 "구역이
+    # 바뀌었다" 가 된다. 우리가 지켜야 할 것은 **보호되는 코드**가 같은가다.
+    drifted = sorted(
+        name
+        for name, body in before_blocks.items()
+        if name not in moved_ok
+        and _code_only(after_blocks.get(name)) != _code_only(body)
+    )
+    if drifted:
+        return {
+            "path": rel,
+            "status": "skipped",
+            "reason": (
+                "교차와 무관한 앵커의 보호 구역이 바뀝니다 — "
+                f"{', '.join(drifted[:5])}"
+            ),
+            "lost_names": [],
+        }
     if rebuilt == original:
         return {"path": rel, "status": "unchanged", "reason": "바뀔 내용 없음", "lost_names": []}
     if not dry_run:
         try:
-            _ = path.write_text(rebuilt, encoding="utf-8")
+            # 원자적 교체. write_text 는 먼저 비우고 쓰므로, 도중에 죽으면
+            # 소스가 잘린 채 남는다 — 마커만 옮기려다 코드를 잃는다.
+            atomic_write_text(path, rebuilt, root=root)
         except OSError as exc:
             return {
                 "path": rel,
@@ -1680,6 +1708,24 @@ def repair_crossing_anchors(
 # O(N^2) 로 부풀고, 악성 소스 하나로 vib scan 이 메모리를 태울 수 있다.
 _CROSSING_SHOWN = 5
 _CROSSING_MAX_FINDINGS = 50
+
+
+def _code_only(body: str | None) -> str:
+    """앵커 본문에서 마커 줄을 걷어낸 실제 코드."""
+    if body is None:
+        return ""
+    return "\n".join(
+        line for line in body.splitlines() if not is_anchor_marker_line(line)
+    ).strip()
+
+
+def _crossing_participants(text: str) -> set[str]:
+    """교차에 연루된 앵커 이름. 이들만 구역이 바뀌어도 된다."""
+    names: set[str] = set()
+    for problem in find_crossing_anchors(text):
+        for token in re.findall(r"[A-Z][A-Z0-9_]+", problem):
+            names.add(re.sub(r"_(START|END)$", "", token))
+    return names
 
 
 def find_crossing_anchors(text: str) -> list[str]:

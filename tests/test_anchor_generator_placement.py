@@ -156,6 +156,61 @@ class TestRepair:
         assert "HANDWRITTEN_ZONE" in result["lost_names"]
         assert p.read_text(encoding="utf-8") == before
 
+    def test_skips_when_an_unrelated_zone_would_move(self, tmp_path: Path) -> None:
+        """이름이 남았다고 같은 구역인 건 아니다.
+
+        사람이 붙인 앵커의 이름이 우연히 생성 규칙과 같으면, 이름은 살아남으면서
+        보호 구역만 조용히 다른 코드로 옮겨간다.
+        """
+        marker = "=" * 3
+        p = tmp_path / "drift.py"
+        # DRIFT_HELPER 는 이름이 생성 규칙과 같지만 손으로 다른 구역에 걸어뒀다.
+        p.write_text(
+            f"# {marker} ANCHOR: DRIFT_START {marker}\n"
+            f"# {marker} ANCHOR: DRIFT_HELPER_START {marker}\n"
+            "SENTINEL = 1\n"
+            f"# {marker} ANCHOR: DRIFT_HELPER_END {marker}\n"
+            f"# {marker} ANCHOR: DRIFT_OUTER_START {marker}\n"
+            "class Outer:\n"
+            f"    # {marker} ANCHOR: DRIFT_INNER_START {marker}\n"
+            f"# {marker} ANCHOR: DRIFT_OUTER_END {marker}\n"
+            "    def inner(self) -> None:\n"
+            "        pass\n"
+            f"    # {marker} ANCHOR: DRIFT_INNER_END {marker}\n"
+            "def helper() -> int:\n"
+            "    return 2\n"
+            f"# {marker} ANCHOR: DRIFT_END {marker}\n",
+            encoding="utf-8",
+        )
+        before = p.read_text(encoding="utf-8")
+        result = repair_crossing_anchors(tmp_path, p)
+        assert result["status"] == "skipped"
+        assert "DRIFT_HELPER" in result["reason"]
+        assert p.read_text(encoding="utf-8") == before
+
+    def test_write_is_atomic(self, tmp_path: Path) -> None:
+        """마커만 옮기려다 소스를 잃으면 안 된다 — write_text 는 먼저 비운다."""
+        from vibelign.core import atomic_write as atomic_write_mod
+
+        p = self._crossing_file(tmp_path)
+        before = p.read_text(encoding="utf-8")
+        calls: list[str] = []
+        real_replace = atomic_write_mod.os.replace
+
+        def track(src: object, dst: object) -> None:
+            calls.append(Path(str(dst)).name)
+            real_replace(src, dst)  # type: ignore[arg-type]
+
+        import pytest as _pytest
+
+        with _pytest.MonkeyPatch.context() as mp:
+            mp.setattr(atomic_write_mod.os, "replace", track)
+            result = repair_crossing_anchors(tmp_path, p)
+
+        assert result["status"] == "repaired"
+        assert calls == ["mod.py"]  # 원자적 교체를 거쳤다
+        assert p.read_text(encoding="utf-8") != before
+
     def test_untouched_when_no_crossing(self, tmp_path: Path) -> None:
         p = tmp_path / "clean.py"
         p.write_text("def f() -> int:\n    return 1\n", encoding="utf-8")
