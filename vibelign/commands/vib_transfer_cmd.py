@@ -1097,8 +1097,13 @@ def save_handoff_data(root: Path, data: HandoffData) -> None:
 
     PROJECT_CONTEXT.md 와 짝으로 갱신할 때는 commit_project_context 를 쓴다 —
     따로 쓰면 하나만 갱신된 채 끝날 수 있다.
+
+    root 를 넘겨 경계를 강제한다. 공개 함수라 외부에서 바로 부를 수 있는데,
+    안 넘기면 `.vibelign` 이 프로젝트 밖을 가리킬 때 바깥 파일을 덮는다.
     """
-    atomic_write_text(MetaPaths(root).handoff_path, _handoff_payload(data))
+    meta = MetaPaths(root)
+    _ = resolve_write_target(meta.vibelign_dir, root)
+    atomic_write_text(meta.handoff_path, _handoff_payload(data), root=root)
 
 
 def load_handoff_data(root: Path) -> HandoffData | None:
@@ -1147,8 +1152,10 @@ def _archive_legacy_inline_handoff(root: Path, out_path: Path) -> Path | None:
     if "## Session Handoff" not in text:
         return None
     stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
-    archive = MetaPaths(root).vibelign_dir / f"handoff-legacy-{stamp}.md"
-    atomic_write_text(archive, text)
+    meta = MetaPaths(root)
+    _ = resolve_write_target(meta.vibelign_dir, root)
+    archive = meta.vibelign_dir / f"handoff-legacy-{stamp}.md"
+    atomic_write_text(archive, text, root=root)
     return archive
 
 

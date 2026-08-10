@@ -65,6 +65,7 @@ def run_vib_scan(args: Namespace) -> None:
     # [2] 앵커 무결성 검사 (+ --auto 시 자동 수정)
     clack_step("앵커 무결성 검사 중...")
     from vibelign.core.anchor_tools import (
+        find_crossing_anchors,
         insert_module_anchors,
         strip_unreadable_markers,
         validate_anchor_file,
@@ -74,15 +75,22 @@ def run_vib_scan(args: Namespace) -> None:
 
     problems: list[str] = []
     problem_paths: list[Path] = []
+    crossings: list[str] = []
     for path in iter_source_files(root):
         file_problems = [
             p for p in validate_anchor_file(path) if p != "앵커가 없습니다"
         ]
+        rel = str(path.relative_to(root))
         if file_problems:
-            rel = str(path.relative_to(root))
             for p in file_problems:
                 problems.append(f"{rel}: {p}")
             problem_paths.append(path)
+        # 교차 앵커는 짝이 맞아 validate 를 통과한다. 여기서도 보고하지 않으면
+        # `vib scan` 이 "앵커 멀쩡함" 이라고 답하는데 실제로는 A 를 고치면
+        # B 의 여는 마커가 사라지는 상태다. 자동 수리 대상은 아니다 —
+        # 마커 위치를 옮기는 건 코드 변경이라 사람이 판단해야 한다.
+        for warning in find_crossing_anchors(safe_read_text(path)):
+            crossings.append(f"{rel}: {warning}")
     if problems:
         clack_warn(f"앵커 문제 {len(problems)}건 발견:")
         for p in problems:
@@ -115,6 +123,17 @@ def run_vib_scan(args: Namespace) -> None:
             )
     else:
         clack_success("앵커 무결성 이상 없음")
+
+    if crossings:
+        clack_warn(f"교차 앵커 {len(crossings)}건 (자동 수리 대상 아님):")
+        for item in crossings[:10]:
+            clack_warn(f"  {item}")
+        if len(crossings) > 10:
+            clack_warn(f"  … 외 {len(crossings) - 10}건")
+        clack_info(
+            "한쪽 블록이 다른 앵커의 여는 마커만 품습니다 — 그 블록을 고치면 "
+            "상대 경계가 깨집니다. 마커 위치는 사람이 옮겨야 합니다."
+        )
 
     # [3] 코드맵 재생성 — 앵커 수정 후 최신 상태 반영
     clack_step("코드맵 재생성 중...")
