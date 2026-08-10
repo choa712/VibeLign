@@ -402,6 +402,12 @@ def _js_scan_line(line: str, state: dict) -> int:
 
 
 # === ANCHOR: ANCHOR_TOOLS__JS_SYMBOL_BLOCKS_START ===
+def _js_statement_ends(line: str) -> bool:
+    """줄 끝이 문장 종료(세미콜론)인가 — 줄 끝 주석은 걷어내고 본다."""
+    code = line.split("//", 1)[0].rstrip()
+    return code.endswith(";")
+
+
 def _js_symbol_blocks(text: str) -> list[SymbolBlock]:
     lines = text.splitlines()
     blocks: list[SymbolBlock] = []
@@ -439,6 +445,18 @@ def _js_symbol_blocks(text: str) -> list[SymbolBlock]:
             end_idx = probe
             if state["opened"] and depth <= 0:
                 closed = True
+                break
+            # 중괄호 없이 세미콜론으로 끝나는 문장(표현식 본문 화살표 함수 등)은
+            # 여기서 멈춘다. closed 를 세우지 않으므로 이 심볼은 건너뛴다 —
+            # 한 줄짜리 표현식에 앵커를 달지 않는 기존 계약 그대로다.
+            # 멈추지 않으면 `const f = (x) => x + 1;` 이 다음 중괄호 블록까지
+            # 삼켜 END 마커가 남의 함수 안에 박히고 교차가 된다.
+            if (
+                not state["opened"]
+                and not state["stack"]
+                and not state["block_comment"]
+                and _js_statement_ends(lines[probe])
+            ):
                 break
         if not state["opened"] or not closed:
             continue
@@ -1634,9 +1652,13 @@ def repair_crossing_anchors(
     moved_ok = _crossing_participants(original)
     with tempfile.TemporaryDirectory() as tmp_dir:
         scratch = Path(tmp_dir) / path.name  # 파일명 유지 — 앵커 접두사가 여기서 나온다
-        _ = scratch.write_text(original, encoding="utf-8")
-        _ = strip_anchors(scratch)
-        _ = insert_module_anchors(scratch)
+        # 연루된 앵커의 마커만 걷어내고 그 자리만 다시 잡는다. 파일 전체를
+        # 재생성하면 심볼과 짝이 없는 앵커(사람이 손으로 건 구역, 심볼명이
+        # 바뀐 뒤 남은 이름)가 전부 사라진다 — 낡은 이름 하나 때문에 고칠 수
+        # 있는 파일을 통째로 포기하게 된다.
+        _ = scratch.write_text(
+            _without_markers(original, moved_ok), encoding="utf-8"
+        )
         if scratch.suffix.lower() == ".py":
             _ = insert_python_symbol_anchors(scratch)
         else:
@@ -1708,6 +1730,17 @@ def repair_crossing_anchors(
 # O(N^2) 로 부풀고, 악성 소스 하나로 vib scan 이 메모리를 태울 수 있다.
 _CROSSING_SHOWN = 5
 _CROSSING_MAX_FINDINGS = 50
+
+
+def _without_markers(text: str, names: Collection[str]) -> str:
+    """지정한 이름의 마커 줄만 걷어낸다. 나머지 앵커는 그대로 둔다."""
+    kept: list[str] = []
+    for line in text.splitlines():
+        marker = _parse_anchor_marker(line)
+        if marker is not None and marker[0] in names:
+            continue
+        kept.append(line)
+    return "\n".join(kept) + "\n"
 
 
 def _code_only(body: str | None) -> str:

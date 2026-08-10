@@ -21,15 +21,14 @@ export type ReportResult =
  *  read_file(loadDoc) 가 root-상대 경로를 기대하기 때문. 루트 밖이면 원본 유지. */
 // === ANCHOR: REPORT_TOPROJECTRELATIVE_START ===
 export function toProjectRelative(cwd: string, absPath: string): string {
-  // === ANCHOR: REPORT_NORM_START ===
   const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
   const root = norm(cwd);
   const p = norm(absPath);
   if (p === root) return "";
   if (p.startsWith(root + "/")) return p.slice(root.length + 1);
   return absPath;
-// === ANCHOR: REPORT_TOPROJECTRELATIVE_END ===
 }
+// === ANCHOR: REPORT_TOPROJECTRELATIVE_END ===
 
 // === ANCHOR: REPORT_GENERATEPLANNINGREPORT_START ===
 export async function generatePlanningReport(
@@ -84,7 +83,6 @@ export async function generatePlanningReport(
     if (error instanceof Error) return { ok: false, error: `보고서 파일을 읽지 못했어요: ${error.message}` };
     throw error;
   }
-  // === ANCHOR: REPORT_NORM_END ===
 }
 // === ANCHOR: REPORT_GENERATEPLANNINGREPORT_END ===
 

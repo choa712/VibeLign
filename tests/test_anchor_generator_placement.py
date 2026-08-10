@@ -156,11 +156,12 @@ class TestRepair:
         assert "HANDWRITTEN_ZONE" in result["lost_names"]
         assert p.read_text(encoding="utf-8") == before
 
-    def test_skips_when_an_unrelated_zone_would_move(self, tmp_path: Path) -> None:
-        """이름이 남았다고 같은 구역인 건 아니다.
+    def test_unrelated_hand_placed_anchor_is_untouched(self, tmp_path: Path) -> None:
+        """교차와 무관한 앵커는 손대지 않는다.
 
-        사람이 붙인 앵커의 이름이 우연히 생성 규칙과 같으면, 이름은 살아남으면서
-        보호 구역만 조용히 다른 코드로 옮겨간다.
+        전면 재생성 방식은 심볼과 짝이 없는 앵커(사람이 손으로 건 구역,
+        심볼명이 바뀐 뒤 남은 이름)를 전부 지웠고, 그래서 낡은 이름 하나
+        때문에 고칠 수 있는 파일을 통째로 포기해야 했다.
         """
         marker = "=" * 3
         p = tmp_path / "drift.py"
@@ -182,11 +183,42 @@ class TestRepair:
             f"# {marker} ANCHOR: DRIFT_END {marker}\n",
             encoding="utf-8",
         )
-        before = p.read_text(encoding="utf-8")
+        from vibelign.core.anchor_tools import extract_anchor_blocks
+
+        before_helper = extract_anchor_blocks(p)["DRIFT_HELPER"]
         result = repair_crossing_anchors(tmp_path, p)
-        assert result["status"] == "skipped"
-        assert "DRIFT_HELPER" in result["reason"]
-        assert p.read_text(encoding="utf-8") == before
+
+        assert result["status"] == "repaired"
+        assert find_crossing_anchors(p.read_text(encoding="utf-8")) == []
+        # 손수 앵커는 이름도 구역도 그대로
+        assert extract_anchor_blocks(p)["DRIFT_HELPER"] == before_helper
+        assert before_helper.strip() == "SENTINEL = 1"
+
+    def test_zone_comparison_ignores_marker_lines(self) -> None:
+        """구역 비교는 '보호되는 코드' 로 해야 한다.
+
+        바깥 앵커의 본문에는 안쪽 마커 줄이 섞여 들어간다. 본문을 그대로
+        비교하면 안쪽이 옮겨진 것만으로 바깥까지 "구역이 바뀌었다" 가 되어,
+        고칠 수 있는 파일을 전부 건너뛰게 된다 (처음 구현이 그랬다).
+        """
+        from vibelign.core.anchor_tools import _code_only
+
+        marker = "=" * 3
+        with_inner_at_top = (
+            f"# {marker} ANCHOR: INNER_START {marker}\n"
+            "code = 1\n"
+            f"# {marker} ANCHOR: INNER_END {marker}\n"
+        )
+        with_inner_moved = (
+            "code = 1\n"
+            f"# {marker} ANCHOR: INNER_START {marker}\n"
+            f"# {marker} ANCHOR: INNER_END {marker}\n"
+        )
+        assert _code_only(with_inner_at_top) == _code_only(with_inner_moved) == "code = 1"
+
+        # 코드가 실제로 달라지면 구분해야 한다
+        assert _code_only("code = 1\n") != _code_only("code = 2\n")
+        assert _code_only(None) == ""
 
     def test_write_is_atomic(self, tmp_path: Path) -> None:
         """마커만 옮기려다 소스를 잃으면 안 된다 — write_text 는 먼저 비운다."""

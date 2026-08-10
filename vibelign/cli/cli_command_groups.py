@@ -21,9 +21,9 @@ class SubparserFactory(Protocol):
         description: str | None = None,
         epilog: str | None = None,
         **kwargs: object,
-        # === ANCHOR: CLI_COMMAND_GROUPS_SUBPARSERFACTORY_END ===
-        # === ANCHOR: CLI_COMMAND_GROUPS_ADD_PARSER_END ===
     ) -> argparse.ArgumentParser: ...
+    # === ANCHOR: CLI_COMMAND_GROUPS_ADD_PARSER_END ===
+# === ANCHOR: CLI_COMMAND_GROUPS_SUBPARSERFACTORY_END ===
 
 
 # === ANCHOR: CLI_COMMAND_GROUPS__RUN_VIB_MCP_START ===
