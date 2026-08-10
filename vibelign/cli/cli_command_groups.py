@@ -210,6 +210,11 @@ def register_extended_commands(
         help="--validate 와 함께: 교차 앵커 경고도 실패로 처리",
     )
     _ = p.add_argument(
+        "--repair",
+        action="store_true",
+        help="교차 앵커가 있는 파일의 마커를 올바른 위치로 다시 놓기 (--dry-run 권장)",
+    )
+    _ = p.add_argument(
         "--dry-run", action="store_true", help="실제로 바꾸지 않고 미리 보기"
     )
     _ = p.add_argument("--json", action="store_true", help="JSON으로 출력")

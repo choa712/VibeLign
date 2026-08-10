@@ -126,6 +126,68 @@ def _unindexed_source_files(
     return sorted(found, key=lambda item: item[1])
 
 
+def _run_crossing_repair(
+    root: Path, allowed_exts: set[str] | None, *, dry_run: bool, json_mode: bool
+) -> None:
+    """교차 앵커가 있는 파일의 마커를 다시 놓는다.
+
+    마커 위치를 옮기는 것은 코드 변경이므로 무엇이 바뀌는지 먼저 보여준다.
+    되살릴 수 없는 이름이 사라지는 파일은 건너뛰고 이유를 밝힌다 — 사람이
+    붙인 앵커나 심볼명이 바뀐 뒤 남은 앵커는 재생성으로 복원되지 않는다.
+    """
+    outcomes: list[anchor_tools_mod.RepairOutcome] = []
+    for path in iter_source_files(root):
+        if allowed_exts is not None and path.suffix.lower() not in allowed_exts:
+            continue
+        outcome = anchor_tools_mod.repair_crossing_anchors(root, path, dry_run=dry_run)
+        if outcome["status"] != "unchanged":
+            outcomes.append(outcome)
+
+    repaired = [o for o in outcomes if o["status"] == "repaired"]
+    skipped = [o for o in outcomes if o["status"] == "skipped"]
+    if json_mode:
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "error": None,
+                    "data": {
+                        "dry_run": dry_run,
+                        "repaired": [o["path"] for o in repaired],
+                        "skipped": skipped,
+                    },
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
+        return
+
+    label = "[dry-run] 고칠 수 있는 파일" if dry_run else "마커 위치 수정 완료"
+    if repaired:
+        print(f"{label}: {len(repaired)}개")
+        for item in repaired:
+            print(f"- {item['path']}")
+    else:
+        print("교차 앵커가 있는 파일이 없거나, 자동으로 고칠 수 있는 파일이 없습니다.")
+    if skipped:
+        print("")
+        print(f"건너뛴 파일 {len(skipped)}개 (사람이 판단해야 합니다):")
+        for item in skipped:
+            print(f"- {item['path']}: {item['reason']}")
+            if item["lost_names"]:
+                names = ", ".join(item["lost_names"][:5])
+                more = (
+                    f" 외 {len(item['lost_names']) - 5}개"
+                    if len(item["lost_names"]) > 5
+                    else ""
+                )
+                print(f"    사라질 이름: {names}{more}")
+    if dry_run:
+        print("")
+        print("실제로 바꾸려면 --dry-run 없이 다시 실행하세요.")
+
+
 def _crossing_warnings(path: Path) -> list[str]:
     text = safe_read_text(path)
     if not text:
@@ -486,6 +548,10 @@ def run_vib_anchor(args: object) -> None:
             if warning:
                 line += f"  ⚠️ {warning}"
             print(line)
+        return
+
+    if bool(getattr(args, "repair", False)):
+        _run_crossing_repair(root, allowed_exts, dry_run=dry_run, json_mode=json_mode)
         return
 
     if validate:

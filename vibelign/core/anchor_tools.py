@@ -1,11 +1,13 @@
 # === ANCHOR: ANCHOR_TOOLS_START ===
 from collections.abc import Callable, Collection, Iterator
 from pathlib import Path
+import ast
 import hashlib
 import heapq
 import json
 import re
 import sys
+import tempfile
 from typing import TypeAlias, TypedDict, cast
 
 from vibelign.core.project_map import ProjectMapSnapshot
@@ -244,6 +246,48 @@ def recommend_anchor_targets(
 
 # === ANCHOR: ANCHOR_TOOLS__PYTHON_SYMBOL_BLOCKS_START ===
 def _python_symbol_blocks(text: str) -> list[SymbolBlock]:
+    """심볼별 (시작줄, 끝줄, 이름, 들여쓰기). 끝줄은 본문의 마지막 줄이다.
+
+    AST 를 먼저 쓴다. 들여쓰기만 보고 끝을 찾으면 여러 줄 시그니처에서 닫는
+    괄호가 def 와 같은 열에 있어 그 앞줄을 본문 끝으로 오인한다 — END 마커가
+    시그니처 한가운데 박히고, 그 블록은 함수 본문이 아니라 인자 목록 일부가
+    된다. 실제로 이 리포의 교차 앵커 39건 중 상당수가 그렇게 생겼다.
+
+    구문 오류로 파싱이 안 되는 파일은 기존 들여쓰기 스캔으로 폴백한다.
+    """
+    parsed = _python_symbol_blocks_ast(text)
+    if parsed is not None:
+        return parsed
+    return _python_symbol_blocks_by_indent(text)
+
+
+def _python_symbol_blocks_ast(text: str) -> list[SymbolBlock] | None:
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError):
+        return None
+    lines = text.splitlines()
+    blocks: list[SymbolBlock] = []
+    for node in ast.walk(tree):
+        if not isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        ):
+            continue
+        # node.lineno 는 데코레이터가 아니라 def/class 줄을 가리킨다 (3.8+).
+        start = node.lineno - 1
+        end = (node.end_lineno or node.lineno) - 1
+        if not (0 <= start < len(lines)):
+            continue
+        end = min(end, len(lines) - 1)
+        while end > start and not lines[end].strip():
+            end -= 1
+        indent_match = re.match(r"[ \t]*", lines[start])
+        blocks.append((start, end, node.name, indent_match.group(0) if indent_match else ""))
+    blocks.sort(key=lambda item: item[0])
+    return blocks
+
+
+def _python_symbol_blocks_by_indent(text: str) -> list[SymbolBlock]:
     lines = text.splitlines()
     blocks: list[SymbolBlock] = []
     for idx, line in enumerate(lines):
@@ -418,8 +462,12 @@ def insert_python_symbol_anchors(path: Path) -> bool:
     if not blocks:
         return False
     existing = set(extract_anchors(path))
-    changed = False
-    for start_idx, end_idx, symbol_name, indent in reversed(blocks):
+    # 모든 삽입 위치를 먼저 모은 뒤 위치 내림차순으로 삽입한다. 하나씩
+    # 끼워넣으면 중첩 심볼(클래스 안의 메서드 등)의 마커가 바깥 심볼의 end
+    # 위치를 밀어, 바깥 END 가 안쪽 블록 앞으로 들어가며 교차가 생긴다.
+    # (JS 쪽은 이미 이렇게 고쳐져 있었고 Python 쪽만 남아 있었다)
+    inserts: list[tuple[int, int, str]] = []
+    for start_idx, end_idx, symbol_name, indent in blocks:
         anchor_name = build_symbol_anchor_name(path, symbol_name)
         if anchor_name in existing:
             continue
@@ -427,12 +475,16 @@ def insert_python_symbol_anchors(path: Path) -> bool:
         end_marker = f"{indent}# === ANCHOR: {anchor_name}_END ==="
         if start_idx > 0 and lines[start_idx - 1].strip() == start_marker.strip():
             continue
-        insert_end_at = min(end_idx + 1, len(lines))
-        lines.insert(insert_end_at, end_marker)
-        lines.insert(start_idx, start_marker)
-        changed = True
-    if not changed:
+        # kind: END=0, START=1. 내림차순으로 삽입하므로 같은 위치에서는
+        # 나중에 넣은 쪽이 앞에 온다 — 앞 블록의 END 가 다음 블록의 START
+        # 보다 앞서야 하므로 END 의 kind 가 더 작아야 한다. 반대로 두면
+        # 한 줄짜리 메서드가 연달아 있을 때 START/END 가 엇갈려 교차가 된다.
+        inserts.append((start_idx, 1, start_marker))
+        inserts.append((min(end_idx + 1, len(lines)), 0, end_marker))
+    if not inserts:
         return False
+    for pos, _kind, marker in sorted(inserts, key=lambda x: (x[0], x[1]), reverse=True):
+        lines.insert(pos, marker)
     try:
         _ = path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
     except OSError as e:
@@ -468,8 +520,12 @@ def insert_js_symbol_anchors(path: Path) -> bool:
         end_marker = f"{indent}// === ANCHOR: {anchor_name}_END ==="
         if start_idx > 0 and lines[start_idx - 1].strip() == start_marker.strip():
             continue
-        inserts.append((start_idx, 0, start_marker))
-        inserts.append((min(end_idx + 1, len(lines)), 1, end_marker))
+        # kind: END=0, START=1. 내림차순으로 삽입하므로 같은 위치에서는
+        # 나중에 넣은 쪽이 앞에 온다 — 앞 블록의 END 가 다음 블록의 START
+        # 보다 앞서야 하므로 END 의 kind 가 더 작아야 한다. 반대로 두면
+        # 한 줄짜리 메서드가 연달아 있을 때 START/END 가 엇갈려 교차가 된다.
+        inserts.append((start_idx, 1, start_marker))
+        inserts.append((min(end_idx + 1, len(lines)), 0, end_marker))
     if not inserts:
         return False
     for pos, _kind, marker in sorted(inserts, key=lambda x: (x[0], x[1]), reverse=True):
@@ -1544,6 +1600,79 @@ def find_legacy_anchor_markers(text: str) -> list[str]:
 
 
 # === ANCHOR: ANCHOR_TOOLS_FIND_LEGACY_ANCHOR_MARKERS_END ===
+
+
+# === ANCHOR: ANCHOR_TOOLS_REPAIR_CROSSING_ANCHORS_START ===
+class RepairOutcome(TypedDict):
+    path: str
+    status: str  # repaired | skipped | unchanged
+    reason: str
+    lost_names: list[str]
+
+
+def repair_crossing_anchors(
+    root: Path, path: Path, *, dry_run: bool = False
+) -> RepairOutcome:
+    """교차 앵커가 있는 파일의 마커를 올바른 위치로 다시 놓는다.
+
+    마커를 걷어내고 고쳐진 생성기로 다시 넣는다. 이름은 파일명·심볼명에서
+    결정론적으로 나오므로 보통 그대로 복원되고, anchor_meta.json 의 intent 도
+    이름을 키로 하니 살아남는다.
+
+    **이름이 하나라도 사라지면 쓰지 않고 건너뛴다.** 사람이 직접 붙인 이름이나
+    심볼 이름이 바뀐 뒤 남은 앵커는 재생성으로 되살릴 수 없고, 그걸 잃으면
+    intent 와 보호 구역이 함께 날아간다. 그런 파일은 사람이 판단할 몫이다.
+    """
+    rel = str(path.relative_to(root)) if path.is_relative_to(root) else str(path)
+    original = safe_read_text(path)
+    if not original or not find_crossing_anchors(original):
+        return {"path": rel, "status": "unchanged", "reason": "교차 없음", "lost_names": []}
+
+    before = set(extract_anchors(path))
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        scratch = Path(tmp_dir) / path.name  # 파일명 유지 — 앵커 접두사가 여기서 나온다
+        _ = scratch.write_text(original, encoding="utf-8")
+        _ = strip_anchors(scratch)
+        _ = insert_module_anchors(scratch)
+        if scratch.suffix.lower() == ".py":
+            _ = insert_python_symbol_anchors(scratch)
+        else:
+            _ = insert_js_symbol_anchors(scratch)
+        rebuilt = safe_read_text(scratch)
+        after = set(extract_anchors(scratch))
+
+    lost = sorted(before - after)
+    if lost:
+        return {
+            "path": rel,
+            "status": "skipped",
+            "reason": "재생성하면 되살릴 수 없는 앵커 이름이 사라집니다",
+            "lost_names": lost,
+        }
+    remaining = find_crossing_anchors(rebuilt)
+    if remaining:
+        return {
+            "path": rel,
+            "status": "skipped",
+            "reason": f"재생성 후에도 교차가 남습니다 ({len(remaining)}건)",
+            "lost_names": [],
+        }
+    if rebuilt == original:
+        return {"path": rel, "status": "unchanged", "reason": "바뀔 내용 없음", "lost_names": []}
+    if not dry_run:
+        try:
+            _ = path.write_text(rebuilt, encoding="utf-8")
+        except OSError as exc:
+            return {
+                "path": rel,
+                "status": "skipped",
+                "reason": f"쓰기 실패: {exc}",
+                "lost_names": [],
+            }
+    return {"path": rel, "status": "repaired", "reason": "", "lost_names": []}
+
+
+# === ANCHOR: ANCHOR_TOOLS_REPAIR_CROSSING_ANCHORS_END ===
 
 
 # === ANCHOR: ANCHOR_TOOLS_FIND_CROSSING_ANCHORS_START ===
