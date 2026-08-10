@@ -91,6 +91,28 @@ class TestMultiplicity:
         assert validate_anchor_file(p) == []
         assert find_crossing_anchors("\n".join(lines) + "\n") == []
 
+    def test_unmatched_ends_scale_linearly(self) -> None:
+        """짝 없는 END 가 많으면 예전 구현은 매번 열린 목록을 끝까지 훑었다.
+
+        그 경로에선 교차가 안 잡혀 findings 상한도 안 걸리므로, 저장소 하나로
+        vib scan 을 멈출 수 있었다.
+        """
+        import time
+
+        def unmatched(n: int) -> str:
+            lines = [_m(f"S{i}_START") for i in range(n)]
+            lines += [_m(f"E{i}_END") for i in range(n)]
+            return "\n".join(lines) + "\n"
+
+        timings: dict[int, float] = {}
+        for n in (1000, 2000):
+            start = time.perf_counter()
+            assert find_crossing_anchors(unmatched(n)) == []
+            timings[n] = time.perf_counter() - start
+
+        ratio = timings[2000] / max(timings[1000], 1e-6)
+        assert ratio < 3.0, f"N 2배에 {ratio:.1f}배 — 2차 회귀 의심"
+
     def test_crossing_diagnostics_are_bounded(self) -> None:
         """겹친 앵커 수에 비례한 메시지가 그 수만큼 나오면 O(N^2) 이 된다.
 

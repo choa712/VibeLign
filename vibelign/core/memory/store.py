@@ -133,6 +133,13 @@ def ensure_memory_agent_fields(
     *,
     updated_by: str = "vib memory agent",
 ) -> bool:
+    # 이 함수도 load → 수정 → save 다. 잠금 밖에 두면 add_memory_* 와 겹칠 때
+    # 한쪽 갱신이 사라진다 (MCP·CLI 양쪽에서 불린다).
+    with memory_transaction(path):
+        return _ensure_memory_agent_fields_locked(path, updated_by=updated_by)
+
+
+def _ensure_memory_agent_fields_locked(path: Path, *, updated_by: str) -> bool:
     state = load_memory_state(path)
     if state.read_only:
         return False

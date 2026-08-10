@@ -2,6 +2,7 @@
 from collections.abc import Callable, Collection, Iterator
 from pathlib import Path
 import hashlib
+import heapq
 import json
 import re
 import sys
@@ -1566,32 +1567,44 @@ def find_crossing_anchors(text: str) -> list[str]:
     차단으로 승격하는 순서가 맞다 (soft → hard 승격).
     """
     problems: list[str] = []
-    open_starts: list[tuple[str, int]] = []
+    # 이름 → 아직 열려 있는 항목들의 슬롯 번호. 예전엔 END 마다 열린 목록을
+    # 역순으로 전부 훑었는데, 짝 없는 END 가 많은 파일에서 매번 끝까지 훑어
+    # O(N^2) 이 된다 (그 경로에선 교차가 안 잡혀 findings 상한도 안 걸린다).
+    open_by_name: dict[str, list[int]] = {}
+    slots: dict[int, tuple[str, int]] = {}
+    # "이 슬롯보다 뒤에 아직 열린 게 있는가" 를 O(log n) 으로 답하기 위한
+    # 최대 힙 (죽은 항목은 꺼낼 때 걸러낸다).
+    alive_max: list[int] = []
+    next_slot = 0
     for line_no, line in enumerate(text.splitlines(), 1):
         marker = _parse_anchor_marker(line)
         if marker is None:
             continue
         name, is_start = marker
         if is_start:
-            open_starts.append((name, line_no))
+            slots[next_slot] = (name, line_no)
+            open_by_name.setdefault(name, []).append(next_slot)
+            heapq.heappush(alive_max, -next_slot)
+            next_slot += 1
             continue
-        for idx in range(len(open_starts) - 1, -1, -1):
-            if open_starts[idx][0] == name:
-                # 교차 상대를 전부 나열하면 안 된다. 앵커가 N 개 겹친 파일에서
-                # 메시지 길이가 N 에 비례하고 그런 메시지가 N 개 나와 O(N^2) 이
-                # 된다 (8000 앵커 실측 2.2억 자). 진단은 몇 개만 보여도 충분하다.
-                crossing_count = len(open_starts) - idx - 1
-                if crossing_count:
-                    shown = [n for n, _ in open_starts[idx + 1 : idx + 1 + _CROSSING_SHOWN]]
-                    listed = ", ".join(shown)
-                    if crossing_count > len(shown):
-                        listed += f" 외 {crossing_count - len(shown)}개"
+        stack = open_by_name.get(name)
+        if stack:
+            idx = stack.pop()
+            del slots[idx]
+            while alive_max and -alive_max[0] not in slots:
+                _ = heapq.heappop(alive_max)
+            if alive_max and -alive_max[0] > idx:
+                later = [
+                    slots[-slot][0]
+                    for slot in sorted(alive_max)
+                    if -slot > idx and -slot in slots
+                ][:_CROSSING_SHOWN]
+                listed = ", ".join(later)
+                if listed:
                     problems.append(
-                        f"{line_no}번째 줄: {name}_END 가 {listed} 와 교차합니다 — "
+                        f"{line_no}번째 줄: {name}_END 가 {listed} 등과 교차합니다 — "
                         "앵커는 완전히 포개지거나 완전히 떨어져 있어야 합니다"
                     )
-                del open_starts[idx]
-                break
         if len(problems) >= _CROSSING_MAX_FINDINGS:
             problems.append(
                 f"교차 앵커가 {_CROSSING_MAX_FINDINGS}건을 넘어 이후는 생략합니다 — "

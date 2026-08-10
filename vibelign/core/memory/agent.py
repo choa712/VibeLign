@@ -14,7 +14,11 @@ from vibelign.core.memory.models import (
     MemoryTextField,
     MemoryVerification,
 )
-from vibelign.core.memory.store import load_memory_state, save_memory_state
+from vibelign.core.memory.store import (
+    load_memory_state,
+    memory_transaction,
+    save_memory_state,
+)
 
 
 HandoffDraftField = Literal[
@@ -136,22 +140,24 @@ def accept_handoff_draft_field(
     recommendation = _find_recommendation(draft, field)
     if recommendation is None:
         return HandoffDraftActionResult(False, "accepted", field, "", "proposal not found")
-    state = load_memory_state(memory_path)
-    accepted = _accepted_proposals(state)
-    if recommendation.proposal_hash in {item.get("proposal_hash") for item in accepted}:
-        return HandoffDraftActionResult(True, "accepted", field, recommendation.proposal_hash, "already accepted")
-    now = _utc_now()
-    updated = _apply_recommendation(state, recommendation, accepted_by=accepted_by, accepted_at=now)
-    updated = _record_proposal_action(
-        updated,
-        recommendation,
-        action="accepted",
-        actor=accepted_by,
-        acted_at=now,
-        before=_field_snapshot(state, field),
-    )
-    save_memory_state(memory_path, updated)
-    return HandoffDraftActionResult(True, "accepted", field, recommendation.proposal_hash)
+    # load → 수정 → save 라 잠금 없이는 동시 호출에서 갱신이 유실된다.
+    with memory_transaction(memory_path):
+        state = load_memory_state(memory_path)
+        accepted = _accepted_proposals(state)
+        if recommendation.proposal_hash in {item.get("proposal_hash") for item in accepted}:
+            return HandoffDraftActionResult(True, "accepted", field, recommendation.proposal_hash, "already accepted")
+        now = _utc_now()
+        updated = _apply_recommendation(state, recommendation, accepted_by=accepted_by, accepted_at=now)
+        updated = _record_proposal_action(
+            updated,
+            recommendation,
+            action="accepted",
+            actor=accepted_by,
+            acted_at=now,
+            before=_field_snapshot(state, field),
+        )
+        save_memory_state(memory_path, updated)
+        return HandoffDraftActionResult(True, "accepted", field, recommendation.proposal_hash)
 
 
 def dismiss_handoff_draft_field(
@@ -164,17 +170,19 @@ def dismiss_handoff_draft_field(
     recommendation = _find_recommendation(draft, field)
     if recommendation is None:
         return HandoffDraftActionResult(False, "dismissed", field, "", "proposal not found")
-    state = load_memory_state(memory_path)
-    updated = _record_proposal_action(
-        state,
-        recommendation,
-        action="dismissed",
-        actor=dismissed_by,
-        acted_at=_utc_now(),
-        before=None,
-    )
-    save_memory_state(memory_path, updated)
-    return HandoffDraftActionResult(True, "dismissed", field, recommendation.proposal_hash)
+    # load → 수정 → save 라 잠금 없이는 동시 호출에서 갱신이 유실된다.
+    with memory_transaction(memory_path):
+        state = load_memory_state(memory_path)
+        updated = _record_proposal_action(
+            state,
+            recommendation,
+            action="dismissed",
+            actor=dismissed_by,
+            acted_at=_utc_now(),
+            before=None,
+        )
+        save_memory_state(memory_path, updated)
+        return HandoffDraftActionResult(True, "dismissed", field, recommendation.proposal_hash)
 
 
 def undo_recent_handoff_acceptance(
@@ -183,21 +191,23 @@ def undo_recent_handoff_acceptance(
     *,
     undone_by: str = "vib memory agent",
 ) -> HandoffDraftActionResult:
-    state = load_memory_state(memory_path)
-    accepted = _accepted_proposals(state)
-    target = next((item for item in accepted if item.get("proposal_hash") == proposal_hash), None)
-    if target is None:
-        return HandoffDraftActionResult(False, "undone", "session_summary", proposal_hash, "accepted proposal not found")
-    field = cast(HandoffDraftField, str(target.get("field") or "session_summary"))
-    restored = _restore_field_snapshot(state, field, target.get("before"))
-    remaining = [item for item in accepted if item.get("proposal_hash") != proposal_hash]
-    unknown = dict(restored.unknown_fields)
-    unknown["recently_accepted_proposals"] = remaining
-    history = _proposal_history(restored)
-    history.append({"proposal_hash": proposal_hash, "field": field, "action": "undone", "actor": _safe_label(undone_by), "acted_at": _utc_now()})
-    unknown["handoff_proposal_history"] = history
-    save_memory_state(memory_path, replace(restored, unknown_fields=unknown))
-    return HandoffDraftActionResult(True, "undone", field, proposal_hash)
+    # load → 수정 → save 라 잠금 없이는 동시 호출에서 갱신이 유실된다.
+    with memory_transaction(memory_path):
+        state = load_memory_state(memory_path)
+        accepted = _accepted_proposals(state)
+        target = next((item for item in accepted if item.get("proposal_hash") == proposal_hash), None)
+        if target is None:
+            return HandoffDraftActionResult(False, "undone", "session_summary", proposal_hash, "accepted proposal not found")
+        field = cast(HandoffDraftField, str(target.get("field") or "session_summary"))
+        restored = _restore_field_snapshot(state, field, target.get("before"))
+        remaining = [item for item in accepted if item.get("proposal_hash") != proposal_hash]
+        unknown = dict(restored.unknown_fields)
+        unknown["recently_accepted_proposals"] = remaining
+        history = _proposal_history(restored)
+        history.append({"proposal_hash": proposal_hash, "field": field, "action": "undone", "actor": _safe_label(undone_by), "acted_at": _utc_now()})
+        unknown["handoff_proposal_history"] = history
+        save_memory_state(memory_path, replace(restored, unknown_fields=unknown))
+        return HandoffDraftActionResult(True, "undone", field, proposal_hash)
 
 
 def _recommendations(
