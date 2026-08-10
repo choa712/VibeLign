@@ -9,9 +9,9 @@ from typing import Protocol, cast
 # === ANCHOR: MCP_TRANSFER_HANDLERS_TEXTCONTENTFACTORY_START ===
 class TextContentFactory(Protocol):
     # === ANCHOR: MCP_TRANSFER_HANDLERS___CALL___START ===
-# === ANCHOR: MCP_TRANSFER_HANDLERS_TEXTCONTENTFACTORY_END ===
     def __call__(self, *, type: str, text: str) -> object: ...
     # === ANCHOR: MCP_TRANSFER_HANDLERS___CALL___END ===
+# === ANCHOR: MCP_TRANSFER_HANDLERS_TEXTCONTENTFACTORY_END ===
 
 
 # === ANCHOR: MCP_TRANSFER_HANDLERS__TEXT_START ===
@@ -20,12 +20,14 @@ def _text(factory: TextContentFactory, text: str) -> list[object]:
 # === ANCHOR: MCP_TRANSFER_HANDLERS__TEXT_END ===
 
 
+# === ANCHOR: MCP_TRANSFER_HANDLERS__STRING_LIST_START ===
 def _string_list(value: object) -> list[str]:
     if isinstance(value, str) and value:
         return [value]
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, str) and item]
+# === ANCHOR: MCP_TRANSFER_HANDLERS__STRING_LIST_END ===
 
 
 # === ANCHOR: MCP_TRANSFER_HANDLERS_HANDLE_HANDOFF_CREATE_START ===
@@ -33,7 +35,6 @@ def handle_handoff_create(
     root: Path,
     arguments: dict[str, object],
     text_content: TextContentFactory,
-# === ANCHOR: MCP_TRANSFER_HANDLERS_HANDLE_HANDOFF_CREATE_END ===
 ) -> list[object]:
     from vibelign.commands.vib_transfer_cmd import (
         HandoffData,
@@ -149,6 +150,7 @@ def handle_handoff_create(
         + f"  파일: {ctx_path}\n"
         + "  새 AI에게 PROJECT_CONTEXT.md 상단의 Session Handoff 블록을 읽혀주세요.",
     )
+# === ANCHOR: MCP_TRANSFER_HANDLERS_HANDLE_HANDOFF_CREATE_END ===
 
 
 # === ANCHOR: MCP_TRANSFER_HANDLERS_HANDLE_PROJECT_CONTEXT_GET_START ===
@@ -156,7 +158,6 @@ def handle_project_context_get(
     root: Path,
     arguments: dict[str, object],
     text_content: TextContentFactory,
-# === ANCHOR: MCP_TRANSFER_HANDLERS_HANDLE_PROJECT_CONTEXT_GET_END ===
 ) -> list[object]:
     from vibelign.commands.vib_transfer_cmd import build_context_content
 
@@ -170,6 +171,7 @@ def handle_project_context_get(
         content = build_context_content(root, compact=compact, full=full)
 
     return _text(text_content, content)
+# === ANCHOR: MCP_TRANSFER_HANDLERS_HANDLE_PROJECT_CONTEXT_GET_END ===
 
 
 # === ANCHOR: MCP_TRANSFER_HANDLERS_HANDLE_TRANSFER_SET_DECISION_START ===

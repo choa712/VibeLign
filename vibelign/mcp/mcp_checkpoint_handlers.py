@@ -9,9 +9,9 @@ from typing import Protocol, cast
 # === ANCHOR: MCP_CHECKPOINT_HANDLERS_TEXTCONTENTFACTORY_START ===
 class TextContentFactory(Protocol):
     # === ANCHOR: MCP_CHECKPOINT_HANDLERS___CALL___START ===
-# === ANCHOR: MCP_CHECKPOINT_HANDLERS_TEXTCONTENTFACTORY_END ===
     def __call__(self, *, type: str, text: str) -> object: ...
     # === ANCHOR: MCP_CHECKPOINT_HANDLERS___CALL___END ===
+# === ANCHOR: MCP_CHECKPOINT_HANDLERS_TEXTCONTENTFACTORY_END ===
 
 
 # === ANCHOR: MCP_CHECKPOINT_HANDLERS__TEXT_START ===
@@ -20,14 +20,18 @@ def _text(factory: TextContentFactory, text: str) -> list[object]:
 # === ANCHOR: MCP_CHECKPOINT_HANDLERS__TEXT_END ===
 
 
+# === ANCHOR: MCP_CHECKPOINT_HANDLERS__JSON_TEXT_START ===
 def _json_text(factory: TextContentFactory, payload: dict[str, object]) -> list[object]:
     return _text(factory, json.dumps(payload, ensure_ascii=False, sort_keys=True))
+# === ANCHOR: MCP_CHECKPOINT_HANDLERS__JSON_TEXT_END ===
 
 
+# === ANCHOR: MCP_CHECKPOINT_HANDLERS__STRING_LIST_START ===
 def _string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in cast(list[object], value) if str(item)]
+# === ANCHOR: MCP_CHECKPOINT_HANDLERS__STRING_LIST_END ===
 
 
 # === ANCHOR: MCP_CHECKPOINT_HANDLERS_HANDLE_CHECKPOINT_CREATE_START ===
@@ -35,7 +39,6 @@ def handle_checkpoint_create(
     root: Path,
     arguments: dict[str, object],
     text_content: TextContentFactory,
-# === ANCHOR: MCP_CHECKPOINT_HANDLERS_HANDLE_CHECKPOINT_CREATE_END ===
 ) -> list[object]:
     from vibelign.core.checkpoint_engine.router import create_checkpoint, friendly_time
     from vibelign.core.memory.audit import (
@@ -74,8 +77,10 @@ def handle_checkpoint_create(
             f"  메시지: {summary.message}"
         )
     return _text(text_content, text)
+# === ANCHOR: MCP_CHECKPOINT_HANDLERS_HANDLE_CHECKPOINT_CREATE_END ===
 
 
+# === ANCHOR: MCP_CHECKPOINT_HANDLERS_HANDLE_CHECKPOINT_DIFF_START ===
 def handle_checkpoint_diff(
     root: Path,
     arguments: dict[str, object],
@@ -94,8 +99,10 @@ def handle_checkpoint_diff(
         text_content,
         {"ok": True, "diff": diff_checkpoints(root, from_id, to_id)},
     )
+# === ANCHOR: MCP_CHECKPOINT_HANDLERS_HANDLE_CHECKPOINT_DIFF_END ===
 
 
+# === ANCHOR: MCP_CHECKPOINT_HANDLERS_HANDLE_CHECKPOINT_PREVIEW_RESTORE_START ===
 def handle_checkpoint_preview_restore(
     root: Path,
     arguments: dict[str, object],
@@ -109,8 +116,10 @@ def handle_checkpoint_preview_restore(
     relative_paths = _string_list(arguments.get("relative_paths"))
     preview = preview_restore(root, checkpoint_id, relative_paths or None)
     return _json_text(text_content, {"ok": True, "preview": preview})
+# === ANCHOR: MCP_CHECKPOINT_HANDLERS_HANDLE_CHECKPOINT_PREVIEW_RESTORE_END ===
 
 
+# === ANCHOR: MCP_CHECKPOINT_HANDLERS_HANDLE_CHECKPOINT_RESTORE_FILES_START ===
 def handle_checkpoint_restore_files(
     root: Path,
     arguments: dict[str, object],
@@ -127,8 +136,10 @@ def handle_checkpoint_restore_files(
         )
     restored_count = restore_files(root, checkpoint_id, relative_paths)
     return _json_text(text_content, {"ok": True, "restored_count": restored_count})
+# === ANCHOR: MCP_CHECKPOINT_HANDLERS_HANDLE_CHECKPOINT_RESTORE_FILES_END ===
 
 
+# === ANCHOR: MCP_CHECKPOINT_HANDLERS_HANDLE_CHECKPOINT_RESTORE_SUGGESTIONS_START ===
 def handle_checkpoint_restore_suggestions(
     root: Path,
     arguments: dict[str, object],
@@ -143,8 +154,10 @@ def handle_checkpoint_restore_suggestions(
     cap = cap_value if isinstance(cap_value, int) else 5
     suggestions = restore_suggestions(root, checkpoint_id, cap)
     return _json_text(text_content, {"ok": True, **suggestions})
+# === ANCHOR: MCP_CHECKPOINT_HANDLERS_HANDLE_CHECKPOINT_RESTORE_SUGGESTIONS_END ===
 
 
+# === ANCHOR: MCP_CHECKPOINT_HANDLERS_HANDLE_CHECKPOINT_HAS_CHANGES_START ===
 def handle_checkpoint_has_changes(
     root: Path,
     arguments: dict[str, object],
@@ -159,8 +172,10 @@ def handle_checkpoint_has_changes(
         text_content,
         {"ok": True, "has_changes": has_changes_since_checkpoint(root, checkpoint_id)},
     )
+# === ANCHOR: MCP_CHECKPOINT_HANDLERS_HANDLE_CHECKPOINT_HAS_CHANGES_END ===
 
 
+# === ANCHOR: MCP_CHECKPOINT_HANDLERS_HANDLE_RETENTION_APPLY_START ===
 def handle_retention_apply(
     root: Path,
     arguments: dict[str, object],
@@ -170,12 +185,12 @@ def handle_retention_apply(
 
     _ = arguments
     return _json_text(text_content, {"ok": True, "cleanup": apply_retention(root)})
+# === ANCHOR: MCP_CHECKPOINT_HANDLERS_HANDLE_RETENTION_APPLY_END ===
 
 
 # === ANCHOR: MCP_CHECKPOINT_HANDLERS_HANDLE_CHECKPOINT_LIST_START ===
 def handle_checkpoint_list(
     root: Path, text_content: TextContentFactory
-# === ANCHOR: MCP_CHECKPOINT_HANDLERS_HANDLE_CHECKPOINT_LIST_END ===
 ) -> list[object]:
     from vibelign.core.checkpoint_engine.router import friendly_time, list_checkpoints
 
@@ -191,6 +206,7 @@ def handle_checkpoint_list(
             + f"{checkpoint.message}{pin}"
         )
     return _text(text_content, "\n".join(lines))
+# === ANCHOR: MCP_CHECKPOINT_HANDLERS_HANDLE_CHECKPOINT_LIST_END ===
 
 
 # === ANCHOR: MCP_CHECKPOINT_HANDLERS_HANDLE_CHECKPOINT_RESTORE_START ===
@@ -198,7 +214,6 @@ def handle_checkpoint_restore(
     root: Path,
     arguments: dict[str, object],
     text_content: TextContentFactory,
-# === ANCHOR: MCP_CHECKPOINT_HANDLERS_HANDLE_CHECKPOINT_RESTORE_END ===
 ) -> list[object]:
     from vibelign.core.checkpoint_engine.router import (
         get_last_restore_error,
@@ -215,4 +230,5 @@ def handle_checkpoint_restore(
         else f"오류: {get_last_restore_error()}"
     )
     return _text(text_content, text)
+# === ANCHOR: MCP_CHECKPOINT_HANDLERS_HANDLE_CHECKPOINT_RESTORE_END ===
 # === ANCHOR: MCP_CHECKPOINT_HANDLERS_END ===

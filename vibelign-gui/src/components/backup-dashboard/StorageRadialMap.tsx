@@ -45,11 +45,13 @@ export default function StorageRadialMap({ entries, root, sizeScale = 1 }: Stora
     const built = root ? graphNodeToFileTree(root) : buildFileTree(entries);
     if (sizeScale === 1 || !(sizeScale > 0)) return built;
     // 균일 배율이라 부채꼴 비율(스윕)은 그대로 유지되고 표시 바이트만 환산된다.
+    // === ANCHOR: STORAGERADIALMAP_SCALE_START ===
     const scale = (node: FileTreeNode): FileTreeNode => ({
       ...node,
       sizeBytes: Math.round(node.sizeBytes * sizeScale),
       children: new Map([...node.children].map(([key, child]) => [key, scale(child)])),
     });
+    // === ANCHOR: STORAGERADIALMAP_SCALE_END ===
     return scale(built);
   }, [entries, root, sizeScale]);
   const activeNode = findNodeByPath(tree, activePath) ?? tree;
@@ -209,6 +211,7 @@ function buildFileTree(entries: BackupEntry[]): FileTreeNode {
 }
 // === ANCHOR: STORAGERADIALMAP_BUILDFILETREE_END ===
 
+// === ANCHOR: STORAGERADIALMAP_GRAPHNODETOFILETREE_START ===
 function graphNodeToFileTree(node: BackupGraphNode): FileTreeNode {
   const treeNode = createNode(node.id || node.path || "root", node.name || "백업", node.path || "");
   treeNode.sizeBytes = Math.max(0, node.sizeBytes);
@@ -218,6 +221,7 @@ function graphNodeToFileTree(node: BackupGraphNode): FileTreeNode {
   }
   return treeNode;
 }
+// === ANCHOR: STORAGERADIALMAP_GRAPHNODETOFILETREE_END ===
 
 // === ANCHOR: STORAGERADIALMAP_CREATENODE_START ===
 function createNode(id: string, name: string, path: string): FileTreeNode {
@@ -275,9 +279,9 @@ function appendChildSegments(
     }
     // === ANCHOR: STORAGERADIALMAP_SWEEP_END ===
     appendChildSegments(segments, child, childStart, childEnd, depth + 1, child.sizeBytes, colorOffset + index + 1);
-// === ANCHOR: STORAGERADIALMAP_APPENDCHILDSEGMENTS_END ===
   });
 }
+// === ANCHOR: STORAGERADIALMAP_APPENDCHILDSEGMENTS_END ===
 
 // === ANCHOR: STORAGERADIALMAP_SORTEDCHILDREN_START ===
 function sortedChildren(node: FileTreeNode): FileTreeNode[] {
@@ -349,9 +353,9 @@ function polarToCartesian(cx: number, cy: number, radius: number, angleInDegrees
     x: cx + radius * Math.cos(angleInRadians),
     y: cy + radius * Math.sin(angleInRadians),
   };
-// === ANCHOR: STORAGERADIALMAP_POLARTOCARTESIAN_END ===
   // === ANCHOR: STORAGERADIALMAP_ANGLEINRADIANS_END ===
 }
+// === ANCHOR: STORAGERADIALMAP_POLARTOCARTESIAN_END ===
 
 const mapShellStyle = {
   border: "2px solid #1A1A1A",

@@ -8,9 +8,9 @@ from typing import Protocol, cast
 # === ANCHOR: MCP_PROTECT_HANDLERS_TEXTCONTENTFACTORY_START ===
 class TextContentFactory(Protocol):
     # === ANCHOR: MCP_PROTECT_HANDLERS___CALL___START ===
-# === ANCHOR: MCP_PROTECT_HANDLERS_TEXTCONTENTFACTORY_END ===
     def __call__(self, *, type: str, text: str) -> object: ...
     # === ANCHOR: MCP_PROTECT_HANDLERS___CALL___END ===
+# === ANCHOR: MCP_PROTECT_HANDLERS_TEXTCONTENTFACTORY_END ===
 
 
 # === ANCHOR: MCP_PROTECT_HANDLERS__TEXT_START ===
@@ -24,7 +24,6 @@ def handle_protect_add(
     root: Path,
     arguments: dict[str, object],
     text_content: TextContentFactory,
-# === ANCHOR: MCP_PROTECT_HANDLERS_HANDLE_PROTECT_ADD_END ===
 ) -> list[object]:
     from vibelign.core.protected_files import get_protected, save_protected
 
@@ -43,4 +42,5 @@ def handle_protect_add(
     lines = [f"✓ {len(new_paths)}개 파일을 보호 목록에 추가했습니다."]
     lines.extend(f"  - {path}" for path in new_paths)
     return _text(text_content, "\n".join(lines))
+# === ANCHOR: MCP_PROTECT_HANDLERS_HANDLE_PROTECT_ADD_END ===
 # === ANCHOR: MCP_PROTECT_HANDLERS_END ===

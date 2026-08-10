@@ -19,10 +19,10 @@ else:
     # === ANCHOR: CLI_BASE_SUPPORTSWRITE_START ===
     class SupportsWrite(Protocol[_WriteT]):
         # === ANCHOR: CLI_BASE_WRITE_START ===
-        # === ANCHOR: CLI_BASE_SUPPORTSWRITE_END ===
         def write(self, s: _WriteT) -> object: ...
-
         # === ANCHOR: CLI_BASE_WRITE_END ===
+    # === ANCHOR: CLI_BASE_SUPPORTSWRITE_END ===
+
 
 
 # === ANCHOR: CLI_BASE_RICHARGUMENTPARSER_START ===
@@ -43,7 +43,6 @@ class RichArgumentParser(argparse.ArgumentParser):
         add_help: bool = True,
         allow_abbrev: bool = True,
         exit_on_error: bool = True,
-        # === ANCHOR: CLI_BASE___INIT___END ===
     ) -> None:
         super().__init__(
             prog=prog,
@@ -60,6 +59,7 @@ class RichArgumentParser(argparse.ArgumentParser):
             allow_abbrev=allow_abbrev,
             exit_on_error=exit_on_error,
         )
+    # === ANCHOR: CLI_BASE___INIT___END ===
 
     @override
     # === ANCHOR: CLI_BASE__PRINT_MESSAGE_START ===
@@ -67,15 +67,15 @@ class RichArgumentParser(argparse.ArgumentParser):
         self,
         message: str | None,
         file: SupportsWrite[str] | None = None,
-        # === ANCHOR: CLI_BASE__PRINT_MESSAGE_END ===
     ) -> None:
         if not message:
             return
-        # === ANCHOR: CLI_BASE_RICHARGUMENTPARSER_END ===
         if file not in (None, sys.stdout):
             _ = file.write(message)
             return
         print_cli_help(str(message))
+    # === ANCHOR: CLI_BASE__PRINT_MESSAGE_END ===
+# === ANCHOR: CLI_BASE_RICHARGUMENTPARSER_END ===
 
 
 MAIN_DESCRIPTION = """\
@@ -148,11 +148,9 @@ def lazy_command(module_name: str, func_name: str) -> Callable[[object], object]
         module = importlib.import_module(module_name)
         func = cast(Callable[[object], object], getattr(module, func_name))
         return func(args)
-
     # === ANCHOR: CLI_BASE_RUNNER_END ===
-    # === ANCHOR: CLI_BASE_LAZY_COMMAND_END ===
+
 
     return runner
-
-
+# === ANCHOR: CLI_BASE_LAZY_COMMAND_END ===
 # === ANCHOR: CLI_BASE_END ===

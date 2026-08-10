@@ -373,11 +373,8 @@ function manualEntryToTopic(id: string, entry: ManualEntry): HelpTopic | null {
   // === ANCHOR: HELPDATA_ONELINE_START ===
   const oneLine = (entry.one_line ?? "").trim();
   if (!title && !what && !oneLine) return null;
-  // === ANCHOR: HELPDATA_TITLE_END ===
 
-  // === ANCHOR: HELPDATA_WHAT_END ===
   const summary = oneLine || firstLine(what) || `vib ${id} 설명`;
-  // === ANCHOR: HELPDATA_ONELINE_END ===
   const answerParts = [oneLine || title, what]
     .map((part) => part?.trim())
     .filter((part): part is string => Boolean(part));
@@ -385,6 +382,9 @@ function manualEntryToTopic(id: string, entry: ManualEntry): HelpTopic | null {
   if (entry.when?.length) {
     answerParts.push(`언제 써요: ${entry.when.slice(0, 3).join(" / ")}`);
   }
+  // === ANCHOR: HELPDATA_ONELINE_END ===
+  // === ANCHOR: HELPDATA_WHAT_END ===
+  // === ANCHOR: HELPDATA_TITLE_END ===
   if (entry.examples?.length) {
     answerParts.push(
       `예시: ${entry.examples
@@ -407,13 +407,13 @@ function manualEntryToTopic(id: string, entry: ManualEntry): HelpTopic | null {
 
   return {
     id,
-// === ANCHOR: HELPDATA_MANUALENTRYTOTOPIC_END ===
     title: title || id,
     command: commandLabel(id),
     summary,
     answer: answerParts.join("\n\n"),
   };
 }
+// === ANCHOR: HELPDATA_MANUALENTRYTOTOPIC_END ===
 
 // === ANCHOR: HELPDATA_BUILDTOPICSFROMMANUAL_START ===
 function buildTopicsFromManual(manual: ManualRecord): HelpTopic[] {
@@ -670,9 +670,9 @@ function getStrongLocalAnswer(question: string, topics: HelpTopic[]): string | n
   }
   // === ANCHOR: HELPDATA_STRONGNAMEHIT_END ===
 
-// === ANCHOR: HELPDATA_GETSTRONGLOCALANSWER_END ===
   return null;
 }
+// === ANCHOR: HELPDATA_GETSTRONGLOCALANSWER_END ===
 
 type GeminiCandidate = { content?: { parts?: Array<{ text?: string }> } };
 type GeminiResponse = { candidates?: GeminiCandidate[] };
@@ -728,9 +728,9 @@ async function answerWithGemini(question: string, providerKey: string, topics: H
     return null;
   } finally {
     clearTimeout(timeout);
-// === ANCHOR: HELPDATA_ANSWERWITHGEMINI_END ===
   }
 }
+// === ANCHOR: HELPDATA_ANSWERWITHGEMINI_END ===
 
 // === ANCHOR: HELPDATA_RESOLVEHELPANSWER_START ===
 export async function resolveHelpAnswer(
