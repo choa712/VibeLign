@@ -1587,6 +1587,11 @@ def validate_anchor_file(path: Path) -> list[str]:
         problems.append("앵커가 없습니다")
     problems.extend(find_legacy_anchor_markers(text))
     problems.extend(find_malformed_anchor_markers(text))
+    # 교차는 이제 차단 사유다. 생성기가 스스로 만들어내던 동안에는 경고로만
+    # 뒀다 — 차단하면 `vib anchor --auto` 를 돌린 모든 프로젝트가 깨졌다.
+    # 원인 3종을 고치고 `vib anchor --repair` 로 기존 파일을 정리해 이 리포의
+    # 39건이 0이 된 뒤에야 올린다 (issue #7).
+    problems.extend(find_crossing_anchors(text))
     return problems
 
 

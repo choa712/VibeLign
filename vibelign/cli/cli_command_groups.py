@@ -205,11 +205,6 @@ def register_extended_commands(
     )
     _ = p.add_argument("--validate", action="store_true", help="앵커 검증")
     _ = p.add_argument(
-        "--strict",
-        action="store_true",
-        help="--validate 와 함께: 교차 앵커 경고도 실패로 처리",
-    )
-    _ = p.add_argument(
         "--repair",
         action="store_true",
         help="교차 앵커가 있는 파일의 마커를 올바른 위치로 다시 놓기 (--dry-run 권장)",
