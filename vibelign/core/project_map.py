@@ -50,8 +50,8 @@ class ProjectMapSnapshot:
             if category == "core":
                 return "logic"
         return None
-
     # === ANCHOR: PROJECT_MAP_CLASSIFY_PATH_END ===
+
 
     # === ANCHOR: PROJECT_MAP_ANCHOR_PRIORITY_START ===
     def anchor_priority(self, rel_path: str) -> int:
@@ -64,12 +64,12 @@ class ProjectMapSnapshot:
             score += 3
         if rel_path in self.service_modules:
             score += 2
-        # === ANCHOR: PROJECT_MAP_PROJECTMAPSNAPSHOT_END ===
         if rel_path in self.core_modules:
             score += 2
         return score
-
     # === ANCHOR: PROJECT_MAP_ANCHOR_PRIORITY_END ===
+# === ANCHOR: PROJECT_MAP_PROJECTMAPSNAPSHOT_END ===
+
 
 
 # === ANCHOR: PROJECT_MAP_LOAD_PROJECT_MAP_START ===
@@ -100,8 +100,8 @@ def load_project_map(root: Path) -> tuple[ProjectMapSnapshot | None, str | None]
         return frozenset(
             str(item) for item in cast(list[object], raw) if isinstance(item, str)
         )
-
     # === ANCHOR: PROJECT_MAP__VALUES_END ===
+
 
     file_count = payload.get("file_count", 0)
     raw_anchor_index = payload.get("anchor_index", {})
@@ -176,9 +176,9 @@ def load_project_map(root: Path) -> tuple[ProjectMapSnapshot | None, str | None]
             tree=tree,
             files=files,
         ),
-        # === ANCHOR: PROJECT_MAP_LOAD_PROJECT_MAP_END ===
         None,
     )
+# === ANCHOR: PROJECT_MAP_LOAD_PROJECT_MAP_END ===
 
 
 # === ANCHOR: PROJECT_MAP_ENRICH_CHANGE_KIND_START ===
@@ -186,13 +186,11 @@ def enrich_change_kind(
     snapshot: ProjectMapSnapshot | None,
     rel_path: str,
     fallback_kind: str,
-    # === ANCHOR: PROJECT_MAP_ENRICH_CHANGE_KIND_END ===
 ) -> str:
     if fallback_kind == "command":
         return fallback_kind
     if snapshot is None:
         return fallback_kind
     return snapshot.classify_path(rel_path) or fallback_kind
-
-
+# === ANCHOR: PROJECT_MAP_ENRICH_CHANGE_KIND_END ===
 # === ANCHOR: PROJECT_MAP_END ===

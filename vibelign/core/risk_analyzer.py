@@ -78,9 +78,9 @@ class RiskReport:
 
     # === ANCHOR: RISK_ANALYZER_TO_DICT_START ===
     def to_dict(self) -> dict[str, object]:
-# === ANCHOR: RISK_ANALYZER_RISKREPORT_END ===
         return asdict(self)
     # === ANCHOR: RISK_ANALYZER_TO_DICT_END ===
+# === ANCHOR: RISK_ANALYZER_RISKREPORT_END ===
 
 
 # === ANCHOR: RISK_ANALYZER_COUNT_MATCHES_START ===
@@ -114,7 +114,6 @@ def add_issue(
     category: str,
     severity: str,
     check_type: str,
-# === ANCHOR: RISK_ANALYZER_ADD_ISSUE_END ===
 ) -> None:
     report.issues.append(
         {
@@ -128,6 +127,7 @@ def add_issue(
     )
     report.suggestions.append(suggestion)
     report.score += score
+# === ANCHOR: RISK_ANALYZER_ADD_ISSUE_END ===
 
 
 # === ANCHOR: RISK_ANALYZER_ANALYZE_PROJECT_START ===

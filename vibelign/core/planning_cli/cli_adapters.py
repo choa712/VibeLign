@@ -54,9 +54,9 @@ class PlanningCliRunner(Protocol):
         cwd: Path,
         input_text: str,
         timeout_seconds: int,
-# === ANCHOR: CLI_ADAPTERS_PLANNINGCLIRUNNER_END ===
-    # === ANCHOR: CLI_ADAPTERS_RUN_END ===
     ) -> PlanningCliResult: ...
+    # === ANCHOR: CLI_ADAPTERS_RUN_END ===
+# === ANCHOR: CLI_ADAPTERS_PLANNINGCLIRUNNER_END ===
 
 
 # === ANCHOR: CLI_ADAPTERS_SUBPROCESSPLANNINGCLIRUNNER_START ===
@@ -69,7 +69,6 @@ class SubprocessPlanningCliRunner:
         cwd: Path,
         input_text: str,
         timeout_seconds: int,
-    # === ANCHOR: CLI_ADAPTERS_RUN_END ===
     ) -> PlanningCliResult:
         started = time.monotonic()
         try:
@@ -112,9 +111,10 @@ class SubprocessPlanningCliRunner:
             stdout=completed.stdout,
             stderr=completed.stderr,
             exit_code=completed.returncode,
-# === ANCHOR: CLI_ADAPTERS_SUBPROCESSPLANNINGCLIRUNNER_END ===
             duration_ms=_duration_ms(started),
         )
+    # === ANCHOR: CLI_ADAPTERS_RUN_END ===
+# === ANCHOR: CLI_ADAPTERS_SUBPROCESSPLANNINGCLIRUNNER_END ===
 
 
 # === ANCHOR: CLI_ADAPTERS__DURATION_MS_START ===

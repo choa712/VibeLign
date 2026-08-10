@@ -126,37 +126,66 @@ def _unindexed_source_files(
     return sorted(found, key=lambda item: item[1])
 
 
-def _crossing_warnings(path: Path) -> list[str]:
-    text = safe_read_text(path)
-    if not text:
-        return []
-    return anchor_tools_mod.find_crossing_anchors(text)
-
-
-def _print_crossing_warnings(
-    warnings: list[str], limit: int = 10, *, strict: bool = False
+def _run_crossing_repair(
+    root: Path, allowed_exts: set[str] | None, *, dry_run: bool, json_mode: bool
 ) -> None:
-    """교차 앵커를 알린다. 기본은 경고, --strict 에서는 실패.
+    """교차 앵커가 있는 파일의 마커를 다시 놓는다.
 
-    수가 많을 수 있어 앞부분만 보여주고 나머지는 개수로 줄인다.
+    마커 위치를 옮기는 것은 코드 변경이므로 무엇이 바뀌는지 먼저 보여준다.
+    되살릴 수 없는 이름이 사라지는 파일은 건너뛰고 이유를 밝힌다 — 사람이
+    붙인 앵커나 심볼명이 바뀐 뒤 남은 앵커는 재생성으로 복원되지 않는다.
     """
-    if not warnings:
-        return
-    print("")
-    if strict:
-        print(f"🛑 교차 앵커 {len(warnings)}건 (--strict: 실패로 처리):")
-    else:
+    outcomes: list[anchor_tools_mod.RepairOutcome] = []
+    for path in iter_source_files(root):
+        if allowed_exts is not None and path.suffix.lower() not in allowed_exts:
+            continue
+        outcome = anchor_tools_mod.repair_crossing_anchors(root, path, dry_run=dry_run)
+        if outcome["status"] != "unchanged":
+            outcomes.append(outcome)
+
+    repaired = [o for o in outcomes if o["status"] == "repaired"]
+    skipped = [o for o in outcomes if o["status"] == "skipped"]
+    if json_mode:
         print(
-            f"⚠️  교차 앵커 {len(warnings)}건 "
-            "(검증 실패는 아닙니다 — --strict 로 올릴 수 있습니다):"
+            json.dumps(
+                {
+                    "ok": True,
+                    "error": None,
+                    "data": {
+                        "dry_run": dry_run,
+                        "repaired": [o["path"] for o in repaired],
+                        "skipped": skipped,
+                    },
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
         )
-    for item in warnings[:limit]:
-        print(f"- {item}")
-    if len(warnings) > limit:
-        print(f"- … 외 {len(warnings) - limit}건")
-    print("  한쪽 블록이 다른 앵커의 여는 마커만 품어, 그 블록을 고치면")
-    print("  상대 앵커의 경계가 깨집니다. 대부분 `vib anchor --auto` 가")
-    print("  여러 줄 시그니처에서 END 를 잘못 넣어 생깁니다.")
+        return
+
+    label = "[dry-run] 고칠 수 있는 파일" if dry_run else "마커 위치 수정 완료"
+    if repaired:
+        print(f"{label}: {len(repaired)}개")
+        for item in repaired:
+            print(f"- {item['path']}")
+    else:
+        print("교차 앵커가 있는 파일이 없거나, 자동으로 고칠 수 있는 파일이 없습니다.")
+    if skipped:
+        print("")
+        print(f"건너뛴 파일 {len(skipped)}개 (사람이 판단해야 합니다):")
+        for item in skipped:
+            print(f"- {item['path']}: {item['reason']}")
+            if item["lost_names"]:
+                names = ", ".join(item["lost_names"][:5])
+                more = (
+                    f" 외 {len(item['lost_names']) - 5}개"
+                    if len(item["lost_names"]) > 5
+                    else ""
+                )
+                print(f"    사라질 이름: {names}{more}")
+    if dry_run:
+        print("")
+        print("실제로 바꾸려면 --dry-run 없이 다시 실행하세요.")
 
 
 def _marker_format_problems(path: Path) -> list[str]:
@@ -488,16 +517,17 @@ def run_vib_anchor(args: object) -> None:
             print(line)
         return
 
+    if bool(getattr(args, "repair", False)):
+        _run_crossing_repair(root, allowed_exts, dry_run=dry_run, json_mode=json_mode)
+        return
+
     if validate:
         index = _write_anchor_index(root, meta, allowed_exts)
         problems: list[str] = []
-        warnings: list[str] = []
         for rel in sorted(index):
             path = root / rel
             for problem in _validate_anchor_file(path):
                 problems.append(f"{rel}: {problem}")
-            for warning in _crossing_warnings(path):
-                warnings.append(f"{rel}: {warning}")
         # 인덱스는 "정본 앵커가 있는 파일"만 담는다. 인덱스만 돌면 구 형식·훼손
         # 마커만 가진 파일은 아예 순회되지 않아, 보호가 0인 프로젝트가 조용히
         # validation passed 를 받는다. 앵커가 없는 파일도 훑되 "앵커가 없습니다"
@@ -506,22 +536,14 @@ def run_vib_anchor(args: object) -> None:
         for path, rel in _unindexed_source_files(root, index, allowed_exts):
             for problem in _marker_format_problems(path):
                 problems.append(f"{rel}: {problem}")
-        # 교차 앵커는 기본값에서 경고다. `vib anchor --auto` 가 여러 줄
-        # 시그니처에서 스스로 만들어내므로(이 리포만 175개 파일) 차단으로
-        # 두면 --auto 를 돌린 모든 프로젝트가 깨진다. 원인은 별도 이슈이고,
-        # 지금 막고 싶은 사람은 --strict 로 올릴 수 있다.
-        strict = bool(getattr(args, "strict", False))
-        blocking = problems + (warnings if strict else [])
         if json_mode:
             print(
                 json.dumps(
                     {
-                        "ok": not blocking,
+                        "ok": not problems,
                         "error": None,
                         "data": {
                             "problems": problems,
-                            "warnings": warnings,
-                            "strict": strict,
                             "anchor_index": index,
                         },
                     },
@@ -529,18 +551,15 @@ def run_vib_anchor(args: object) -> None:
                     ensure_ascii=False,
                 )
             )
-            if blocking:
+            if problems:
                 raise SystemExit(1)
             return
         if problems:
             print("Anchor validation problems:")
             for item in problems:
                 print(f"- {item}")
-        elif not blocking:
-            print("Anchor validation passed.")
-        _print_crossing_warnings(warnings, strict=strict)
-        if blocking:
             raise SystemExit(1)
+        print("Anchor validation passed.")
         print(f"Anchor index saved: {meta.anchor_index_path.relative_to(root)}")
         return
 

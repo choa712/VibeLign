@@ -21,9 +21,9 @@ class SubparserFactory(Protocol):
         description: str | None = None,
         epilog: str | None = None,
         **kwargs: object,
-        # === ANCHOR: CLI_COMMAND_GROUPS_SUBPARSERFACTORY_END ===
-        # === ANCHOR: CLI_COMMAND_GROUPS_ADD_PARSER_END ===
     ) -> argparse.ArgumentParser: ...
+    # === ANCHOR: CLI_COMMAND_GROUPS_ADD_PARSER_END ===
+# === ANCHOR: CLI_COMMAND_GROUPS_SUBPARSERFACTORY_END ===
 
 
 # === ANCHOR: CLI_COMMAND_GROUPS__RUN_VIB_MCP_START ===
@@ -205,9 +205,9 @@ def register_extended_commands(
     )
     _ = p.add_argument("--validate", action="store_true", help="앵커 검증")
     _ = p.add_argument(
-        "--strict",
+        "--repair",
         action="store_true",
-        help="--validate 와 함께: 교차 앵커 경고도 실패로 처리",
+        help="교차 앵커가 있는 파일의 마커를 올바른 위치로 다시 놓기 (--dry-run 권장)",
     )
     _ = p.add_argument(
         "--dry-run", action="store_true", help="실제로 바꾸지 않고 미리 보기"

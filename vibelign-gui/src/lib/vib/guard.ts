@@ -20,6 +20,7 @@ export async function doctorJson(cwd: string, strict = false): Promise<unknown> 
   const parsed = JSON.parse(res.stdout);
   return parsed.data ?? parsed;
 }
+// === ANCHOR: GUARD_DOCTORJSON_END ===
 
 // === ANCHOR: GUARD_DOCTORPLANJSON_START ===
 export async function doctorPlanJson(cwd: string): Promise<unknown> {
@@ -79,16 +80,14 @@ export async function vibGuard(cwd: string, opts?: { strict?: boolean; sinceMinu
   // === ANCHOR: GUARD_ROOT_START ===
   const root = (parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {});
   // === ANCHOR: GUARD_ROOT_END ===
-// === ANCHOR: GUARD_DOCTORJSON_END ===
   // === ANCHOR: GUARD_DATA_START ===
   const data = (root.data && typeof root.data === "object" ? root.data as Record<string, unknown> : root);
   // === ANCHOR: GUARD_DOCTOR_START ===
-  // === ANCHOR: GUARD_DATA_END ===
   const doctor = (data.doctor && typeof data.doctor === "object" ? data.doctor as Record<string, unknown> : {});
   // === ANCHOR: GUARD_DOCTOR_END ===
+  // === ANCHOR: GUARD_DATA_END ===
   const status = _toStr(data.status) || "unknown";
   return {
-// === ANCHOR: GUARD_VIBGUARD_END ===
     status,
     // 구버전 CLI(verdict 부재)는 status 에서 보수적으로 유도 — fail 은 stop 으로 본다.
     verdict:
@@ -98,6 +97,7 @@ export async function vibGuard(cwd: string, opts?: { strict?: boolean; sinceMinu
     issues: _toGuardIssues(doctor.issues),
   };
 }
+// === ANCHOR: GUARD_VIBGUARD_END ===
 
 // === ANCHOR: GUARD_VIBSCAN_START ===
 export async function vibScan(cwd: string): Promise<VibResult> {

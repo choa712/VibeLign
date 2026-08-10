@@ -19,9 +19,9 @@ from vibelign.core.meta_paths import MetaPaths
 # === ANCHOR: MCP_MEMORY_HANDLERS_TEXTCONTENTFACTORY_START ===
 class TextContentFactory(Protocol):
     # === ANCHOR: MCP_MEMORY_HANDLERS___CALL___START ===
-# === ANCHOR: MCP_MEMORY_HANDLERS_TEXTCONTENTFACTORY_END ===
     def __call__(self, *, type: str, text: str) -> object: ...
     # === ANCHOR: MCP_MEMORY_HANDLERS___CALL___END ===
+# === ANCHOR: MCP_MEMORY_HANDLERS_TEXTCONTENTFACTORY_END ===
 
 
 # === ANCHOR: MCP_MEMORY_HANDLERS__TEXT_START ===
@@ -35,7 +35,6 @@ def handle_memory_summary_read(
     root: Path,
     arguments: dict[str, object],
     text_content: TextContentFactory,
-# === ANCHOR: MCP_MEMORY_HANDLERS_HANDLE_MEMORY_SUMMARY_READ_END ===
 ) -> list[object]:
     _ = arguments
     state = load_memory_state(MetaPaths(root).work_memory_path)
@@ -70,6 +69,7 @@ def handle_memory_summary_read(
     if state.downgrade_warning:
         payload["warnings"] = summary.warnings + [state.downgrade_warning]
     return _text(text_content, json.dumps(payload, ensure_ascii=False, sort_keys=True))
+# === ANCHOR: MCP_MEMORY_HANDLERS_HANDLE_MEMORY_SUMMARY_READ_END ===
 
 
 # === ANCHOR: MCP_MEMORY_HANDLERS_HANDLE_HANDOFF_DRAFT_CREATE_START ===
@@ -77,7 +77,6 @@ def handle_handoff_draft_create(
     root: Path,
     arguments: dict[str, object],
     text_content: TextContentFactory,
-# === ANCHOR: MCP_MEMORY_HANDLERS_HANDLE_HANDOFF_DRAFT_CREATE_END ===
 ) -> list[object]:
     from vibelign.core.memory.agent import build_handoff_summary_draft, handoff_draft_to_payload
 
@@ -92,6 +91,7 @@ def handle_handoff_draft_create(
         build_memory_audit_event(root, event="handoff_draft_create", tool="mcp"),
     )
     return _text(text_content, json.dumps(payload, ensure_ascii=False, sort_keys=True))
+# === ANCHOR: MCP_MEMORY_HANDLERS_HANDLE_HANDOFF_DRAFT_CREATE_END ===
 
 
 # === ANCHOR: MCP_MEMORY_HANDLERS_HANDLE_HANDOFF_DRAFT_ACCEPT_START ===
@@ -99,7 +99,6 @@ def handle_handoff_draft_accept(
     root: Path,
     arguments: dict[str, object],
     text_content: TextContentFactory,
-# === ANCHOR: MCP_MEMORY_HANDLERS_HANDLE_HANDOFF_DRAFT_ACCEPT_END ===
 ) -> list[object]:
     from vibelign.core.memory.agent import HandoffDraftField, HandoffSummaryDraft, accept_handoff_draft_field
 
@@ -115,6 +114,7 @@ def handle_handoff_draft_accept(
     )
     _audit_handoff_action(root, "handoff_draft_accept", result.ok)
     return _text(text_content, json.dumps(result.__dict__, ensure_ascii=False, sort_keys=True))
+# === ANCHOR: MCP_MEMORY_HANDLERS_HANDLE_HANDOFF_DRAFT_ACCEPT_END ===
 
 
 # === ANCHOR: MCP_MEMORY_HANDLERS_HANDLE_HANDOFF_DRAFT_DISMISS_START ===
@@ -122,7 +122,6 @@ def handle_handoff_draft_dismiss(
     root: Path,
     arguments: dict[str, object],
     text_content: TextContentFactory,
-# === ANCHOR: MCP_MEMORY_HANDLERS_HANDLE_HANDOFF_DRAFT_DISMISS_END ===
 ) -> list[object]:
     from vibelign.core.memory.agent import HandoffDraftField, HandoffSummaryDraft, dismiss_handoff_draft_field
 
@@ -138,6 +137,7 @@ def handle_handoff_draft_dismiss(
     )
     _audit_handoff_action(root, "handoff_draft_dismiss", result.ok)
     return _text(text_content, json.dumps(result.__dict__, ensure_ascii=False, sort_keys=True))
+# === ANCHOR: MCP_MEMORY_HANDLERS_HANDLE_HANDOFF_DRAFT_DISMISS_END ===
 
 
 # === ANCHOR: MCP_MEMORY_HANDLERS_HANDLE_HANDOFF_DRAFT_UNDO_START ===
@@ -145,7 +145,6 @@ def handle_handoff_draft_undo(
     root: Path,
     arguments: dict[str, object],
     text_content: TextContentFactory,
-# === ANCHOR: MCP_MEMORY_HANDLERS_HANDLE_HANDOFF_DRAFT_UNDO_END ===
 ) -> list[object]:
     from vibelign.core.memory.agent import undo_recent_handoff_acceptance
 
@@ -159,6 +158,7 @@ def handle_handoff_draft_undo(
     )
     _audit_handoff_action(root, "handoff_draft_undo", result.ok)
     return _text(text_content, json.dumps(result.__dict__, ensure_ascii=False, sort_keys=True))
+# === ANCHOR: MCP_MEMORY_HANDLERS_HANDLE_HANDOFF_DRAFT_UNDO_END ===
 
 
 # === ANCHOR: MCP_MEMORY_HANDLERS__DRAFT_FROM_ARGUMENTS_START ===

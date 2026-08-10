@@ -29,9 +29,9 @@ from vibelign.commands.vib_recover_cmd import recommendation_outcome_payload
 # === ANCHOR: MCP_RECOVERY_HANDLERS_TEXTCONTENTFACTORY_START ===
 class TextContentFactory(Protocol):
     # === ANCHOR: MCP_RECOVERY_HANDLERS___CALL___START ===
-# === ANCHOR: MCP_RECOVERY_HANDLERS_TEXTCONTENTFACTORY_END ===
     def __call__(self, *, type: str, text: str) -> object: ...
     # === ANCHOR: MCP_RECOVERY_HANDLERS___CALL___END ===
+# === ANCHOR: MCP_RECOVERY_HANDLERS_TEXTCONTENTFACTORY_END ===
 
 
 # === ANCHOR: MCP_RECOVERY_HANDLERS__TEXT_START ===
@@ -45,7 +45,6 @@ def handle_recovery_preview(
     root: Path,
     arguments: dict[str, object],
     text_content: TextContentFactory,
-# === ANCHOR: MCP_RECOVERY_HANDLERS_HANDLE_RECOVERY_PREVIEW_END ===
 ) -> list[object]:
     recovery_request = str(arguments.get("request", ""))
     plan = build_recovery_plan(collect_basic_signals(root), project_root=root, recovery_request=recovery_request)
@@ -75,6 +74,7 @@ def handle_recovery_preview(
         ],
     }
     return _text(text_content, json.dumps(payload, ensure_ascii=False, sort_keys=True))
+# === ANCHOR: MCP_RECOVERY_HANDLERS_HANDLE_RECOVERY_PREVIEW_END ===
 
 
 # === ANCHOR: MCP_RECOVERY_HANDLERS_HANDLE_RECOVERY_RECOMMEND_START ===
@@ -82,7 +82,6 @@ def handle_recovery_recommend(
     root: Path,
     arguments: dict[str, object],
     text_content: TextContentFactory,
-# === ANCHOR: MCP_RECOVERY_HANDLERS_HANDLE_RECOVERY_RECOMMEND_END ===
 ) -> list[object]:
     from vibelign.core.recovery.agent import AgentConfig, recommend_candidates, resolve_auto_llm_provider
     from vibelign.core.recovery.signals import collect_recovery_candidates
@@ -95,6 +94,7 @@ def handle_recovery_recommend(
         cfg=AgentConfig(cache_dir=root / ".vibelign" / "cache" / "agent"),
     )
     return _text(text_content, json.dumps(recommendation_outcome_payload(outcome), ensure_ascii=False, sort_keys=True))
+# === ANCHOR: MCP_RECOVERY_HANDLERS_HANDLE_RECOVERY_RECOMMEND_END ===
 
 
 # === ANCHOR: MCP_RECOVERY_HANDLERS_HANDLE_RECOVERY_APPLY_START ===
@@ -102,7 +102,6 @@ def handle_recovery_apply(
     root: Path,
     arguments: dict[str, object],
     text_content: TextContentFactory,
-# === ANCHOR: MCP_RECOVERY_HANDLERS_HANDLE_RECOVERY_APPLY_END ===
 ) -> list[object]:
     from vibelign.core.recovery.apply import RecoveryApplyRequest, execute_recovery_apply
 
@@ -137,6 +136,7 @@ def handle_recovery_apply(
         "would_apply": result.would_apply,
     }
     return _text(text_content, json.dumps(payload, ensure_ascii=False, sort_keys=True))
+# === ANCHOR: MCP_RECOVERY_HANDLERS_HANDLE_RECOVERY_APPLY_END ===
 
 
 # === ANCHOR: MCP_RECOVERY_HANDLERS__STRING_LIST_START ===

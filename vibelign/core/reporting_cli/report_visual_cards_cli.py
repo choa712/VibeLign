@@ -31,9 +31,9 @@ class VisualCardsCliError(RuntimeError):
 
     # === ANCHOR: REPORT_VISUAL_CARDS_CLI___STR___START ===
     def __str__(self) -> str:
-# === ANCHOR: REPORT_VISUAL_CARDS_CLI_VISUALCARDSCLIERROR_END ===
         return f"{self.provider} CLI 카드뉴스 초안 생성 실패: {self.reason}"
     # === ANCHOR: REPORT_VISUAL_CARDS_CLI___STR___END ===
+# === ANCHOR: REPORT_VISUAL_CARDS_CLI_VISUALCARDSCLIERROR_END ===
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,9 +68,9 @@ class CliVisualCardsProvider:
             "provider": self.provider,
             "cards": cards,
             "assets": [card["image"] for card in cards],
-# === ANCHOR: REPORT_VISUAL_CARDS_CLI_CLIVISUALCARDSPROVIDER_END ===
         }
     # === ANCHOR: REPORT_VISUAL_CARDS_CLI_DRAFT_END ===
+# === ANCHOR: REPORT_VISUAL_CARDS_CLI_CLIVISUALCARDSPROVIDER_END ===
 
 
 # === ANCHOR: REPORT_VISUAL_CARDS_CLI__PROMPT_START ===

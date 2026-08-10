@@ -9,9 +9,9 @@ from typing import Protocol
 # === ANCHOR: MCP_DOCTOR_HANDLERS_TEXTCONTENTFACTORY_START ===
 class TextContentFactory(Protocol):
     # === ANCHOR: MCP_DOCTOR_HANDLERS___CALL___START ===
-# === ANCHOR: MCP_DOCTOR_HANDLERS_TEXTCONTENTFACTORY_END ===
     def __call__(self, *, type: str, text: str) -> object: ...
     # === ANCHOR: MCP_DOCTOR_HANDLERS___CALL___END ===
+# === ANCHOR: MCP_DOCTOR_HANDLERS_TEXTCONTENTFACTORY_END ===
 
 
 # === ANCHOR: MCP_DOCTOR_HANDLERS__TEXT_START ===
@@ -25,7 +25,6 @@ def handle_doctor_plan(
     root: Path,
     arguments: dict[str, object],
     text_content: TextContentFactory,
-# === ANCHOR: MCP_DOCTOR_HANDLERS_HANDLE_DOCTOR_PLAN_END ===
 ) -> list[object]:
     from vibelign.action_engine.action_planner import generate_plan
     from vibelign.core.doctor_v2 import analyze_project_v2
@@ -34,6 +33,7 @@ def handle_doctor_plan(
     report = analyze_project_v2(root, strict=strict)
     plan = generate_plan(report)
     return _text(text_content, json.dumps(plan.to_dict(), indent=2, ensure_ascii=False))
+# === ANCHOR: MCP_DOCTOR_HANDLERS_HANDLE_DOCTOR_PLAN_END ===
 
 
 # === ANCHOR: MCP_DOCTOR_HANDLERS_HANDLE_DOCTOR_APPLY_START ===
@@ -41,7 +41,6 @@ def handle_doctor_apply(
     root: Path,
     arguments: dict[str, object],
     text_content: TextContentFactory,
-# === ANCHOR: MCP_DOCTOR_HANDLERS_HANDLE_DOCTOR_APPLY_END ===
 ) -> list[object]:
     from vibelign.action_engine.action_planner import generate_plan
     from vibelign.action_engine.executors.action_executor import execute_plan
@@ -66,4 +65,5 @@ def handle_doctor_apply(
         ],
     }
     return _text(text_content, json.dumps(output, indent=2, ensure_ascii=False))
+# === ANCHOR: MCP_DOCTOR_HANDLERS_HANDLE_DOCTOR_APPLY_END ===
 # === ANCHOR: MCP_DOCTOR_HANDLERS_END ===

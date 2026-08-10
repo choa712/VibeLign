@@ -13,9 +13,9 @@ from vibelign.core.meta_paths import MetaPaths
 # === ANCHOR: MCP_ANCHOR_HANDLERS_TEXTCONTENTFACTORY_START ===
 class TextContentFactory(Protocol):
     # === ANCHOR: MCP_ANCHOR_HANDLERS___CALL___START ===
-# === ANCHOR: MCP_ANCHOR_HANDLERS_TEXTCONTENTFACTORY_END ===
     def __call__(self, *, type: str, text: str) -> object: ...
     # === ANCHOR: MCP_ANCHOR_HANDLERS___CALL___END ===
+# === ANCHOR: MCP_ANCHOR_HANDLERS_TEXTCONTENTFACTORY_END ===
 
 
 # === ANCHOR: MCP_ANCHOR_HANDLERS__TEXT_START ===
@@ -70,6 +70,7 @@ def handle_anchor_run(root: Path, text_content: TextContentFactory) -> list[obje
 # === ANCHOR: MCP_ANCHOR_HANDLERS_HANDLE_ANCHOR_RUN_END ===
 
 
+# === ANCHOR: MCP_ANCHOR_HANDLERS__PARSE_ALLOWED_EXTS_START ===
 def _parse_allowed_exts(raw: object) -> set[str] | None:
     if not isinstance(raw, str) or not raw.strip():
         return None
@@ -80,13 +81,16 @@ def _parse_allowed_exts(raw: object) -> set[str] | None:
             continue
         exts.add(t if t.startswith(".") else f".{t}")
     return exts or None
+# === ANCHOR: MCP_ANCHOR_HANDLERS__PARSE_ALLOWED_EXTS_END ===
 
 
+# === ANCHOR: MCP_ANCHOR_HANDLERS__STR_LIST_START ===
 def _str_list(value: object) -> list[str] | None:
     if not isinstance(value, list):
         return None
     out: list[str] = [item for item in value if isinstance(item, str) and item]
     return out if out else None
+# === ANCHOR: MCP_ANCHOR_HANDLERS__STR_LIST_END ===
 
 
 # === ANCHOR: MCP_ANCHOR_HANDLERS_HANDLE_ANCHOR_AUTO_INTENT_START ===

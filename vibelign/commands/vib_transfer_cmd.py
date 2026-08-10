@@ -1911,12 +1911,44 @@ def _run_ai_handoff_non_interactive(
         MetaPaths(root).work_memory_path,
         cast(dict[str, object], cast(object, handoff_data)),
     )
-    _archive, _content = commit_project_context(
-        root,
-        out_path,
-        lambda: _build_context_content(root, handoff_data=handoff_data),
-        handoff_data=handoff_data,
-    )
+    # 이 경로는 JSON 만 내보내는 계약이다. 예외가 새어나가면 호출한 AI 는
+    # 트레이스백을 받고 무엇이 저장됐는지 알 수 없다 — 잠금 경합·부분 커밋도
+    # 기계가 읽을 수 있는 형태로 알린다.
+    try:
+        _archive, _content = commit_project_context(
+            root,
+            out_path,
+            lambda: _build_context_content(root, handoff_data=handoff_data),
+            handoff_data=handoff_data,
+        )
+    except PartialCommitError as exc:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "mode": "handoff_ai_draft",
+                    "error": "partial_commit",
+                    "detail": str(exc),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+        return
+    except OSError as exc:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "mode": "handoff_ai_draft",
+                    "error": "commit_failed",
+                    "detail": str(exc),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+        return
     _inject_agents_handoff_instruction(root)
     payload: dict[str, object] = {
         "ok": True,

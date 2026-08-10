@@ -19,9 +19,9 @@ class DispatchCallable(Protocol):
     # === ANCHOR: MCP_DISPATCH___CALL___START ===
     def __call__(
         self, root: Path, arguments: dict[str, object], text_content: TextContentFactory
-# === ANCHOR: MCP_DISPATCH_DISPATCHCALLABLE_END ===
-    # === ANCHOR: MCP_DISPATCH___CALL___END ===
     ) -> list[object]: ...
+    # === ANCHOR: MCP_DISPATCH___CALL___END ===
+# === ANCHOR: MCP_DISPATCH_DISPATCHCALLABLE_END ===
 
 
 # === ANCHOR: MCP_DISPATCH__TEXT_START ===
@@ -37,7 +37,6 @@ async def call_tool_dispatch(
     *,
     root: Path,
     text_content: TextContentFactory,
-# === ANCHOR: MCP_DISPATCH_CALL_TOOL_DISPATCH_END ===
 ) -> list[object]:
     handler = cast(DispatchCallable | None, DISPATCH_TABLE.get(name))
     if handler is None:
@@ -48,8 +47,10 @@ async def call_tool_dispatch(
     except Exception as exc:
         print(f"[WARN] MCP narrative capture failed for {name}: {exc}", file=sys.stderr)
     return result
+# === ANCHOR: MCP_DISPATCH_CALL_TOOL_DISPATCH_END ===
 
 
+# === ANCHOR: MCP_DISPATCH__AUTO_CAPTURE_NARRATIVE_START ===
 def _auto_capture_narrative(
     name: str,
     arguments: dict[str, object],
@@ -79,8 +80,10 @@ def _auto_capture_narrative(
                 context_path="checkpoint",
                 source_tool="mcp checkpoint_create",
             )
+# === ANCHOR: MCP_DISPATCH__AUTO_CAPTURE_NARRATIVE_END ===
 
 
+# === ANCHOR: MCP_DISPATCH__FLATTEN_RESULT_TEXT_START ===
 def _flatten_result_text(result: list[object]) -> str:
     parts: list[str] = []
     for item in result:
@@ -91,4 +94,5 @@ def _flatten_result_text(result: list[object]) -> str:
         if isinstance(text, str):
             parts.append(text)
     return " | ".join(parts)
+# === ANCHOR: MCP_DISPATCH__FLATTEN_RESULT_TEXT_END ===
 # === ANCHOR: MCP_DISPATCH_END ===

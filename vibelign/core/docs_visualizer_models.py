@@ -99,9 +99,9 @@ class DocsVisualArtifact:
 
     # === ANCHOR: DOCS_VISUALIZER_TO_DICT_START ===
     def to_dict(self) -> dict[str, Any]:
-# === ANCHOR: DOCS_VISUALIZER_DOCSVISUALARTIFACT_END ===
         return asdict(self)
     # === ANCHOR: DOCS_VISUALIZER_TO_DICT_END ===
+# === ANCHOR: DOCS_VISUALIZER_DOCSVISUALARTIFACT_END ===
 
 
 @dataclass(frozen=True)

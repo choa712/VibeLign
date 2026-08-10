@@ -67,23 +67,21 @@ class TestMultiplicity:
         )
         assert validate_anchor_file(p) == []
 
-    def test_crossing_anchors_are_warned_not_blocked(self, tmp_path: Path) -> None:
-        """교차는 중첩이 아니다 — 다만 차단이 아니라 경고다.
+    def test_crossing_anchors_are_blocked(self, tmp_path: Path) -> None:
+        """교차는 중첩이 아니고, 이제 검증 실패다.
 
         P_START Q_START P_END Q_END 에서 블록 P 는 Q 의 여는 마커만 품는다.
-        P 를 고치면 Q 의 경계가 깨지는데 짝은 맞으니 검증은 통과한다.
+        P 를 고치면 Q 의 경계가 깨진다.
 
-        차단으로 올리지 않는 이유: `vib anchor --auto` 가 여러 줄 시그니처에서
-        스스로 이 형태를 만들어낸다 (이 리포만 175개 파일). 생성기를 먼저
-        고치고 그 다음 승격하는 순서가 맞다.
+        생성기가 이 형태를 스스로 만들어내던 동안에는 경고로만 뒀다 — 차단하면
+        `vib anchor --auto` 를 돌린 모든 프로젝트가 깨졌다. 원인 3종을 고치고
+        `vib anchor --repair` 로 기존 파일을 정리한 뒤에야 올렸다 (issue #7).
         """
         lines = [_m("P_START"), _m("Q_START"), "x = 1", _m("P_END"), _m("Q_END")]
         p = _write(tmp_path, "cross.py", lines)
-        text = "\n".join(lines) + "\n"
 
-        assert validate_anchor_file(p) == []  # 차단하지 않는다
-        crossing = find_crossing_anchors(text)
-        assert any("교차" in x for x in crossing), crossing
+        problems = validate_anchor_file(p)
+        assert any("교차" in x for x in problems), problems
 
     def test_sequential_anchors_have_no_crossing(self, tmp_path: Path) -> None:
         lines = [_m("P_START"), "x = 1", _m("P_END"), _m("Q_START"), "y = 2", _m("Q_END")]
@@ -133,8 +131,8 @@ class TestMultiplicity:
         text = "\n".join([_m("M_START"), _m("M_F_START"), "x", _m("M_F_END"), _m("M_END")])
         assert find_crossing_anchors(text) == []
 
-    def test_strict_flag_turns_crossing_into_failure(self, tmp_path: Path) -> None:
-        """기본은 경고, --strict 는 실패 — 지금 막고 싶은 사람에게 길을 준다."""
+    def test_validate_cli_fails_on_crossing(self, tmp_path: Path) -> None:
+        """CLI 도 기본값에서 실패해야 한다 — 별도 플래그 없이."""
         import json
         import os
         import subprocess
@@ -145,26 +143,17 @@ class TestMultiplicity:
         _ = (tmp_path / "src" / "mod.py").write_text(
             "\n".join(lines) + "\n", encoding="utf-8"
         )
-        env = {**os.environ, "PYTHONPATH": str(Path.cwd())}
-
-        def run(*extra: str) -> subprocess.CompletedProcess[str]:
-            return subprocess.run(
-                [sys.executable, "-m", "vibelign", "anchor", "--validate", "--json", *extra],
-                cwd=tmp_path,
-                capture_output=True,
-                text=True,
-                env=env,
-            )
-
-        default = run()
-        assert default.returncode == 0
-        assert json.loads(default.stdout)["data"]["warnings"]
-
-        strict = run("--strict")
-        assert strict.returncode == 1
-        payload = json.loads(strict.stdout)
+        result = subprocess.run(
+            [sys.executable, "-m", "vibelign", "anchor", "--validate", "--json"],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PYTHONPATH": str(Path.cwd())},
+        )
+        assert result.returncode == 1
+        payload = json.loads(result.stdout)
         assert payload["ok"] is False
-        assert payload["data"]["strict"] is True
+        assert any("교차" in p for p in payload["data"]["problems"])
 
 
 # === ANCHOR: TEST_ANCHOR_VALIDATE_PAIRING_TESTMULTIPLICITY_END ===
