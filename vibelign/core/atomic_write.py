@@ -83,6 +83,11 @@ def commit_staged(pairs: list[tuple[Path, Path]]) -> None:
                     ) from exc
                 raise
             replaced.append(dest)
+        # 임시 파일 내용만 fsync 하면 rename 자체는 아직 디스크에 없다.
+        # 전원이 끊기면 "저장했다" 고 보고한 파일이 사라지거나 옛 내용으로
+        # 돌아간다. 디렉터리 엔트리까지 동기화해야 교체가 내구성을 갖는다.
+        for directory in dict.fromkeys(dest.parent for dest in replaced):
+            _sync_directory(directory)
     finally:
         for tmp_path, _dest in pairs:
             if tmp_path.exists():
@@ -125,6 +130,30 @@ def stage_text(path: Path, text: str, *, encoding: str = "utf-8") -> Path:
 
 
 # === ANCHOR: ATOMIC_WRITE_ATOMIC_WRITE_TEXT_END ===
+
+
+# === ANCHOR: ATOMIC_WRITE__SYNC_DIRECTORY_START ===
+def _sync_directory(directory: Path) -> None:
+    """디렉터리 엔트리를 디스크에 내린다 (rename 내구성).
+
+    Windows 는 디렉터리 fd 를 열 수 없어 건너뛴다. 실패해도 조용히 넘긴다 —
+    이미 교체는 끝났고, 여기서 던지면 성공한 저장이 실패로 보고된다.
+    """
+    if sys.platform == "win32":
+        return
+    try:
+        fd = os.open(directory, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+# === ANCHOR: ATOMIC_WRITE__SYNC_DIRECTORY_END ===
 
 
 # === ANCHOR: ATOMIC_WRITE_RESOLVE_WRITE_TARGET_START ===

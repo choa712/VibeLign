@@ -718,6 +718,34 @@ class TestAtomicWrite:
         assert link.is_symlink()
         assert "공유 정책" in target.read_text(encoding="utf-8")
 
+    def test_directory_is_synced_after_replace(self, tmp_path: Path) -> None:
+        """임시 파일만 fsync 하면 rename 자체는 아직 디스크에 없다.
+
+        전원이 끊기면 '저장했다' 고 보고한 파일이 사라지거나 옛 내용으로 돌아간다.
+        """
+        synced: list[str] = []
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(
+                atomic_write_mod, "_sync_directory", lambda d: synced.append(d.name)
+            )
+            atomic_write_text(tmp_path / "out.md", "x")
+        assert synced == [tmp_path.name]
+
+    def test_sync_failure_does_not_fail_the_write(self, tmp_path: Path) -> None:
+        """이미 교체는 끝났다 — 여기서 던지면 성공한 저장이 실패로 보고된다."""
+        p = tmp_path / "out.md"
+        with pytest.MonkeyPatch.context() as mp:
+            real_open = atomic_write_mod.os.open
+
+            def refuse_dir(path: object, flags: int, *args: object) -> int:
+                if Path(str(path)).is_dir():
+                    raise OSError("디렉터리 열기 실패")
+                return real_open(path, flags, *args)  # type: ignore[arg-type]
+
+            mp.setattr(atomic_write_mod.os, "open", refuse_dir)
+            atomic_write_text(p, "내용")
+        assert p.read_text(encoding="utf-8") == "내용"
+
     def test_partial_commit_error_is_an_oserror(self) -> None:
         # 기존 호출부의 except OSError 가 계속 받아야 한다.
         assert issubclass(atomic_write_mod.PartialCommitError, OSError)
