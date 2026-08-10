@@ -1248,7 +1248,11 @@ def commit_project_context(
         if after_commit is not None:
             try:
                 after_commit()
-            except OSError as exc:
+            # OSError 만 잡으면 부족하다 — 메모리 스키마가 도중에 새 버전으로
+            # 바뀌면 save 가 ValueError 를 던지고, 그게 그대로 올라가 이미
+            # 성공한 저장이 실패로 보고된다. 부수 기록의 실패는 종류를 가리지
+            # 않고 경고로 낮춘다.
+            except Exception as exc:
                 clack_info(
                     f"주의: 저장은 끝났지만 작업 기록 갱신에 실패했습니다 ({exc}). "
                     "PROJECT_CONTEXT.md 와 handoff.json 은 정상입니다."

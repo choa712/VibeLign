@@ -759,6 +759,30 @@ class TestAtomicWrite:
             atomic_write_text(p, "내용")
         assert p.read_text(encoding="utf-8") == "내용"
 
+    def test_non_oserror_from_after_commit_does_not_fail_the_save(
+        self, tmp_path: Path
+    ) -> None:
+        """부수 기록의 실패는 종류를 가리지 않고 경고여야 한다.
+
+        메모리 스키마가 도중에 새 버전으로 바뀌면 save 가 ValueError 를 던진다.
+        OSError 만 잡으면 그게 올라가 이미 성공한 저장이 실패로 보고된다.
+        """
+        ctx = tmp_path / "PROJECT_CONTEXT.md"
+
+        def boom() -> None:
+            raise ValueError("memory schema is newer")
+
+        _archive, content = commit_project_context(
+            tmp_path,
+            ctx,
+            lambda: "본문",
+            handoff_data=_handoff(),  # type: ignore[arg-type]
+            after_commit=boom,
+        )
+        assert content == "본문"
+        assert ctx.read_text(encoding="utf-8") == "본문"
+        assert load_handoff_data(tmp_path) is not None
+
     def test_partial_commit_error_is_an_oserror(self) -> None:
         # 기존 호출부의 except OSError 가 계속 받아야 한다.
         assert issubclass(atomic_write_mod.PartialCommitError, OSError)
