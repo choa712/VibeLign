@@ -418,6 +418,55 @@ def test_repair_does_not_create_new_anchors(tmp_path: Path) -> None:
     assert "SAMPLE_UNTOUCHED" not in path.read_text(encoding="utf-8")
 
 
+def test_repair_skips_when_an_occurrence_would_disappear(tmp_path: Path) -> None:
+    """이름 집합만 보면 등장 횟수가 줄어드는 걸 놓친다.
+
+    같은 이름이 한 심볼에 두 번 걸려 있으면 걷어내기는 둘 다 지우는데 생성기는
+    한 쌍만 다시 놓는다. 이름은 살아 있으니 소실 검사를 통과하고, 두 등장 모두
+    오배치로 지목돼 drift 면제까지 받아 NAME_2 가 말없이 사라진다.
+    """
+    path = _write(
+        tmp_path,
+        "dup.py",
+        "def run(\n"
+        "# === ANCHOR: DUP_RUN_START ===\n"
+        "    a: int,\n"
+        "# === ANCHOR: DUP_RUN_END ===\n"
+        "# === ANCHOR: DUP_RUN_START ===\n"
+        "    b: int,\n"
+        "# === ANCHOR: DUP_RUN_END ===\n"
+        ") -> int:\n"
+        "    return a + b\n",
+    )
+    original = path.read_text(encoding="utf-8")
+
+    outcome = repair_crossing_anchors(tmp_path, path, dry_run=False)
+
+    assert outcome["status"] == "skipped"
+    assert "DUP_RUN_2" in outcome["lost_names"]
+    assert path.read_text(encoding="utf-8") == original
+
+
+def test_pathological_js_nesting_is_bounded_and_reported(tmp_path: Path) -> None:
+    """JS 블록 탐지는 중첩에 초선형이다 — 상한을 두되 조용히 넘기지 않는다.
+
+    실측: 중첩 50/100/200/400개가 0.018/0.13/0.98/7.9초. 생성기(`--auto`)는
+    원래 이 비용을 치렀지만 배치 검사가 읽기 전용인 `--validate` 까지 그
+    비용을 끌고 들어왔다 — 파일 하나로 검사 전체를 멈춰 세울 수 있다.
+    """
+    depth = 400
+    body = "".join(f"{'  ' * i}function f{i}() {{\n" for i in range(depth))
+    body += "".join(f"{'  ' * (depth - 1 - i)}}}\n" for i in range(depth))
+    path = _write(tmp_path, "deep.ts", body)
+
+    problems = find_misplaced_anchors(path)
+
+    assert len(problems) == 1
+    assert "건너뜁니다" in problems[0]
+    # 건너뛴 파일은 고치려 들지도 않는다.
+    assert repair_crossing_anchors(tmp_path, path, dry_run=True)["status"] == "unchanged"
+
+
 def test_repair_leaves_clean_file_untouched(tmp_path: Path) -> None:
     path = _write(
         tmp_path,

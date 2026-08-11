@@ -1799,6 +1799,18 @@ def repair_crossing_anchors(
             "reason": "재생성하면 되살릴 수 없는 앵커 이름이 사라집니다",
             "lost_names": lost,
         }
+    # 이름 집합만 보면 **등장 횟수**가 줄어드는 걸 놓친다. 같은 이름이 한 심볼에
+    # 두 번 걸려 있으면 걷어내기는 둘 다 지우는데 생성기는 한 쌍만 다시 놓는다.
+    # 이름은 살아 있으니 위 검사를 통과하고, 두 등장 모두 오배치로 지목돼 drift
+    # 면제까지 받아 NAME_2 의 보호 구역이 말없이 사라진다.
+    lost_occurrences = sorted(set(before_blocks) - set(after_blocks))
+    if lost_occurrences:
+        return {
+            "path": rel,
+            "status": "skipped",
+            "reason": "같은 이름의 앵커 등장 횟수가 줄어듭니다",
+            "lost_names": lost_occurrences,
+        }
     remaining = find_crossing_anchors(rebuilt)
     if remaining:
         return {
@@ -1904,6 +1916,29 @@ _MISPLACED_MAX_FINDINGS = 50
 
 
 # === ANCHOR: ANCHOR_TOOLS__SYMBOL_ZONES_START ===
+class _TooManySymbols(Exception):
+    """JS 블록 탐지를 돌리기엔 심볼이 너무 많다 — 검사를 건너뛴다."""
+
+
+# JS 블록 탐지는 심볼마다 파일 끝까지 다시 훑어서 중첩 함수에 초선형이다
+# (실측 중첩 50/100/200/400개 = 0.018/0.13/0.98/7.9초). 생성기(`--auto`)는
+# 원래 이 비용을 치렀지만, 배치 검사가 읽기 전용인 `--validate` 까지 그
+# 비용을 끌고 들어왔다 — 파일 하나로 검사 전체를 멈춰 세울 수 있다.
+# 상한을 둔다. 이 리포의 JS/TS 최대가 32개이므로 6배 여유다. 넘는 파일은
+# 조용히 넘기지 않고 건너뛴 사실을 보고한다.
+_JS_SYMBOL_SCAN_CAP = 200
+_JS_SYMBOL_START_RE = re.compile(
+    r"^\s*(?:export\s+)?(?:(?:async\s+)?function\s+[A-Za-z_]"
+    r"|class\s+[A-Za-z_]"
+    r"|(?:const|let|var)\s+[A-Za-z_][A-Za-z0-9_]*\s*=\s*(?:async\s*)?\()",
+    re.M,
+)
+
+
+def _js_symbol_count(text: str) -> int:
+    return len(_JS_SYMBOL_START_RE.findall(text))
+
+
 def _symbol_zones(path: Path, text: str) -> dict[str, list[tuple[int, int]]]:
     """생성 규칙으로 나올 앵커 이름 → 그 심볼이 차지하는 줄 범위 (1-based, 양끝 포함).
 
@@ -1915,6 +1950,8 @@ def _symbol_zones(path: Path, text: str) -> dict[str, list[tuple[int, int]]]:
     if suffix == ".py":
         blocks = _python_symbol_blocks(text)
     elif suffix in {".js", ".ts", ".jsx", ".tsx"}:
+        if _js_symbol_count(text) > _JS_SYMBOL_SCAN_CAP:
+            raise _TooManySymbols
         blocks = _js_symbol_blocks(text)
     else:
         return {}
@@ -1950,6 +1987,16 @@ def find_misplaced_anchors(path: Path) -> list[str]:
     고쳤지만 이미 놓인 마커는 그대로 남아 있다. 먼저 보고만 하고, 리포가
     0이 된 뒤에 차단으로 올린다 (soft → hard 승격).
     """
+    text = safe_read_text(path)
+    if (
+        text
+        and path.suffix.lower() in {".js", ".ts", ".jsx", ".tsx"}
+        and _js_symbol_count(text) > _JS_SYMBOL_SCAN_CAP
+    ):
+        return [
+            f"심볼이 {_JS_SYMBOL_SCAN_CAP}개를 넘어 배치 검사를 건너뜁니다 — "
+            "이 파일의 앵커 위치는 확인되지 않았습니다"
+        ]
     problems: list[str] = []
     for item in _uncovered_symbols(path):
         start_line, end_line = item.anchor
@@ -1980,7 +2027,10 @@ def _uncovered_symbols(path: Path) -> list[_Uncovered]:
     text = safe_read_text(path)
     if not text:
         return []
-    zones = _symbol_zones(path, text)
+    try:
+        zones = _symbol_zones(path, text)
+    except _TooManySymbols:
+        return []
     if not zones:
         return []
     found: list[_Uncovered] = []
