@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import TypedDict
 
 
-@dataclass(frozen=True, slots=True)
 # === ANCHOR: SESSION_METADATA_AGENTRUNMETADATA_START ===
+@dataclass(frozen=True, slots=True)
 class AgentRunMetadata:
     turn_index: int
     persona_id: str

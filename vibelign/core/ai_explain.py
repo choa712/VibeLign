@@ -21,7 +21,6 @@ _SYSTEM_PROMPT = (
 )
 
 
-# === ANCHOR: AI_EXPLAIN__FORMAT_GEMINI_ERROR_START ===
 def _format_gemini_error(error: Exception, model: str) -> str:
     if isinstance(error, urllib.error.HTTPError):
         try:
@@ -55,18 +54,14 @@ def _format_gemini_error(error: Exception, model: str) -> str:
                 message.append(f"응답 본문: {detail}")
             return "\n".join(message)
     return f"Gemini API 호출 실패: {error}"
-# === ANCHOR: AI_EXPLAIN__FORMAT_GEMINI_ERROR_END ===
 
 
-# === ANCHOR: AI_EXPLAIN_EXPLAINFILEENTRY_START ===
 class ExplainFileEntry(TypedDict, total=False):
     path: str
     status: str
     kind: str
-# === ANCHOR: AI_EXPLAIN_EXPLAINFILEENTRY_END ===
 
 
-# === ANCHOR: AI_EXPLAIN_EXPLAINPROMPTDATA_START ===
 class ExplainPromptData(TypedDict, total=False):
     source: str
     risk_level: str
@@ -75,56 +70,37 @@ class ExplainPromptData(TypedDict, total=False):
     why_it_matters: list[str]
     what_to_do_next: str
     files: list[object]
-# === ANCHOR: AI_EXPLAIN_EXPLAINPROMPTDATA_END ===
 
 
-# === ANCHOR: AI_EXPLAIN_CHATMESSAGE_START ===
 class ChatMessage(TypedDict):
     role: str
     content: str
-# === ANCHOR: AI_EXPLAIN_CHATMESSAGE_END ===
 
 
-# === ANCHOR: AI_EXPLAIN_OPENAICOMPATIBLEREQUEST_START ===
 class OpenAICompatibleRequest(TypedDict):
     model: str
     messages: list[ChatMessage]
     max_tokens: int
-# === ANCHOR: AI_EXPLAIN_OPENAICOMPATIBLEREQUEST_END ===
 
 
-# === ANCHOR: AI_EXPLAIN_URLOPENRESPONSE_START ===
 class UrlopenResponse(Protocol):
-    # === ANCHOR: AI_EXPLAIN_READ_START ===
     def read(self) -> bytes: ...
-    # === ANCHOR: AI_EXPLAIN_READ_END ===
 
-    # === ANCHOR: AI_EXPLAIN___ENTER___START ===
     def __enter__(self) -> "UrlopenResponse": ...
-    # === ANCHOR: AI_EXPLAIN___ENTER___END ===
 
-    # === ANCHOR: AI_EXPLAIN___EXIT___START ===
     def __exit__(self, exc_type: object, exc: object, tb: object) -> bool | None: ...
-    # === ANCHOR: AI_EXPLAIN___EXIT___END ===
-# === ANCHOR: AI_EXPLAIN_URLOPENRESPONSE_END ===
 
 
-# === ANCHOR: AI_EXPLAIN_ANTHROPICTEXTBLOCK_START ===
 class AnthropicTextBlock(Protocol):
     type: str
     text: str
-# === ANCHOR: AI_EXPLAIN_ANTHROPICTEXTBLOCK_END ===
 
 
-# === ANCHOR: AI_EXPLAIN_ANTHROPICMESSAGERESPONSE_START ===
 class AnthropicMessageResponse(Protocol):
     content: object
-# === ANCHOR: AI_EXPLAIN_ANTHROPICMESSAGERESPONSE_END ===
 
 
-# === ANCHOR: AI_EXPLAIN_ANTHROPICMESSAGES_START ===
 class AnthropicMessages(Protocol):
-    # === ANCHOR: AI_EXPLAIN_CREATE_START ===
     def create(
         self,
         *,
@@ -133,25 +109,16 @@ class AnthropicMessages(Protocol):
         system: str,
         messages: list[ChatMessage],
     ) -> AnthropicMessageResponse: ...
-    # === ANCHOR: AI_EXPLAIN_CREATE_END ===
-# === ANCHOR: AI_EXPLAIN_ANTHROPICMESSAGES_END ===
 
 
-# === ANCHOR: AI_EXPLAIN_ANTHROPICCLIENT_START ===
 class AnthropicClient(Protocol):
     messages: AnthropicMessages
-# === ANCHOR: AI_EXPLAIN_ANTHROPICCLIENT_END ===
 
 
-# === ANCHOR: AI_EXPLAIN_ANTHROPICMODULE_START ===
 class AnthropicModule(Protocol):
-    # === ANCHOR: AI_EXPLAIN_ANTHROPIC_START ===
     def Anthropic(self, *, api_key: str) -> AnthropicClient: ...
-    # === ANCHOR: AI_EXPLAIN_ANTHROPIC_END ===
-# === ANCHOR: AI_EXPLAIN_ANTHROPICMODULE_END ===
 
 
-# === ANCHOR: AI_EXPLAIN__LOAD_JSON_OBJECT_START ===
 def _load_json_object(raw: bytes) -> dict[str, object] | None:
     parsed = cast(object, json.loads(raw))
     if not isinstance(parsed, dict):
@@ -161,10 +128,8 @@ def _load_json_object(raw: bytes) -> dict[str, object] | None:
     for key, value in source.items():
         normalized[str(key)] = value
     return normalized
-# === ANCHOR: AI_EXPLAIN__LOAD_JSON_OBJECT_END ===
 
 
-# === ANCHOR: AI_EXPLAIN__NORMALIZE_OBJECT_DICT_START ===
 def _normalize_object_dict(value: object) -> dict[str, object] | None:
     if not isinstance(value, dict):
         return None
@@ -173,10 +138,8 @@ def _normalize_object_dict(value: object) -> dict[str, object] | None:
     for key, item in source.items():
         normalized[str(key)] = item
     return normalized
-# === ANCHOR: AI_EXPLAIN__NORMALIZE_OBJECT_DICT_END ===
 
 
-# === ANCHOR: AI_EXPLAIN__EXTRACT_OPENAI_TEXT_START ===
 def _extract_openai_text(result: dict[str, object]) -> str | None:
     choices = result.get("choices")
     if not isinstance(choices, list) or not choices:
@@ -189,10 +152,8 @@ def _extract_openai_text(result: dict[str, object]) -> str | None:
         return None
     content = cast(dict[object, object], message).get("content")
     return content if isinstance(content, str) else None
-# === ANCHOR: AI_EXPLAIN__EXTRACT_OPENAI_TEXT_END ===
 
 
-# === ANCHOR: AI_EXPLAIN__EXTRACT_GEMINI_TEXT_START ===
 def _extract_gemini_text(result: dict[str, object]) -> str | None:
     candidates = result.get("candidates")
     if not isinstance(candidates, list) or not candidates:
@@ -211,7 +172,6 @@ def _extract_gemini_text(result: dict[str, object]) -> str | None:
         return None
     text = cast(dict[object, object], first_part).get("text")
     return text if isinstance(text, str) else None
-# === ANCHOR: AI_EXPLAIN__EXTRACT_GEMINI_TEXT_END ===
 
 
 # === ANCHOR: AI_EXPLAIN__FRIENDLY_ERROR_START ===

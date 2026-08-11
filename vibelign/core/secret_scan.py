@@ -12,7 +12,6 @@ from pathlib import Path
 
 from vibelign.core.structure_policy import WINDOWS_SUBPROCESS_FLAGS
 
-# === ANCHOR: SECRET_SCAN__FIND_GIT_START ===
 def _find_git() -> str:
     found = shutil.which("git")
     if found:
@@ -34,7 +33,6 @@ def _find_git() -> str:
             if Path(p).exists():
                 return p
     raise FileNotFoundError("git 실행 파일을 찾을 수 없어요. Git을 설치하고 PATH에 추가해주세요.")
-# === ANCHOR: SECRET_SCAN__FIND_GIT_END ===
 
 
 _ALLOW_MARKER = "vibelign: allow-secret"
@@ -182,17 +180,14 @@ def _extract_added_line(line: str) -> str | None:
 # === ANCHOR: SECRET_SCAN__EXTRACT_ADDED_LINE_END ===
 
 
-# === ANCHOR: SECRET_SCAN__RUST_SECRET_SCAN_ENABLED_START ===
 def _rust_secret_scan_enabled() -> bool:
     return os.environ.get("VIBELIGN_SECRET_SCAN_RUST", "").strip().lower() in {
         "1",
         "true",
         "yes",
     }
-# === ANCHOR: SECRET_SCAN__RUST_SECRET_SCAN_ENABLED_END ===
 
 
-# === ANCHOR: SECRET_SCAN__FINDINGS_FROM_RUST_PAYLOAD_START ===
 def _findings_from_rust_payload(items: list[dict[str, object]], path_hint: str) -> list[SecretFinding] | None:
     findings: list[SecretFinding] = []
     for item in items:
@@ -216,10 +211,8 @@ def _findings_from_rust_payload(items: list[dict[str, object]], path_hint: str) 
             SecretFinding(path=path_value, rule_id=rule_id, line_number=line_number, snippet=snippet)
         )
     return findings
-# === ANCHOR: SECRET_SCAN__FINDINGS_FROM_RUST_PAYLOAD_END ===
 
 
-# === ANCHOR: SECRET_SCAN__SCAN_UNIFIED_DIFF_ROUTED_START ===
 def _scan_unified_diff_routed(
     root: Path, diff_text: str, path_hint: str
 ) -> list[SecretFinding]:
@@ -234,7 +227,6 @@ def _scan_unified_diff_routed(
     if findings is None:
         return scan_unified_diff_for_secrets(diff_text, path_hint)
     return findings
-# === ANCHOR: SECRET_SCAN__SCAN_UNIFIED_DIFF_ROUTED_END ===
 
 
 # === ANCHOR: SECRET_SCAN_SCAN_UNIFIED_DIFF_FOR_SECRETS_START ===
@@ -345,19 +337,15 @@ _SECRET_SCAN_FIXTURE_PREFIXES: tuple[str, ...] = (
 )
 
 
-# === ANCHOR: SECRET_SCAN__IS_SECRET_SCAN_FIXTURE_PATH_START ===
 def _is_secret_scan_fixture_path(path: str) -> bool:
     normalized = path.replace("\\", "/")
     return any(normalized.startswith(prefix) for prefix in _SECRET_SCAN_FIXTURE_PREFIXES)
-# === ANCHOR: SECRET_SCAN__IS_SECRET_SCAN_FIXTURE_PATH_END ===
 
 
-# === ANCHOR: SECRET_SCAN__IS_HISTORY_AUDIT_SKIPPED_START ===
 def _is_history_audit_skipped(path: str) -> bool:
     if path in _HISTORY_AUDIT_SKIP_PATHS:
         return True
     return _is_secret_scan_fixture_path(path)
-# === ANCHOR: SECRET_SCAN__IS_HISTORY_AUDIT_SKIPPED_END ===
 
 
 # === ANCHOR: SECRET_SCAN_PARSE_GIT_LOG_CHUNKS_START ===
@@ -368,7 +356,6 @@ def parse_git_log_chunks(
     current_file = ""
     buffer: list[str] = []
 
-    # === ANCHOR: SECRET_SCAN__FLUSH_START ===
     def _flush() -> tuple[str, str, str] | None:
         nonlocal buffer, current_file
         if buffer and current_file:
@@ -379,7 +366,6 @@ def parse_git_log_chunks(
         buffer = []
         current_file = ""
         return None
-    # === ANCHOR: SECRET_SCAN__FLUSH_END ===
 
     for raw in lines:
         line = raw.rstrip("\r\n")

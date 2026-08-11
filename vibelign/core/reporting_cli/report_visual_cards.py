@@ -77,8 +77,8 @@ class VisualCardsDict(TypedDict):
 # === ANCHOR: REPORT_VISUAL_CARDS_VISUALCARDSDICT_END ===
 
 
-@dataclass(frozen=True)
 # === ANCHOR: REPORT_VISUAL_CARDS_VISUALIMAGEREQUEST_START ===
+@dataclass(frozen=True)
 class VisualImageRequest:
     card_id: str
     visual_prompt: str
@@ -97,8 +97,8 @@ class VisualImageProvider(Protocol):
 # === ANCHOR: REPORT_VISUAL_CARDS_VISUALIMAGEPROVIDER_END ===
 
 
-@dataclass(frozen=True)
 # === ANCHOR: REPORT_VISUAL_CARDS__CARDSEED_START ===
+@dataclass(frozen=True)
 class _CardSeed:
     section_index: int
     block_index: int

@@ -19,7 +19,6 @@ from email.message import Message
 
 
 # certifi SSL context (macOS GUI 앱 등 시스템 인증서 미포함 환경 대응)
-# === ANCHOR: HTTP_RETRY__MAKE_SSL_CTX_START ===
 def _make_ssl_ctx() -> ssl.SSLContext | None:
     try:
         import certifi
@@ -27,7 +26,6 @@ def _make_ssl_ctx() -> ssl.SSLContext | None:
         return ssl.create_default_context(cafile=certifi.where())
     except ImportError:
         return None
-# === ANCHOR: HTTP_RETRY__MAKE_SSL_CTX_END ===
 
 
 _SSL_CTX = _make_ssl_ctx()

@@ -21,8 +21,8 @@ MENTION_ALIASES: Final[tuple[PersonaAliasGroup, ...]] = tuple(
 ALL_ALIASES: Final[tuple[str, ...]] = ("all", "모두")
 
 
-@dataclass(frozen=True, slots=True)
 # === ANCHOR: MENTIONS_PERSONAMENTIONRESULT_START ===
+@dataclass(frozen=True, slots=True)
 class PersonaMentionResult:
     persona_ids: tuple[str, ...]
     used_default: bool

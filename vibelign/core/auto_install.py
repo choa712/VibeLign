@@ -178,7 +178,6 @@ def try_install_fast_tools(
 
 
 # === ANCHOR: AUTO_INSTALL_ENSURE_PYPROJECT_START ===
-# === ANCHOR: AUTO_INSTALL_ENSURE_PYPROJECT_TOML_START ===
 def ensure_pyproject_toml(
     root: Path,
     clack_info: PrintFn,
@@ -224,7 +223,6 @@ dependencies = []
     _ = pyproject_path.write_text(content, encoding="utf-8")
     clack_success(f"pyproject.toml 생성 완료! (프로젝트명: {project_name})")
     return True
-# === ANCHOR: AUTO_INSTALL_ENSURE_PYPROJECT_TOML_END ===
 
 
 # === ANCHOR: AUTO_INSTALL_ENSURE_PYPROJECT_END ===

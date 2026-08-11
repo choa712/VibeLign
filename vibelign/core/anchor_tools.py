@@ -286,7 +286,13 @@ def _python_symbol_blocks_ast(text: str) -> list[SymbolBlock] | None:
         ):
             continue
         # node.lineno 는 데코레이터가 아니라 def/class 줄을 가리킨다 (3.8+).
+        # 데코레이터는 정의의 일부다. 빼두면 마커가 @route 와 def 사이에 박혀
+        # 데코레이터가 보호 밖으로 나간다 — 그 앵커만 보고 고치는 AI 는 이
+        # 함수가 라우트인 줄도 모른다. repair 가 기존 START 를 데코레이터
+        # 아래로 끌어내리는 경로도 여기서 막힌다.
         start = node.lineno - 1
+        if node.decorator_list:
+            start = min(start, min(d.lineno for d in node.decorator_list) - 1)
         end = (node.end_lineno or node.lineno) - 1
         if not (0 <= start < len(lines)):
             continue
@@ -1769,6 +1775,14 @@ def repair_crossing_anchors(
         else:
             _ = insert_js_symbol_anchors(scratch)
         rebuilt = safe_read_text(scratch)
+        # 걷어낸 건 대상 마커뿐이지만 생성기는 파일 전체를 훑는다. 그대로 두면
+        # 앵커가 없던 함수·클래스에도 새로 붙어, "마커를 옮긴다" 고 한 명령이
+        # 보호 계약을 말없이 넓힌다. 이 리포를 한 번 돌렸을 때 20개 파일에
+        # 139개가 붙었다. 새로 생긴 이름은 도로 걷어낸다.
+        added = set(extract_anchors(scratch)) - before
+        if added:
+            _ = scratch.write_text(_without_markers(rebuilt, added), encoding="utf-8")
+            rebuilt = safe_read_text(scratch)
         after = set(extract_anchors(scratch))
         after_blocks = extract_anchor_blocks(scratch)
         # 오배치 판정은 파일을 다시 읽어야 하므로 임시 디렉터리 안에서 재본다.

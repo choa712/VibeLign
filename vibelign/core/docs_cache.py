@@ -25,8 +25,8 @@ DOCS_HTML_GENERATOR_VERSION = "raw-html-v1"
 TEXT_DOC_EXTENSIONS: frozenset[str] = frozenset({".md", ".markdown", ".txt", ".csv"})
 
 
-@dataclass(frozen=True)
 # === ANCHOR: DOCS_CACHE_DOCSINDEXENTRY_START ===
+@dataclass(frozen=True)
 class DocsIndexEntry:
     category: str
     path: str

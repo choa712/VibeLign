@@ -9,13 +9,11 @@ interface GuardResultModalProps {
 
 // === ANCHOR: GUARDRESULTMODAL_GUARDSTATUSCOLOR_START ===
 // 배지는 사람용 3단 verdict 기준(2026-06-12) — 위생 누적(prepare)이 빨강으로 보이지 않게.
-// === ANCHOR: GUARDRESULTMODAL_GUARDVERDICTBADGE_START ===
 function guardVerdictBadge(verdict: GuardResult["verdict"]): { label: string; color: string } {
   if (verdict === "pass") return { label: "통과", color: "#4DFF91" };
   if (verdict === "prepare") return { label: "준비 필요", color: "#FFD166" };
   return { label: "멈춤", color: "#FF4D4D" };
 }
-// === ANCHOR: GUARDRESULTMODAL_GUARDVERDICTBADGE_END ===
 // === ANCHOR: GUARDRESULTMODAL_GUARDSTATUSCOLOR_END ===
 
 // === ANCHOR: GUARDRESULTMODAL_GUARDRESULTMODAL_START ===

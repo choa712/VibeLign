@@ -32,8 +32,8 @@ class CardNewsExportError(ValueError):
 # === ANCHOR: REPORT_CARD_NEWS_EXPORT_CARDNEWSEXPORTERROR_END ===
 
 
-@dataclass(frozen=True, slots=True)
 # === ANCHOR: REPORT_CARD_NEWS_EXPORT_CARDNEWSEXPORT_START ===
+@dataclass(frozen=True, slots=True)
 class CardNewsExport:
     json_path: Path
     html_path: Path

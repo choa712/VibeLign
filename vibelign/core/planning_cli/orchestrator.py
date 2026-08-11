@@ -201,13 +201,11 @@ def _parse_csv(raw: str | None) -> tuple[str, ...]:
 # === ANCHOR: ORCHESTRATOR__PARSE_CSV_END ===
 
 
-# === ANCHOR: ORCHESTRATOR__FILTER_ENABLED_PERSONAS_START ===
 def _filter_enabled_personas(
     personas: tuple[PlanningPersona, ...],
 ) -> tuple[PlanningPersona, ...]:
     config = load_persona_config()
     return tuple(p for p in personas if not config.get(p.id) or config[p.id].enabled)
-# === ANCHOR: ORCHESTRATOR__FILTER_ENABLED_PERSONAS_END ===
 
 
 # === ANCHOR: ORCHESTRATOR__SAFE_RELATIVE_OUTPUT_PATH_START ===

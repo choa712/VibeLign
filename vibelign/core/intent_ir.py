@@ -2,8 +2,8 @@
 from dataclasses import dataclass, field, asdict
 
 
-@dataclass
 # === ANCHOR: INTENT_IR_INTENTIR_START ===
+@dataclass
 class IntentIR:
     raw_request: str
     operation: str

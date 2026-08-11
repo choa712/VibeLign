@@ -4,8 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True)
 # === ANCHOR: MODELS_PLANNINGINPUT_START ===
+@dataclass(frozen=True)
 class PlanningInput:
     idea: str
     language: str = "auto"
@@ -14,8 +14,8 @@ class PlanningInput:
 # === ANCHOR: MODELS_PLANNINGINPUT_END ===
 
 
-@dataclass(frozen=True)
 # === ANCHOR: MODELS_PLANNINGRESULT_START ===
+@dataclass(frozen=True)
 class PlanningResult:
     output_path: str
     absolute_output_path: str

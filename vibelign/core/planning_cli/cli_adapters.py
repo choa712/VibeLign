@@ -23,8 +23,8 @@ PlanningCliStatus = Literal[
 ]
 
 
-@dataclass(frozen=True)
 # === ANCHOR: CLI_ADAPTERS_PLANNINGCLIRESULT_START ===
+@dataclass(frozen=True)
 class PlanningCliResult:
     status: PlanningCliStatus
     stdout: str
@@ -34,8 +34,8 @@ class PlanningCliResult:
 # === ANCHOR: CLI_ADAPTERS_PLANNINGCLIRESULT_END ===
 
 
-@dataclass(frozen=True)
 # === ANCHOR: CLI_ADAPTERS_PLANNINGCLICANDIDATE_START ===
+@dataclass(frozen=True)
 class PlanningCliCandidate:
     adapter: str
     executable: str | None

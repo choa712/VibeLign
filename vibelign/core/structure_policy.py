@@ -62,7 +62,6 @@ ANCHOR_MARKER_PATTERN = (
 _ANCHOR_MARKER_RE = re.compile(ANCHOR_MARKER_PATTERN, re.MULTILINE)
 
 
-# === ANCHOR: STRUCTURE_POLICY_HAS_ANCHOR_MARKERS_START ===
 def has_anchor_markers(text: str) -> bool:
     """정본 형식 앵커 마커가 하나라도 있는가.
 
@@ -92,7 +91,6 @@ def has_anchor_markers(text: str) -> bool:
             # 없으므로, 이름만 양쪽에 있다고 참으로 보면 안 된다.
             return True
     return False
-# === ANCHOR: STRUCTURE_POLICY_HAS_ANCHOR_MARKERS_END ===
 
 GENERATED_ARTIFACT_DIR_NAMES: frozenset[str] = frozenset(
     {"dist", "build", "target", ".next", ".pnpm-store", "node_modules"}

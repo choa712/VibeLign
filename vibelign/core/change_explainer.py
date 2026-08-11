@@ -13,8 +13,8 @@ from vibelign.core.structure_policy import WINDOWS_SUBPROCESS_FLAGS
 FileSummary = dict[str, str]
 
 
-@dataclass
 # === ANCHOR: CHANGE_EXPLAINER_CHANGEITEM_START ===
+@dataclass
 class ChangeItem:
     path: str
     status: str
@@ -25,8 +25,8 @@ class ChangeItem:
 
 
 
-@dataclass
 # === ANCHOR: CHANGE_EXPLAINER_EXPLAINREPORT_START ===
+@dataclass
 class ExplainReport:
     source: str
     summary: str

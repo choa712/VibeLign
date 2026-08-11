@@ -40,8 +40,8 @@ class CardNewsAssetError(ValueError):
 # === ANCHOR: REPORT_CARD_NEWS_ASSET_GENERATOR_CARDNEWSASSETERROR_END ===
 
 
-@dataclass(frozen=True, slots=True)
 # === ANCHOR: REPORT_CARD_NEWS_ASSET_GENERATOR__ASSETRENDERCONTEXT_START ===
+@dataclass(frozen=True, slots=True)
 class _AssetRenderContext:
     root: Path
     slug: str
@@ -74,7 +74,6 @@ def materialize_card_news_assets(
 # === ANCHOR: REPORT_CARD_NEWS_ASSET_GENERATOR_MATERIALIZE_CARD_NEWS_ASSETS_END ===
 
 
-# === ANCHOR: REPORT_CARD_NEWS_ASSET_GENERATOR__MATERIALIZE_CARD_ASSET_START ===
 def _materialize_card_asset(
     context: _AssetRenderContext,
     asset_dir: Path,
@@ -92,7 +91,6 @@ def _materialize_card_asset(
     svg = _asset_svg(context, card)
     _ = asset_path.write_text(svg, encoding="utf-8")
     return _card_with_asset(card, asset_relative, _asset_source(card["image"]["provider"], svg))
-# === ANCHOR: REPORT_CARD_NEWS_ASSET_GENERATOR__MATERIALIZE_CARD_ASSET_END ===
 
 
 # === ANCHOR: REPORT_CARD_NEWS_ASSET_GENERATOR__SHARED_CLI_PROVIDER_START ===

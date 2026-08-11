@@ -342,6 +342,82 @@ def test_repair_is_not_abandoned_because_of_an_unfixable_report(tmp_path: Path) 
     assert "SENTINEL = 1" in path.read_text(encoding="utf-8")
 
 
+def test_decorator_is_part_of_the_symbol(tmp_path: Path) -> None:
+    """데코레이터를 심볼에서 빼면 마커가 @route 와 def 사이에 박힌다.
+
+    그 앵커만 보고 고치는 AI 는 이 함수가 라우트인 줄도 모른다. 더 나쁜 건
+    repair 가 사람이 데코레이터 위에 걸어둔 START 를 그 아래로 끌어내리면서
+    "고쳤다" 고 보고하는 경로다.
+    """
+    path = _write(
+        tmp_path,
+        "sample.py",
+        "# === ANCHOR: SAMPLE_HANDLE_START ===\n"
+        "@route\n"
+        "def handle() -> int:\n"
+        "    return 1\n"
+        "# === ANCHOR: SAMPLE_HANDLE_END ===\n",
+    )
+
+    # 데코레이터까지 덮고 있으니 정상이다.
+    assert find_misplaced_anchors(path) == []
+
+    outcome = repair_crossing_anchors(tmp_path, path, dry_run=False)
+    assert outcome["status"] == "unchanged"
+    assert "@route" in extract_anchor_blocks(path)["SAMPLE_HANDLE"]
+
+
+def test_decorator_left_outside_is_reported(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "sample.py",
+        "@route\n"
+        "# === ANCHOR: SAMPLE_HANDLE_START ===\n"
+        "def handle() -> int:\n"
+        "    return 1\n"
+        "# === ANCHOR: SAMPLE_HANDLE_END ===\n",
+    )
+
+    problems = find_misplaced_anchors(path)
+    assert len(problems) == 1
+    assert "SAMPLE_HANDLE" in problems[0]
+
+    outcome = repair_crossing_anchors(tmp_path, path, dry_run=False)
+    assert outcome["status"] == "repaired"
+    assert "@route" in extract_anchor_blocks(path)["SAMPLE_HANDLE"]
+
+
+def test_repair_does_not_create_new_anchors(tmp_path: Path) -> None:
+    """repair 는 옮기기만 한다 — 보호 계약을 넓히지 않는다.
+
+    걷어낸 건 대상 마커뿐이지만 생성기는 파일 전체를 훑는다. 그대로 두면
+    앵커가 없던 함수·클래스에도 새로 붙는다. 이 리포를 한 번 돌렸을 때
+    20개 파일에 139개가 붙었다 — "마커를 옮긴다" 고 한 명령의 결과로는
+    설명되지 않는 변경이다.
+    """
+    path = _write(
+        tmp_path,
+        "sample.py",
+        "# === ANCHOR: SAMPLE_HANDLE_START ===\n"
+        "def handle(\n"
+        "    value: int,\n"
+        "# === ANCHOR: SAMPLE_HANDLE_END ===\n"
+        ") -> int:\n"
+        "    return value\n"
+        "\n"
+        "\n"
+        "def untouched() -> int:\n"  # 앵커 없음 — 그대로여야 한다
+        "    return 0\n",
+    )
+    before = set(extract_anchors(path))
+
+    outcome = repair_crossing_anchors(tmp_path, path, dry_run=False)
+
+    assert outcome["status"] == "repaired"
+    assert set(extract_anchors(path)) == before
+    assert "SAMPLE_UNTOUCHED" not in path.read_text(encoding="utf-8")
+
+
 def test_repair_leaves_clean_file_untouched(tmp_path: Path) -> None:
     path = _write(
         tmp_path,

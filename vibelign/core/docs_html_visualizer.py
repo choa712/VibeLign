@@ -13,8 +13,8 @@ from . import docs_visualizer as _DOCS_VISUALIZER
 RAW_HTML_CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-src 'none'"
 
 
-@dataclass(frozen=True)
 # === ANCHOR: DOCS_HTML_VISUALIZER_DOCSHTMLARTIFACT_START ===
+@dataclass(frozen=True)
 class DocsHtmlArtifact:
     source_path: str
     source_hash: str

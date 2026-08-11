@@ -97,7 +97,6 @@ function assignDirectoryCategories(node: CodeTreeNode): Record<CategoryKey, numb
 }
 // === ANCHOR: TREE_ASSIGNDIRECTORYCATEGORIES_END ===
 
-// === ANCHOR: TREE_ASSIGNCHANGEDCOUNTS_START ===
 function assignChangedCounts(node: CodeTreeNode): number {
   let count = 0;
   for (const child of node.children) {
@@ -112,7 +111,6 @@ function assignChangedCounts(node: CodeTreeNode): number {
   }
   return count;
 }
-// === ANCHOR: TREE_ASSIGNCHANGEDCOUNTS_END ===
 
 // === ANCHOR: TREE_BUILDCODETREE_START ===
 export function buildCodeTree(files: CodeFileEntry[], changes?: ReadonlyMap<string, ChangeStatus>): CodeTreeNode {

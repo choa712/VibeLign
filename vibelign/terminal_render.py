@@ -9,90 +9,47 @@ import builtins
 from typing import IO, Protocol, TypedDict, cast
 
 
-# === ANCHOR: TERMINAL_RENDER_RICHTEXTLIKE_START ===
 class RichTextLike(Protocol):
-    # === ANCHOR: TERMINAL_RENDER_APPEND_START ===
     def append(self, text: str, style: str = "") -> object: ...
-    # === ANCHOR: TERMINAL_RENDER_APPEND_END ===
-# === ANCHOR: TERMINAL_RENDER_RICHTEXTLIKE_END ===
 
 
-# === ANCHOR: TERMINAL_RENDER_RICHCONSOLELIKE_START ===
 class RichConsoleLike(Protocol):
-    # === ANCHOR: TERMINAL_RENDER_PRINT_START ===
     def print(self, *objects: object, **kwargs: object) -> object: ...
-    # === ANCHOR: TERMINAL_RENDER_PRINT_END ===
-# === ANCHOR: TERMINAL_RENDER_RICHCONSOLELIKE_END ===
 
 
-# === ANCHOR: TERMINAL_RENDER_RICHCONSOLEFACTORY_START ===
 class RichConsoleFactory(Protocol):
-    # === ANCHOR: TERMINAL_RENDER___CALL___START ===
     def __call__(self, *args: object, **kwargs: object) -> RichConsoleLike: ...
-    # === ANCHOR: TERMINAL_RENDER___CALL___END ===
-# === ANCHOR: TERMINAL_RENDER_RICHCONSOLEFACTORY_END ===
 
 
-# === ANCHOR: TERMINAL_RENDER_RICHGROUPFACTORY_START ===
 class RichGroupFactory(Protocol):
-    # === ANCHOR: TERMINAL_RENDER___CALL___START ===
     def __call__(self, *args: object, **kwargs: object) -> object: ...
-    # === ANCHOR: TERMINAL_RENDER___CALL___END ===
-# === ANCHOR: TERMINAL_RENDER_RICHGROUPFACTORY_END ===
 
 
-# === ANCHOR: TERMINAL_RENDER_RICHCOLUMNSFACTORY_START ===
 class RichColumnsFactory(Protocol):
-    # === ANCHOR: TERMINAL_RENDER___CALL___START ===
     def __call__(self, *args: object, **kwargs: object) -> object: ...
-    # === ANCHOR: TERMINAL_RENDER___CALL___END ===
-# === ANCHOR: TERMINAL_RENDER_RICHCOLUMNSFACTORY_END ===
 
 
-# === ANCHOR: TERMINAL_RENDER_RICHPANELFACTORY_START ===
 class RichPanelFactory(Protocol):
-    # === ANCHOR: TERMINAL_RENDER___CALL___START ===
     def __call__(self, *args: object, **kwargs: object) -> object: ...
-    # === ANCHOR: TERMINAL_RENDER___CALL___END ===
-    # === ANCHOR: TERMINAL_RENDER_FIT_START ===
     def fit(self, *args: object, **kwargs: object) -> object: ...
-    # === ANCHOR: TERMINAL_RENDER_FIT_END ===
-# === ANCHOR: TERMINAL_RENDER_RICHPANELFACTORY_END ===
 
 
-# === ANCHOR: TERMINAL_RENDER_RICHRULEFACTORY_START ===
 class RichRuleFactory(Protocol):
-    # === ANCHOR: TERMINAL_RENDER___CALL___START ===
     def __call__(self, *args: object, **kwargs: object) -> object: ...
-    # === ANCHOR: TERMINAL_RENDER___CALL___END ===
-# === ANCHOR: TERMINAL_RENDER_RICHRULEFACTORY_END ===
 
 
-# === ANCHOR: TERMINAL_RENDER_RICHSYNTAXFACTORY_START ===
 class RichSyntaxFactory(Protocol):
-    # === ANCHOR: TERMINAL_RENDER___CALL___START ===
     def __call__(self, *args: object, **kwargs: object) -> object: ...
-    # === ANCHOR: TERMINAL_RENDER___CALL___END ===
-# === ANCHOR: TERMINAL_RENDER_RICHSYNTAXFACTORY_END ===
 
 
-# === ANCHOR: TERMINAL_RENDER_RICHTEXTFACTORY_START ===
 class RichTextFactory(Protocol):
-    # === ANCHOR: TERMINAL_RENDER___CALL___START ===
     def __call__(self, *args: object, **kwargs: object) -> RichTextLike: ...
-    # === ANCHOR: TERMINAL_RENDER___CALL___END ===
-# === ANCHOR: TERMINAL_RENDER_RICHTEXTFACTORY_END ===
 
 
-# === ANCHOR: TERMINAL_RENDER_RICHPADDINGFACTORY_START ===
 class RichPaddingFactory(Protocol):
-    # === ANCHOR: TERMINAL_RENDER___CALL___START ===
     def __call__(self, *args: object, **kwargs: object) -> object: ...
-    # === ANCHOR: TERMINAL_RENDER___CALL___END ===
-# === ANCHOR: TERMINAL_RENDER_RICHPADDINGFACTORY_END ===
 
 
-# === ANCHOR: TERMINAL_RENDER_RICHMODULE_START ===
 class RichModule(TypedDict):
     Console: RichConsoleFactory
     Group: RichGroupFactory
@@ -102,7 +59,6 @@ class RichModule(TypedDict):
     Syntax: RichSyntaxFactory
     Text: RichTextFactory
     Padding: RichPaddingFactory
-# === ANCHOR: TERMINAL_RENDER_RICHMODULE_END ===
 
 
 _ONBOARDING_STYLE_ENV = "VIBELIGN_ONBOARDING_STYLE"

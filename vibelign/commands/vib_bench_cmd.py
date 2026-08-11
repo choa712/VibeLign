@@ -26,7 +26,6 @@ from vibelign.terminal_render import (
 SCENARIOS_PATH = BENCHMARK_DIR / "scenarios.json"
 
 
-# === ANCHOR: VIB_BENCH_CMD_BENCHMARKSCENARIO_START ===
 class BenchmarkScenario(TypedDict):
     id: str
     request: str
@@ -34,26 +33,20 @@ class BenchmarkScenario(TypedDict):
     correct_files: list[str]
     forbidden_files: NotRequired[list[str]]
     correct_anchor: NotRequired[str]
-# === ANCHOR: VIB_BENCH_CMD_BENCHMARKSCENARIO_END ===
 
 
-# === ANCHOR: VIB_BENCH_CMD_PROJECTMAPDATA_START ===
 class ProjectMapData(TypedDict):
     entry_files: list[str]
     ui_modules: list[str]
     service_modules: list[str]
     core_modules: list[str]
-# === ANCHOR: VIB_BENCH_CMD_PROJECTMAPDATA_END ===
 
 
-# === ANCHOR: VIB_BENCH_CMD_ANCHORMETAENTRY_START ===
 class AnchorMetaEntry(TypedDict, total=False):
     intent: str
     connects: list[str]
-# === ANCHOR: VIB_BENCH_CMD_ANCHORMETAENTRY_END ===
 
 
-# === ANCHOR: VIB_BENCH_CMD_BENCHSCOREENTRY_START ===
 class BenchScoreEntry(TypedDict):
     condition: str
     scenario_id: str
@@ -63,36 +56,26 @@ class BenchScoreEntry(TypedDict):
     anchor_respected: bool | None
     modified_files: list[str]
     extra_files: list[str]
-# === ANCHOR: VIB_BENCH_CMD_BENCHSCOREENTRY_END ===
 
 
-# === ANCHOR: VIB_BENCH_CMD_BENCHSCORES_START ===
 class BenchScores(TypedDict):
     scenarios: list[BenchScoreEntry]
-# === ANCHOR: VIB_BENCH_CMD_BENCHSCORES_END ===
 
 
-# === ANCHOR: VIB_BENCH_CMD_VIBBENCHARGS_START ===
 class VibBenchArgs(Protocol):
     generate: bool
     score: bool
     report: bool
     json: bool
-# === ANCHOR: VIB_BENCH_CMD_VIBBENCHARGS_END ===
 
 
 ScoreMetric = Literal["file_accuracy", "precision", "safety"]
 
 
-# === ANCHOR: VIB_BENCH_CMD_BUILDPROJECTMAPFN_START ===
 class BuildProjectMapFn(Protocol):
-    # === ANCHOR: VIB_BENCH_CMD___CALL___START ===
     def __call__(self, root: Path, force_scan: bool = False) -> dict[str, object]: ...
-    # === ANCHOR: VIB_BENCH_CMD___CALL___END ===
-# === ANCHOR: VIB_BENCH_CMD_BUILDPROJECTMAPFN_END ===
 
 
-# === ANCHOR: VIB_BENCH_CMD__EMPTY_PROJECT_MAP_START ===
 def _empty_project_map() -> ProjectMapData:
     return {
         "entry_files": [],
@@ -100,10 +83,8 @@ def _empty_project_map() -> ProjectMapData:
         "service_modules": [],
         "core_modules": [],
     }
-# === ANCHOR: VIB_BENCH_CMD__EMPTY_PROJECT_MAP_END ===
 
 
-# === ANCHOR: VIB_BENCH_CMD__NORMALIZE_OBJECT_DICT_START ===
 def _normalize_object_dict(value: object) -> dict[str, object] | None:
     if not isinstance(value, dict):
         return None
@@ -112,19 +93,15 @@ def _normalize_object_dict(value: object) -> dict[str, object] | None:
     for key, item in raw.items():
         normalized[str(key)] = item
     return normalized
-# === ANCHOR: VIB_BENCH_CMD__NORMALIZE_OBJECT_DICT_END ===
 
 
-# === ANCHOR: VIB_BENCH_CMD__NORMALIZE_STRING_LIST_START ===
 def _normalize_string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     raw = cast(list[object], value)
     return [item for item in raw if isinstance(item, str)]
-# === ANCHOR: VIB_BENCH_CMD__NORMALIZE_STRING_LIST_END ===
 
 
-# === ANCHOR: VIB_BENCH_CMD__NORMALIZE_SCENARIO_START ===
 def _normalize_scenario(value: object) -> BenchmarkScenario | None:
     data = _normalize_object_dict(value)
     if data is None:
@@ -151,10 +128,8 @@ def _normalize_scenario(value: object) -> BenchmarkScenario | None:
     if isinstance(correct_anchor, str):
         normalized["correct_anchor"] = correct_anchor
     return normalized
-# === ANCHOR: VIB_BENCH_CMD__NORMALIZE_SCENARIO_END ===
 
 
-# === ANCHOR: VIB_BENCH_CMD__NORMALIZE_PROJECT_MAP_START ===
 def _normalize_project_map(value: object) -> ProjectMapData:
     data = _normalize_object_dict(value)
     if data is None:
@@ -165,10 +140,8 @@ def _normalize_project_map(value: object) -> ProjectMapData:
         "service_modules": _normalize_string_list(data.get("service_modules")),
         "core_modules": _normalize_string_list(data.get("core_modules")),
     }
-# === ANCHOR: VIB_BENCH_CMD__NORMALIZE_PROJECT_MAP_END ===
 
 
-# === ANCHOR: VIB_BENCH_CMD__NORMALIZE_ANCHOR_META_START ===
 def _normalize_anchor_meta(value: object) -> dict[str, AnchorMetaEntry]:
     data = _normalize_object_dict(value)
     if data is None:
@@ -187,10 +160,8 @@ def _normalize_anchor_meta(value: object) -> dict[str, AnchorMetaEntry]:
             meta_entry["connects"] = connects
         normalized[name] = meta_entry
     return normalized
-# === ANCHOR: VIB_BENCH_CMD__NORMALIZE_ANCHOR_META_END ===
 
 
-# === ANCHOR: VIB_BENCH_CMD__BUILD_PROJECT_MAP_FOR_BENCH_START ===
 def _build_project_map_for_bench(root: Path) -> dict[str, object]:
     vib_start_raw = cast(
         object, importlib.import_module("vibelign.commands.vib_start_cmd")
@@ -199,7 +170,6 @@ def _build_project_map_for_bench(root: Path) -> dict[str, object]:
         BuildProjectMapFn, getattr(vib_start_raw, "_build_project_map")
     )
     return build_project_map(root)
-# === ANCHOR: VIB_BENCH_CMD__BUILD_PROJECT_MAP_FOR_BENCH_END ===
 
 
 # === ANCHOR: VIB_BENCH_CMD__LOAD_SCENARIOS_START ===

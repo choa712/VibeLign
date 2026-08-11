@@ -43,15 +43,15 @@ def _secret_then_guard(secret_cmd: str, guard_cmd: str, indent: str) -> list[str
     ]
 
 
-@dataclass(frozen=True)
 # === ANCHOR: GIT_HOOKS_HOOKINSTALLRESULT_START ===
+@dataclass(frozen=True)
 class HookInstallResult:
     status: str
     path: Path | None
     detail: str | None = None
-
-
 # === ANCHOR: GIT_HOOKS_HOOKINSTALLRESULT_END ===
+
+
 
 
 # === ANCHOR: GIT_HOOKS__RUN_GIT_PATH_START ===

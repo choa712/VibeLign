@@ -13,17 +13,17 @@ _MAX_INLINE_EDIT_LINES = 20
 _NEW_FILE_LINE_THRESHOLD = 150
 
 
-@dataclass(frozen=True)
 # === ANCHOR: STRUCTURE_PLANNER_PLANNERRULE_START ===
+@dataclass(frozen=True)
 class PlannerRule:
     tokens: tuple[str, ...]
     target_category: str
     default_filename: str
     path_signals: tuple[str, ...]
     preferred_existing_names: tuple[str, ...] = ()
-
-
 # === ANCHOR: STRUCTURE_PLANNER_PLANNERRULE_END ===
+
+
 
 
 _CATEGORY_PATHS: dict[str, str] = {
@@ -167,7 +167,6 @@ def _slugify_feature(feature: str) -> str:
 # === ANCHOR: STRUCTURE_PLANNER__SLUGIFY_FEATURE_END ===
 
 
-# === ANCHOR: STRUCTURE_PLANNER__DEFAULT_NEW_FILENAME_START ===
 def _default_new_filename(feature: str, rule: PlannerRule, keywords: list[str]) -> str:
     filename = rule.default_filename
     if not filename.startswith("new_feature."):
@@ -182,7 +181,6 @@ def _default_new_filename(feature: str, rule: PlannerRule, keywords: list[str]) 
         if keyword_set & {"menu", "dropdown", "메뉴", "드롭다운"}:
             return "feature_menu.tsx"
     return f"{_slugify_feature(feature)}{suffix}"
-# === ANCHOR: STRUCTURE_PLANNER__DEFAULT_NEW_FILENAME_END ===
 
 
 # === ANCHOR: STRUCTURE_PLANNER__EXTRACT_KEYWORDS_START ===

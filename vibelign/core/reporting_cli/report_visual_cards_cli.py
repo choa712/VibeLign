@@ -23,8 +23,8 @@ JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
 JsonObject: TypeAlias = dict[str, JsonValue]
 
 
-@dataclass(frozen=True, slots=True)
 # === ANCHOR: REPORT_VISUAL_CARDS_CLI_VISUALCARDSCLIERROR_START ===
+@dataclass(frozen=True, slots=True)
 class VisualCardsCliError(RuntimeError):
     provider: str
     reason: str
@@ -36,8 +36,8 @@ class VisualCardsCliError(RuntimeError):
 # === ANCHOR: REPORT_VISUAL_CARDS_CLI_VISUALCARDSCLIERROR_END ===
 
 
-@dataclass(frozen=True, slots=True)
 # === ANCHOR: REPORT_VISUAL_CARDS_CLI_CLIVISUALCARDSPROVIDER_START ===
+@dataclass(frozen=True, slots=True)
 class CliVisualCardsProvider:
     provider: str
     root: Path

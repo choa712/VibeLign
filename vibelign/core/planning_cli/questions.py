@@ -7,8 +7,8 @@ from dataclasses import dataclass
 SHORT_IDEA_THRESHOLD = 40
 
 
-@dataclass(frozen=True)
 # === ANCHOR: QUESTIONS_PLANNINGQUESTION_START ===
+@dataclass(frozen=True)
 class PlanningQuestion:
     id: str
     label: str

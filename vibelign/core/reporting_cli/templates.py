@@ -11,8 +11,8 @@ from vibelign.core.reporting_cli.models import (
 )
 
 
-@dataclass(frozen=True)
 # === ANCHOR: TEMPLATES_SECTIONSPEC_START ===
+@dataclass(frozen=True)
 class SectionSpec:
     heading: str  # 보고서에 보일 제목
     source: str  # PlanningData 필드명
