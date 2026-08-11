@@ -30,14 +30,14 @@ export function tokensToCssVars(t: StyleSpec["tokens"], motion?: StyleSpec["moti
   if (motion) {
     s = s.replace(/\}$/, `--dur:${motion.tokens.duration};--ease:${motion.tokens.easing};}`);
   }
-// === ANCHOR: CUSTOMSTYLES_TOKENSTOCSSVARS_END ===
   return s;
 }
+// === ANCHOR: CUSTOMSTYLES_TOKENSTOCSSVARS_END ===
 
 /** 목업 HTML 의 첫 `:root{…}` 블록을 새 블록으로 치환(LLM 재호출 없는 즉시 재색칠). 매치 없으면 원본 유지. */
 // === ANCHOR: CUSTOMSTYLES_REPLACEROOTBLOCK_START ===
 export function replaceRootBlock(html: string, rootBlock: string): string {
   return html.replace(/:root\s*\{[^}]*\}/, rootBlock);
-// === ANCHOR: CUSTOMSTYLES_REPLACEROOTBLOCK_END ===
 }
+// === ANCHOR: CUSTOMSTYLES_REPLACEROOTBLOCK_END ===
 // === ANCHOR: CUSTOMSTYLES_END ===

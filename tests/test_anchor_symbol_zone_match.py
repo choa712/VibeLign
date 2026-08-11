@@ -467,6 +467,51 @@ def test_pathological_js_nesting_is_bounded_and_reported(tmp_path: Path) -> None
     assert repair_crossing_anchors(tmp_path, path, dry_run=True)["status"] == "unchanged"
 
 
+def test_regex_literal_braces_do_not_end_the_block(tmp_path: Path) -> None:
+    """정규식 안의 중괄호를 코드로 세면 함수가 일찍 끝난 것으로 잡힌다.
+
+    이 리포의 customStyles.ts 가 그랬다. `s.replace(/\\}$/, ...)` 의 `}` 때문에
+    블록 깊이가 0으로 떨어져 END 가 `return s;` 앞에 놓였고, 검사조차 그걸
+    정상으로 봤다 — 결함을 못 보는 검사는 없는 것보다 나쁘다.
+    """
+    path = _write(
+        tmp_path,
+        "styles.ts",
+        "// === ANCHOR: STYLES_BUILD_START ===\n"
+        "export function build(t: string): string {\n"
+        "  let s = t;\n"
+        "  if (t) {\n"
+        "    s = s.replace(/\\}$/, ';}');\n"
+        "  }\n"
+        "// === ANCHOR: STYLES_BUILD_END ===\n"
+        "  return s;\n"
+        "}\n",
+    )
+
+    problems = find_misplaced_anchors(path)
+    assert len(problems) == 1
+    assert "STYLES_BUILD" in problems[0]
+
+    assert repair_crossing_anchors(tmp_path, path, dry_run=False)["status"] == "repaired"
+    assert "return s;" in extract_anchor_blocks(path)["STYLES_BUILD"]
+
+
+def test_division_is_not_mistaken_for_a_regex(tmp_path: Path) -> None:
+    """반대 방향 오판도 막아야 한다 — 나눗셈을 정규식으로 읽으면 깊이가 샌다."""
+    path = _write(
+        tmp_path,
+        "math.ts",
+        "// === ANCHOR: MATH_RATIO_START ===\n"
+        "export function ratio(a: number, b: number): number {\n"
+        "  const half = (a + 1) / 2 / b;\n"
+        "  return half;\n"
+        "}\n"
+        "// === ANCHOR: MATH_RATIO_END ===\n",
+    )
+
+    assert find_misplaced_anchors(path) == []
+
+
 def test_repair_leaves_clean_file_untouched(tmp_path: Path) -> None:
     path = _write(
         tmp_path,

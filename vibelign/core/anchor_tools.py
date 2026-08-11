@@ -276,7 +276,10 @@ def _python_symbol_blocks(text: str) -> list[SymbolBlock]:
 def _python_symbol_blocks_ast(text: str) -> list[SymbolBlock] | None:
     try:
         tree = ast.parse(text)
-    except (SyntaxError, ValueError):
+    except (SyntaxError, ValueError, MemoryError, RecursionError):
+        # MemoryError 는 파서 스택 넘침으로도 온다(단항 연산자 2만 개 등).
+        # 검사 하나가 죽으면 vib anchor --validate 전체가 멈춘다 — 그 파일만
+        # 들여쓰기 스캔으로 떨어뜨린다.
         return None
     lines = text.splitlines()
     blocks: list[SymbolBlock] = []
@@ -392,6 +395,14 @@ def _js_scan_line(line: str, state: dict) -> int:
             state["block_comment"] = True
             j += 2
             continue
+        # 정규식 리터럴. 안의 중괄호를 코드로 세면 블록 깊이가 망가진다 —
+        # 이 리포의 customStyles.ts 가 `s.replace(/\}$/, ...)` 때문에 함수가
+        # 한 줄 일찍 끝난 것으로 잡혀 END 가 return 앞에 놓였고, 검사도 그걸
+        # 정상으로 봤다. 나눗셈과 구분하는 기준은 앞의 의미 있는 문자다:
+        # 값이 올 수 없는 자리 뒤의 `/` 는 정규식이다.
+        if c == "/" and _js_regex_can_start(line, j):
+            j = _js_skip_regex(line, j)
+            continue
         if c in ("'", '"'):
             stack.append(("str", c))
             j += 1
@@ -421,6 +432,60 @@ def _js_scan_line(line: str, state: dict) -> int:
         j += 1
     return delta
 # === ANCHOR: ANCHOR_TOOLS__JS_SCAN_LINE_END ===
+
+# === ANCHOR: ANCHOR_TOOLS__JS_REGEX_LITERAL_START ===
+# `/` 앞에 이 문자들이 오면 값이 아직 안 나온 자리라 정규식 시작이다.
+# 식별자·숫자·닫는 괄호 뒤라면 나눗셈이다. 완벽한 판별은 파서가 필요하지만,
+# 이 휴리스틱이 실무 코드의 사실상 전부를 가른다.
+_JS_REGEX_PREV_OK = set("(,=:[!&|?{;}+-*%~^<>")
+
+
+def _js_regex_can_start(line: str, idx: int) -> bool:
+    k = idx - 1
+    while k >= 0 and line[k] in " \t":
+        k -= 1
+    if k < 0:
+        return True  # 줄 첫 토큰
+    prev = line[k]
+    if prev in _JS_REGEX_PREV_OK:
+        return True
+    # `return /re/`, `typeof /re/` 처럼 키워드 뒤도 값 자리다.
+    word_end = k + 1
+    while k >= 0 and (line[k].isalnum() or line[k] == "_"):
+        k -= 1
+    word = line[k + 1 : word_end]
+    return word in {"return", "typeof", "case", "in", "of", "delete", "void", "yield", "await", "new"}
+
+
+def _js_skip_regex(line: str, idx: int) -> int:
+    """`/` 에서 시작하는 정규식 리터럴의 끝 다음 위치. 못 닫으면 나눗셈으로 본다."""
+    j = idx + 1
+    in_class = False
+    while j < len(line):
+        ch = line[j]
+        if ch == "\\":
+            j += 2
+            continue
+        if in_class:
+            if ch == "]":
+                in_class = False
+            j += 1
+            continue
+        if ch == "[":
+            in_class = True
+            j += 1
+            continue
+        if ch == "/":
+            j += 1
+            while j < len(line) and line[j].isalpha():  # 플래그 g, i, m ...
+                j += 1
+            return j
+        j += 1
+    return idx + 1  # 줄 안에서 안 닫힘 — 정규식이 아니었다고 보고 한 칸만 전진
+
+
+# === ANCHOR: ANCHOR_TOOLS__JS_REGEX_LITERAL_END ===
+
 
 
 # === ANCHOR: ANCHOR_TOOLS__JS_SYMBOL_BLOCKS_START ===
