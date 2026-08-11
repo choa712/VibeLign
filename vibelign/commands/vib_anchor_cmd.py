@@ -149,7 +149,7 @@ def _unindexed_source_files(
 def _run_crossing_repair(
     root: Path, allowed_exts: set[str] | None, *, dry_run: bool, json_mode: bool
 ) -> None:
-    """교차 앵커가 있는 파일의 마커를 다시 놓는다.
+    """잘못 놓인 마커를 다시 놓는다 — 교차와 단독 오배치 양쪽.
 
     마커 위치를 옮기는 것은 코드 변경이므로 무엇이 바뀌는지 먼저 보여준다.
     되살릴 수 없는 이름이 사라지는 파일은 건너뛰고 이유를 밝힌다 — 사람이
@@ -189,7 +189,7 @@ def _run_crossing_repair(
         for item in repaired:
             print(f"- {item['path']}")
     else:
-        print("교차 앵커가 있는 파일이 없거나, 자동으로 고칠 수 있는 파일이 없습니다.")
+        print("잘못 놓인 마커가 없거나, 자동으로 고칠 수 있는 파일이 없습니다.")
     if skipped:
         print("")
         print(f"건너뛴 파일 {len(skipped)}개 (사람이 판단해야 합니다):")

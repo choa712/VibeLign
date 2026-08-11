@@ -512,6 +512,57 @@ def test_division_is_not_mistaken_for_a_regex(tmp_path: Path) -> None:
     assert find_misplaced_anchors(path) == []
 
 
+def test_repair_skips_when_an_occurrence_would_appear(tmp_path: Path) -> None:
+    """줄어드는 쪽만 막으면 절반이다 — 늘어나는 쪽도 보호 계약 변경이다.
+
+    이름이 하나뿐이던 앵커를 걷어냈는데 같은 이름의 심볼이 둘이면 두 쌍이
+    다시 놓인다. 이름 집합은 그대로라 소실 검사를 통과하고, 없던 보호 구역
+    (NAME_2)이 조용히 생긴다.
+    """
+    path = _write(
+        tmp_path,
+        "dup.py",
+        "class A:\n"
+        "    # === ANCHOR: DUP_RUN_START ===\n"
+        "    def run(self) -> int:\n"
+        "        value = 1\n"
+        "    # === ANCHOR: DUP_RUN_END ===\n"  # 잘렸다
+        "        return value\n"
+        "\n"
+        "\n"
+        "class B:\n"  # 같은 이름의 두 번째 심볼 — 앵커는 없다
+        "    def run(self) -> int:\n"
+        "        return 2\n",
+    )
+    original = path.read_text(encoding="utf-8")
+
+    outcome = repair_crossing_anchors(tmp_path, path, dry_run=False)
+
+    assert outcome["status"] == "skipped"
+    assert "DUP_RUN_2" in outcome["lost_names"]
+    assert path.read_text(encoding="utf-8") == original
+
+
+def test_regex_after_a_control_paren_is_recognized(tmp_path: Path) -> None:
+    """`if (ok) /re/.test(v)` 는 정규식 자리다.
+
+    `)` 를 값의 끝으로만 보면 나눗셈으로 읽혀 정규식 안의 중괄호가 블록
+    깊이를 망친다. 제어문 괄호인지 뒤로 짚어 구분한다.
+    """
+    path = _write(
+        tmp_path,
+        "guard.ts",
+        "// === ANCHOR: GUARD_CHECK_START ===\n"
+        "export function check(v: string, ok: boolean): boolean {\n"
+        "  if (ok) /\\}$/.test(v);\n"
+        "  return ok;\n"
+        "}\n"
+        "// === ANCHOR: GUARD_CHECK_END ===\n",
+    )
+
+    assert find_misplaced_anchors(path) == []
+
+
 def test_repair_leaves_clean_file_untouched(tmp_path: Path) -> None:
     path = _write(
         tmp_path,

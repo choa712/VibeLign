@@ -440,6 +440,33 @@ def _js_scan_line(line: str, state: dict) -> int:
 _JS_REGEX_PREV_OK = set("(,=:[!&|?{;}+-*%~^<>")
 
 
+def _js_control_paren_before(line: str, idx: int) -> bool:
+    """`idx` 의 `)` 가 if/while/for 의 조건 괄호인가.
+
+    `if (ok) /re/.test(v)` 는 정규식 자리인데, `)` 를 값의 끝으로만 보면
+    나눗셈으로 읽혀 정규식 안의 중괄호가 블록 깊이를 망친다.
+    """
+    depth = 0
+    k = idx
+    while k >= 0:
+        if line[k] == ")":
+            depth += 1
+        elif line[k] == "(":
+            depth -= 1
+            if depth == 0:
+                break
+        k -= 1
+    if k < 0:
+        return False
+    k -= 1
+    while k >= 0 and line[k] in " \t":
+        k -= 1
+    end = k + 1
+    while k >= 0 and (line[k].isalnum() or line[k] == "_"):
+        k -= 1
+    return line[k + 1 : end] in {"if", "while", "for", "with"}
+
+
 def _js_regex_can_start(line: str, idx: int) -> bool:
     k = idx - 1
     while k >= 0 and line[k] in " \t":
@@ -447,6 +474,8 @@ def _js_regex_can_start(line: str, idx: int) -> bool:
     if k < 0:
         return True  # 줄 첫 토큰
     prev = line[k]
+    if prev == ")":
+        return _js_control_paren_before(line, k)
     if prev in _JS_REGEX_PREV_OK:
         return True
     # `return /re/`, `typeof /re/` 처럼 키워드 뒤도 값 자리다.
@@ -1875,6 +1904,17 @@ def repair_crossing_anchors(
             "status": "skipped",
             "reason": "같은 이름의 앵커 등장 횟수가 줄어듭니다",
             "lost_names": lost_occurrences,
+        }
+    # 늘어나는 쪽도 막는다. 이름이 하나뿐이던 앵커를 걷어냈는데 같은 이름의
+    # 심볼이 둘이면 두 쌍이 다시 놓인다 — 이름 집합은 그대로라 위 검사를
+    # 통과하고, 없던 보호 구역(NAME_2)이 조용히 생긴다.
+    gained_occurrences = sorted(set(after_blocks) - set(before_blocks))
+    if gained_occurrences:
+        return {
+            "path": rel,
+            "status": "skipped",
+            "reason": "같은 이름의 앵커 등장 횟수가 늘어납니다",
+            "lost_names": gained_occurrences,
         }
     remaining = find_crossing_anchors(rebuilt)
     if remaining:
