@@ -1,5 +1,5 @@
 # === ANCHOR: ANCHOR_TOOLS_START ===
-from collections.abc import Callable, Collection, Iterator
+from collections.abc import Callable, Collection, Iterable, Iterator
 from pathlib import Path
 import ast
 import hashlib
@@ -1637,11 +1637,16 @@ class RepairOutcome(TypedDict):
 def repair_crossing_anchors(
     root: Path, path: Path, *, dry_run: bool = False
 ) -> RepairOutcome:
-    """교차 앵커가 있는 파일의 마커를 올바른 위치로 다시 놓는다.
+    """잘못 놓인 마커를 올바른 위치로 다시 놓는다 — 교차와 단독 오배치 양쪽.
 
     마커를 걷어내고 고쳐진 생성기로 다시 넣는다. 이름은 파일명·심볼명에서
     결정론적으로 나오므로 보통 그대로 복원되고, anchor_meta.json 의 intent 도
     이름을 키로 하니 살아남는다.
+
+    대상이 둘인 이유: 두 결함의 원인이 같다. #7 에서 고친 생성기 결함(여러 줄
+    시그니처의 닫는 괄호를 본문 끝으로 오인)이 만든 마커가, 이웃 앵커와 엇갈리면
+    교차로 잡히고 혼자 놓이면 아무 검사에도 안 걸린 채 남았다 (issue #11).
+    고치는 방법은 같으므로 대상만 넓힌다.
 
     **이름이 하나라도 사라지면 쓰지 않고 건너뛴다.** 사람이 직접 붙인 이름이나
     심볼 이름이 바뀐 뒤 남은 앵커는 재생성으로 되살릴 수 없고, 그걸 잃으면
@@ -1649,12 +1654,17 @@ def repair_crossing_anchors(
     """
     rel = str(path.relative_to(root)) if path.is_relative_to(root) else str(path)
     original = safe_read_text(path)
-    if not original or not find_crossing_anchors(original):
-        return {"path": rel, "status": "unchanged", "reason": "교차 없음", "lost_names": []}
+    moved_ok = _crossing_participants(original or "") | _misplaced_participants(path)
+    if not original or not moved_ok:
+        return {
+            "path": rel,
+            "status": "unchanged",
+            "reason": "교차·오배치 없음",
+            "lost_names": [],
+        }
 
     before = set(extract_anchors(path))
     before_blocks = extract_anchor_blocks(path)
-    moved_ok = _crossing_participants(original)
     with tempfile.TemporaryDirectory() as tmp_dir:
         scratch = Path(tmp_dir) / path.name  # 파일명 유지 — 앵커 접두사가 여기서 나온다
         # 연루된 앵커의 마커만 걷어내고 그 자리만 다시 잡는다. 파일 전체를
@@ -1671,6 +1681,11 @@ def repair_crossing_anchors(
         rebuilt = safe_read_text(scratch)
         after = set(extract_anchors(scratch))
         after_blocks = extract_anchor_blocks(scratch)
+        # 오배치 판정은 파일을 다시 읽어야 하므로 임시 디렉터리 안에서 재본다.
+        # 보고 기준이 아니라 **옮길 수 있는 것** 기준으로 본다. 사람이 다른 곳에
+        # 건 앵커는 재생성해도 계속 보고되지만, 그건 고칠 대상이 아니므로
+        # 그것 때문에 고칠 수 있는 파일을 통째로 포기하면 안 된다.
+        still_misplaced = sorted(_misplaced_participants(scratch))
 
     lost = sorted(before - after)
     if lost:
@@ -1686,6 +1701,13 @@ def repair_crossing_anchors(
             "path": rel,
             "status": "skipped",
             "reason": f"재생성 후에도 교차가 남습니다 ({len(remaining)}건)",
+            "lost_names": [],
+        }
+    if still_misplaced:
+        return {
+            "path": rel,
+            "status": "skipped",
+            "reason": f"재생성 후에도 오배치가 남습니다 ({len(still_misplaced)}건)",
             "lost_names": [],
         }
     # 이름이 남았다고 같은 구역인 건 아니다. 사람이 붙인 앵커의 이름이 우연히
@@ -1752,9 +1774,126 @@ def _code_only(body: str | None) -> str:
     """앵커 본문에서 마커 줄을 걷어낸 실제 코드."""
     if body is None:
         return ""
+    return _code_only_lines(body.splitlines())
+
+
+def _code_only_lines(lines: Iterable[str]) -> str:
+    """마커 줄을 걷어낸 실제 코드. 앵커 본문과 심볼 구역을 같은 자로 잰다."""
     return "\n".join(
-        line for line in body.splitlines() if not is_anchor_marker_line(line)
+        line for line in lines if not is_anchor_marker_line(line)
     ).strip()
+
+
+# === ANCHOR: ANCHOR_TOOLS_FIND_MISPLACED_ANCHORS_START ===
+# 진단 크기 상한. 교차 쪽과 같은 이유 — 파일 하나가 리포트를 태우면 안 된다.
+_MISPLACED_MAX_FINDINGS = 50
+
+
+def _symbol_zones(path: Path, text: str) -> dict[str, list[tuple[int, int]]]:
+    """생성 규칙으로 나올 앵커 이름 → 그 심볼이 차지하는 줄 범위 (1-based, 양끝 포함).
+
+    같은 이름이 여러 심볼에서 나올 수 있다(다른 클래스의 동명 메서드).
+    그 경우 후보를 모두 담고, 하나라도 덮이면 제자리로 본다 — 어느 쪽을
+    가리키는지 가릴 수 없을 때 오배치로 단정하면 오탐이 된다.
+    """
+    suffix = path.suffix.lower()
+    if suffix == ".py":
+        blocks = _python_symbol_blocks(text)
+    elif suffix in {".js", ".ts", ".jsx", ".tsx"}:
+        blocks = _js_symbol_blocks(text)
+    else:
+        return {}
+    total = len(text.splitlines())
+    zones: dict[str, list[tuple[int, int]]] = {}
+    for start_idx, end_idx, symbol_name, _indent in blocks:
+        if not (0 <= start_idx <= end_idx < total):
+            continue
+        name = build_symbol_anchor_name(path, symbol_name)
+        zones.setdefault(name, []).append((start_idx + 1, end_idx + 1))
+    return zones
+
+
+def find_misplaced_anchors(path: Path) -> list[str]:
+    """심볼 이름을 달고 있으면서 그 심볼을 다 덮지 못하는 앵커를 찾는다 — 경고다.
+
+    교차 검출은 앵커가 **둘 이상 엇갈릴 때만** 잡는다. 앵커 하나가 혼자
+    잘못 놓이면 짝도 맞고 교차도 없어서 검증을 통과한다. 그런데 그 앵커가
+    보호하는 건 함수 본문이 아니라 시그니처 한 조각이다 — AI 에게 "이 앵커
+    안에서만 고쳐라" 라고 하면 본문은 보호 밖이다 (issue #11).
+
+    **덜 덮는 것만 문제다.** 앵커가 심볼보다 넓은 건(이웃 헬퍼·모듈 상수까지
+    한 구역으로 묶은 경우) 결함이 아니라 사람의 의도다 — 보호가 더 넓어질
+    뿐이다. 이 리포만 해도 그런 묶음이 훨씬 많아서, 넘침까지 보고하면 정작
+    위험한 "부족"이 신호에 묻힌다.
+
+    비교 대상은 **이름이 생성 규칙과 정확히 일치하는 앵커**뿐이다. 사람이
+    손으로 건 구역이나 심볼명이 바뀐 뒤 남은 앵커는 대응할 심볼이 없으므로
+    건너뛴다 — 그쪽까지 잡으려 들면 정당한 사용을 오탐한다.
+
+    차단하지 않는 이유는 교차 때와 같다. 원인이던 생성기 결함은 #7 에서
+    고쳤지만 이미 놓인 마커는 그대로 남아 있다. 먼저 보고만 하고, 리포가
+    0이 된 뒤에 차단으로 올린다 (soft → hard 승격).
+    """
+    problems: list[str] = []
+    for name, (start_line, end_line), (sym_start, sym_end) in _uncovered_symbols(path):
+        problems.append(
+            f"{start_line}~{end_line}번째 줄: {name} 이 심볼 구역"
+            f"({sym_start}~{sym_end}번째 줄)을 다 덮지 못합니다 — "
+            "이 앵커는 심볼 전체가 아니라 그 일부만 보호합니다"
+        )
+        if len(problems) >= _MISPLACED_MAX_FINDINGS:
+            problems.append(
+                f"오배치 앵커가 {_MISPLACED_MAX_FINDINGS}건을 넘어 이후는 생략합니다"
+            )
+            break
+    return problems
+
+
+def _uncovered_symbols(
+    path: Path,
+) -> list[tuple[str, tuple[int, int], tuple[int, int]]]:
+    """(앵커 이름, 앵커 줄범위, 대표 심볼 줄범위) — 심볼을 다 덮지 못하는 것만."""
+    text = safe_read_text(path)
+    if not text:
+        return []
+    zones = _symbol_zones(path, text)
+    if not zones:
+        return []
+    found: list[tuple[str, tuple[int, int], tuple[int, int]]] = []
+    for name, (start_line, end_line) in sorted(extract_anchor_line_ranges(path).items()):
+        candidates = zones.get(name)
+        if not candidates:
+            continue  # 대응 심볼 없음 — 사람이 건 앵커이거나 이름이 낡았다
+        # 마커 줄 자체는 보호 구역이 아니므로 그 사이에 심볼이 온전히 들어와야 한다.
+        if any(
+            start_line < sym_start and sym_end < end_line
+            for sym_start, sym_end in candidates
+        ):
+            continue
+        found.append((name, (start_line, end_line), candidates[0]))
+    return found
+
+
+def _misplaced_participants(path: Path) -> set[str]:
+    """repair 가 옮겨도 되는 오배치 앵커 이름.
+
+    보고 기준보다 좁다. 보고는 "심볼을 다 덮지 못한다" 로 충분하지만, **옮기는**
+    판단에는 그것만으로 부족하다 — 이름이 생성 규칙과 우연히 같으면서 사람이
+    전혀 다른 곳(모듈 상수 등)에 일부러 건 앵커가 여기 걸리고, 그걸 옮기면
+    사용자가 지정한 보호 구역이 조용히 사라진다.
+
+    그래서 **심볼과 겹칠 때만** 옮긴다. 겹침은 "그 심볼을 감싸려다 경계를
+    잘못 잡았다" 는 뜻이고, 그게 #7 생성기 결함이 남긴 모양이다. 완전히
+    떨어져 있으면 감싸려던 대상이 애초에 그 심볼이 아니었다고 본다.
+    """
+    names: set[str] = set()
+    for name, (start_line, end_line), (sym_start, sym_end) in _uncovered_symbols(path):
+        if start_line <= sym_end and sym_start <= end_line:
+            names.add(name)
+    return names
+
+
+# === ANCHOR: ANCHOR_TOOLS_FIND_MISPLACED_ANCHORS_END ===
 
 
 def _crossing_participants(text: str) -> set[str]:

@@ -108,6 +108,26 @@ def _validate_anchor_file(path: Path) -> Iterable[str]:
     return cast(Iterable[str], anchor_tools_mod.validate_anchor_file(path))
 
 
+_MISPLACED_SHOWN = 10
+
+
+def _print_misplaced_warnings(warnings: list[str]) -> None:
+    """오배치 경고를 출력한다 — 종료 코드는 건드리지 않는다.
+
+    전부 쏟아내면(이 리포만 102건) 정작 차단 사유가 묻힌다. 앞의 몇 건만
+    보여주고 나머지는 수로 알린 뒤 고치는 방법을 가리킨다.
+    """
+    if not warnings:
+        return
+    print("")
+    print(f"⚠️  심볼을 다 덮지 못하는 앵커 {len(warnings)}건 (경고 — 차단하지 않습니다):")
+    for item in warnings[:_MISPLACED_SHOWN]:
+        print(f"- {item}")
+    if len(warnings) > _MISPLACED_SHOWN:
+        print(f"  ... 외 {len(warnings) - _MISPLACED_SHOWN}건")
+    print("  vib anchor --repair --dry-run 으로 고칠 수 있는 파일을 확인하세요.")
+
+
 def _unindexed_source_files(
     root: Path, index: dict[str, object], allowed_exts: set[str] | None
 ) -> list[tuple[Path, str]]:
@@ -524,10 +544,16 @@ def run_vib_anchor(args: object) -> None:
     if validate:
         index = _write_anchor_index(root, meta, allowed_exts)
         problems: list[str] = []
+        # 오배치는 경고다 — problems 에 섞지 않는다. 차단으로 올리면 --auto 를
+        # 한 번이라도 돌린 프로젝트가 전부 깨진다. 교차 때와 같은 순서를 지킨다:
+        # 원인(생성기)을 먼저 고치고, 리포가 0이 된 뒤에 승격한다 (issue #11).
+        warnings: list[str] = []
         for rel in sorted(index):
             path = root / rel
             for problem in _validate_anchor_file(path):
                 problems.append(f"{rel}: {problem}")
+            for warning in anchor_tools_mod.find_misplaced_anchors(path):
+                warnings.append(f"{rel}: {warning}")
         # 인덱스는 "정본 앵커가 있는 파일"만 담는다. 인덱스만 돌면 구 형식·훼손
         # 마커만 가진 파일은 아예 순회되지 않아, 보호가 0인 프로젝트가 조용히
         # validation passed 를 받는다. 앵커가 없는 파일도 훑되 "앵커가 없습니다"
@@ -544,6 +570,7 @@ def run_vib_anchor(args: object) -> None:
                         "error": None,
                         "data": {
                             "problems": problems,
+                            "warnings": warnings,
                             "anchor_index": index,
                         },
                     },
@@ -558,9 +585,11 @@ def run_vib_anchor(args: object) -> None:
             print("Anchor validation problems:")
             for item in problems:
                 print(f"- {item}")
+            _print_misplaced_warnings(warnings)
             raise SystemExit(1)
         print("Anchor validation passed.")
         print(f"Anchor index saved: {meta.anchor_index_path.relative_to(root)}")
+        _print_misplaced_warnings(warnings)
         return
 
     recommendations = (
