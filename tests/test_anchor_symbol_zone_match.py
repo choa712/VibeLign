@@ -144,6 +144,46 @@ def test_duplicate_symbol_names_match_any_candidate(tmp_path: Path) -> None:
     assert find_misplaced_anchors(path) == []
 
 
+def test_second_occurrence_of_a_duplicate_name_is_checked(tmp_path: Path) -> None:
+    """같은 이름이 두 번 열리면 두 번째가 검사에서 빠지던 결함.
+
+    extract_anchor_line_ranges 는 두 번째 등장을 NAME_2 로 이름 붙이는데,
+    심볼 쪽은 둘 다 NAME 으로만 색인된다. 그대로 찾으면 아무 심볼과도 안
+    맞아 조용히 건너뛰어졌다 — 잘린 두 번째 앵커가 영영 안 잡힌다.
+    """
+    path = _write(
+        tmp_path,
+        "dup.py",
+        "class First:\n"
+        "    # === ANCHOR: DUP_RUN_START ===\n"
+        "    def run(self) -> int:\n"
+        "        return 1\n"
+        "    # === ANCHOR: DUP_RUN_END ===\n"
+        "\n"
+        "\n"
+        "class Second:\n"
+        "    # === ANCHOR: DUP_RUN_START ===\n"
+        "    def run(self) -> int:\n"
+        "        value = 2\n"
+        "    # === ANCHOR: DUP_RUN_END ===\n"  # 잘렸다 — return 이 보호 밖
+        "        return value\n",
+    )
+
+    problems = find_misplaced_anchors(path)
+    assert len(problems) == 1
+    assert "DUP_RUN_2" in problems[0]
+    # 대표 심볼은 겹치는 쪽이어야 한다. 첫 번째를 쓰면 엉뚱한 줄을 가리키고
+    # 겹침 판정(옮길지 말지)까지 틀린다.
+    assert "10~13번째 줄" in problems[0]
+
+    outcome = repair_crossing_anchors(tmp_path, path, dry_run=False)
+    assert outcome["status"] == "repaired"
+    assert find_misplaced_anchors(path) == []
+    body = path.read_text(encoding="utf-8")
+    assert "return 1" in body
+    assert "return value" in body
+
+
 def test_typescript_end_before_return_is_reported(tmp_path: Path) -> None:
     """실제로 이 리포의 tree.ts 가 이 모양이었다 — 반환문이 보호 밖이다."""
     path = _write(

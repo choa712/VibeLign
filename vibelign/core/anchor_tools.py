@@ -8,7 +8,7 @@ import json
 import re
 import sys
 import tempfile
-from typing import TypeAlias, TypedDict, cast
+from typing import NamedTuple, TypeAlias, TypedDict, cast
 
 from vibelign.core.atomic_write import atomic_write_text
 from vibelign.core.project_map import ProjectMapSnapshot
@@ -1025,6 +1025,18 @@ def _all_marker_names(lines: list[str]) -> set[str]:
 # === ANCHOR: ANCHOR_TOOLS__ALL_MARKER_NAMES_END ===
 
 
+def _marker_name_for(display: str, marker_names: set[str]) -> str:
+    """표시 이름(NAME_2)을 파일에 적힌 마커 이름으로 되돌린다.
+
+    실제로 NAME_2 라는 마커가 있으면 그게 답이다 — _occurrence_namer 는 이미
+    있는 이름과 겹치지 않게 붙이므로, 있는 쪽이 진짜다.
+    """
+    if display in marker_names:
+        return display
+    base = re.sub(r"_\d+$", "", display)
+    return base if base in marker_names else display
+
+
 def _occurrence_namer(lines: list[str]) -> Callable[[str], str]:
     """같은 이름이 여러 번 열릴 때 두 번째부터 NAME_2, NAME_3 로 구분한다.
 
@@ -1792,10 +1804,14 @@ def repair_crossing_anchors(
     # 마커 줄은 빼고 비교한다. 바깥 앵커의 본문에는 안쪽 마커 줄이 섞여
     # 들어가므로, 그대로 비교하면 안쪽이 옮겨진 것만으로 바깥까지 "구역이
     # 바뀌었다" 가 된다. 우리가 지켜야 할 것은 **보호되는 코드**가 같은가다.
+    # 같은 이름이 두 번 열리면 표시 이름은 NAME, NAME_2 로 갈리지만 마커 이름은
+    # 둘 다 NAME 이다. 표시 이름으로 비교하면 옮기기로 한 마커의 두 번째 등장이
+    # "무관한 앵커가 움직였다" 로 잡혀, 정작 고쳐야 할 파일을 영영 건너뛴다.
+    marker_names = _all_marker_names(original.splitlines())
     drifted = sorted(
         name
         for name, body in before_blocks.items()
-        if name not in moved_ok
+        if _marker_name_for(name, marker_names) not in moved_ok
         and _code_only(after_blocks.get(name)) != _code_only(body)
     )
     if drifted:
@@ -1919,9 +1935,11 @@ def find_misplaced_anchors(path: Path) -> list[str]:
     0이 된 뒤에 차단으로 올린다 (soft → hard 승격).
     """
     problems: list[str] = []
-    for name, (start_line, end_line), (sym_start, sym_end) in _uncovered_symbols(path):
+    for item in _uncovered_symbols(path):
+        start_line, end_line = item.anchor
+        sym_start, sym_end = item.symbol
         problems.append(
-            f"{start_line}~{end_line}번째 줄: {name} 이 심볼 구역"
+            f"{start_line}~{end_line}번째 줄: {item.display} 이 심볼 구역"
             f"({sym_start}~{sym_end}번째 줄)을 다 덮지 못합니다 — "
             "이 앵커는 심볼 전체가 아니라 그 일부만 보호합니다"
         )
@@ -1934,19 +1952,35 @@ def find_misplaced_anchors(path: Path) -> list[str]:
 
 
 # === ANCHOR: ANCHOR_TOOLS__UNCOVERED_SYMBOLS_START ===
-def _uncovered_symbols(
-    path: Path,
-) -> list[tuple[str, tuple[int, int], tuple[int, int]]]:
-    """(앵커 이름, 앵커 줄범위, 대표 심볼 줄범위) — 심볼을 다 덮지 못하는 것만."""
+class _Uncovered(NamedTuple):
+    display: str  # 사람에게 보이는 이름 (두 번째 등장은 NAME_2)
+    marker: str  # 파일에 적힌 마커 이름 (중복이면 둘 다 NAME)
+    anchor: tuple[int, int]
+    symbol: tuple[int, int]
+
+
+def _uncovered_symbols(path: Path) -> list[_Uncovered]:
+    """심볼을 다 덮지 못하는 앵커들."""
     text = safe_read_text(path)
     if not text:
         return []
     zones = _symbol_zones(path, text)
     if not zones:
         return []
-    found: list[tuple[str, tuple[int, int], tuple[int, int]]] = []
+    found: list[_Uncovered] = []
     for name, (start_line, end_line) in sorted(extract_anchor_line_ranges(path).items()):
+        # 같은 이름이 두 번 열리면 표시 이름에 _2, _3 이 붙는다(_occurrence_namer).
+        # 그건 파일에 적힌 마커 이름이 아니므로 그대로 찾으면 아무 심볼과도 안
+        # 맞아 조용히 검사에서 빠진다 — 잘린 두 번째 앵커가 영영 안 잡힌다.
+        # 접미사를 떼기 전에 정확히 일치하는 심볼부터 본다. 실제로 run_2 라는
+        # 심볼이 있을 수 있고, 그 경우 namer 는 애초에 그 이름을 피해 간다.
+        marker = name
         candidates = zones.get(name)
+        if candidates is None:
+            base = re.sub(r"_\d+$", "", name)
+            if base != name:
+                candidates = zones.get(base)
+                marker = base
         if not candidates:
             continue  # 대응 심볼 없음 — 사람이 건 앵커이거나 이름이 낡았다
         # 마커 줄 자체는 보호 구역이 아니므로 그 사이에 심볼이 온전히 들어와야 한다.
@@ -1955,7 +1989,17 @@ def _uncovered_symbols(
             for sym_start, sym_end in candidates
         ):
             continue
-        found.append((name, (start_line, end_line), candidates[0]))
+        # 후보가 여럿이면 앵커와 가장 많이 겹치는 것을 대표로 삼는다. 첫 번째를
+        # 그냥 쓰면 다른 클래스의 동명 메서드가 대표가 되어, 메시지가 엉뚱한
+        # 줄을 가리키고 겹침 판정(옮길지 말지)까지 틀린다.
+        representative = max(
+            candidates,
+            key=lambda zone: (
+                max(0, min(end_line, zone[1]) - max(start_line, zone[0])),
+                -zone[0],
+            ),
+        )
+        found.append(_Uncovered(name, marker, (start_line, end_line), representative))
     return found
 # === ANCHOR: ANCHOR_TOOLS__UNCOVERED_SYMBOLS_END ===
 
@@ -1974,9 +2018,12 @@ def _misplaced_participants(path: Path) -> set[str]:
     떨어져 있으면 감싸려던 대상이 애초에 그 심볼이 아니었다고 본다.
     """
     names: set[str] = set()
-    for name, (start_line, end_line), (sym_start, sym_end) in _uncovered_symbols(path):
+    for item in _uncovered_symbols(path):
+        start_line, end_line = item.anchor
+        sym_start, sym_end = item.symbol
         if start_line <= sym_end and sym_start <= end_line:
-            names.add(name)
+            # 마커 이름을 담는다. 표시 이름(NAME_2)으로는 마커를 걷어낼 수 없다.
+            names.add(item.marker)
     return names
 # === ANCHOR: ANCHOR_TOOLS__MISPLACED_PARTICIPANTS_END ===
 
