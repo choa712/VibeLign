@@ -75,7 +75,11 @@ describe("CodeExplorer planning context", () => {
 
     await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("저장된 기획안: plans/예약-앱-만들고-싶어.md"));
-    expect(screen.getByText("복사했어요. 사용하는 AI CLI에 붙여넣어 시작하세요.")).toBeInTheDocument();
+    // findByText 여야 한다. 토스트는 `await navigator.clipboard.writeText(...)` 의
+    // 후속에서 setCopyStatus 로 켜지므로, mock 호출이 기록된 시점에는 아직
+    // 렌더되지 않았을 수 있다. getByText 로 동기 단언하면 러너 부하에 따라
+    // 뒤집히는 경합이 된다 (실측: CI 에서 실패, 로컬에서 통과).
+    expect(await screen.findByText("복사했어요. 사용하는 AI CLI에 붙여넣어 시작하세요.")).toBeInTheDocument();
   });
 
   test("copies_persona_specific_cli_work_instruction", async () => {
