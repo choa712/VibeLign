@@ -1,0 +1,93 @@
+name: Tests
+
+# 빠른 회귀 게이트. gui.yml 은 Tauri 번들까지 만드느라 무겁고 GUI 경로 변경에서만
+# 돌기 때문에 파이썬 회귀를 잡지 못하고, python.yml 은 `python -m build` 만 해서
+# 테스트를 아예 실행하지 않는다. 즉 이 워크플로 이전에는 pytest·vitest 를 돌리는
+# CI 가 없었다.
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+# 같은 브랜치에 새 푸시가 오면 이전 실행을 취소한다. main 은 이력이 남아야 하므로
+# 취소하지 않는다.
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: pytest (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      # macOS 를 포함하는 이유: 러스트 엔진 발견 로직에 darwin 전용 분기(codesign
+      # self-heal)가 있고 주 사용 플랫폼이 macOS 다. 러너 시간은 21초 수준이라
+      # 두 OS 를 돌려도 부담이 없다.
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install package and test deps
+        # -e 로 설치해야 tests/ 가 리포의 vibelign 을 임포트한다. 휠로 설치하면
+        # site-packages 사본을 보게 되어 소스 변경이 검증되지 않는다.
+        # [report] 는 현재 빈 별칭이지만, 보고서 의존성이 다시 extra 로 옮겨져도
+        # CI 가 조용히 그걸 놓치지 않도록 명시해 둔다.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[report]"
+          python -m pip install pytest pytest-asyncio
+
+      - name: pytest
+        run: python -m pytest -q
+
+      # 이 리포는 자기 자신이 앵커 도구다. 앵커 정합이 깨지면 테스트가 통과해도
+      # 도구가 자기 저장소를 잘못 읽는 상태가 된다.
+      - name: vib anchor --validate (dogfood)
+        run: python -m vibelign anchor --validate
+
+      - name: 리포 전수 앵커 정합
+        run: python scripts/anchor_consistency_check.py
+
+  frontend:
+    name: tsc + vitest
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vibelign-gui
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: vibelign-gui/package-lock.json
+
+      - run: npm ci
+
+      # public/pdfjs/ 는 .gitignore 대상이라 체크아웃에 없다. dev·build 는
+      # pre 스크립트로 자동 복사하지만 tsc·vitest 는 그 훅을 타지 않는다.
+      - name: copy pdf.js runtime assets
+        run: npm run copy:pdfjs
+
+      - name: tsc --noEmit
+        run: npx tsc --noEmit
+
+      - name: vitest (직렬)
+        # --no-file-parallelism 이 필수다. DocsViewer.performance 는 벽시계 p95 를
+        # 예산과 비교하는데, 병렬 실행 + 러너 부하가 겹치면 코드 변경 없이도
+        # 실패한다 (실측: 부하 12 인 로컬에서 병렬 3건 실패, 직렬 464/464 통과).
+        # 벤치마크를 스위트에서 분리하기 전까지는 직렬로 돌린다.
+        run: npx vitest run --no-file-parallelism

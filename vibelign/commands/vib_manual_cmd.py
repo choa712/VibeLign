@@ -1495,6 +1495,61 @@ MANUAL: dict[str, ManualEntry] = {
             ),
         ],
     },
+    "report-card-news": {
+        "emoji": "🗂️",
+        "title": "vib report-card-news",
+        "one_line": "카드뉴스 초안에서 승인한 카드만 골라 최종 결과물로 저장해요",
+        "what": (
+            "vib report --visual-cards 로 만든 카드뉴스 companion payload 를 받아,\n"
+            "그 안에서 승인 표시된 카드만 확정 결과물로 저장해요.\n"
+            "초안 전체를 그대로 내보내지 않고 고른 것만 남기는 마무리 단계예요."
+        ),
+        "when": [
+            "카드뉴스 초안을 훑어보고 쓸 것만 추려서 저장하고 싶을 때",
+            "보고서 렌더링과 카드 선별을 나눠서 하고 싶을 때",
+        ],
+        "examples": [
+            [
+                "vib report-card-news out/cards.json",
+                "승인된 카드만 확정 저장",
+            ],
+            [
+                "vib report-card-news out/cards.json --json",
+                "결과를 JSON 으로 받기 (자동화용)",
+            ],
+        ],
+        "options": [
+            ("payload", "카드뉴스 companion JSON 경로 (필수)"),
+            ("--json", "결과를 JSON 으로 출력"),
+        ],
+    },
+    "report-stamp-pdf": {
+        "emoji": "🔢",
+        "title": "vib report-stamp-pdf",
+        "one_line": "이미 만든 PDF 보고서에 페이지 번호를 찍어요",
+        "what": (
+            "vib report --format pdf 로 뽑은 PDF 에 페이지 번호를 넣어요.\n"
+            "실패해도 원본 PDF 는 그대로 두므로 안심하고 다시 시도할 수 있어요."
+        ),
+        "when": [
+            "인쇄하거나 회의에서 넘겨볼 보고서에 쪽번호가 필요할 때",
+            "여러 문서를 묶기 전에 번호를 맞춰두고 싶을 때",
+        ],
+        "examples": [
+            [
+                "vib report-stamp-pdf out/보고서.pdf",
+                "페이지 번호 찍기",
+            ],
+            [
+                "vib report-stamp-pdf out/보고서.pdf --json",
+                "결과를 JSON 으로 받기 (자동화용)",
+            ],
+        ],
+        "options": [
+            ("pdf", "대상 PDF 경로 (필수)"),
+            ("--json", "결과를 JSON 으로 출력"),
+        ],
+    },
 }
 
 # 그룹 순서
@@ -1505,7 +1560,10 @@ GROUPS = [
         ["checkpoint", "undo", "history", "recover", "backup-db-viewer", "backup-graph-summary", "backup-db-maintenance", "backup-cleanup"],
     ),
     ("🔬 점검 & 확인", ["doctor", "guard", "explain"]),
-    ("✏️ AI 작업 준비", ["plan", "report", "anchor", "scan"]),
+    (
+        "✏️ AI 작업 준비",
+        ["plan", "report", "report-card-news", "report-stamp-pdf", "anchor", "scan"],
+    ),
     ("📚 문서 보기 & 다시생성", ["docs-build", "docs-enhance", "docs-index", "doc-sources"]),
     (
         "🗂️ 파일 & 설정",
