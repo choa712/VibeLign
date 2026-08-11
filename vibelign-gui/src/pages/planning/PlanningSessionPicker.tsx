@@ -119,7 +119,7 @@ export function PlanningSessionPicker({ projectDir, onSelect, onClose, onDeleted
         </div>
       </div>
     </div>
-// === ANCHOR: PLANNINGSESSIONPICKER_PLANNINGSESSIONPICKER_END ===
   );
 }
+// === ANCHOR: PLANNINGSESSIONPICKER_PLANNINGSESSIONPICKER_END ===
 // === ANCHOR: PLANNINGSESSIONPICKER_END ===

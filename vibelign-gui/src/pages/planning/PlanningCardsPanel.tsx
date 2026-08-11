@@ -79,9 +79,9 @@ export function PlanningCardsPanel({ cards, projectDir, sessionId, onCardsChange
         <CardItem key={card.id} card={card} busy={busyId === card.id} onAction={handleAction} />
       ))}
     </div>
-// === ANCHOR: PLANNINGCARDSPANEL_PLANNINGCARDSPANEL_END ===
   );
 }
+// === ANCHOR: PLANNINGCARDSPANEL_PLANNINGCARDSPANEL_END ===
 
 // === ANCHOR: PLANNINGCARDSPANEL_CARDITEM_START ===
 function CardItem({

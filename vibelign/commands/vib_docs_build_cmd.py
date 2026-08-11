@@ -29,6 +29,7 @@ write_docs_index_cache = _DOCS_INDEX_CACHE.write_docs_index_cache
 
 
 # === ANCHOR: VIB_DOCS_BUILD_CMD_REBUILD_DOCS_INDEX_CACHE_START ===
+# === ANCHOR: VIB_DOCS_BUILD_CMD_REBUILD_DOCS_INDEX_CACHE_WITH_WARNINGS_START ===
 def rebuild_docs_index_cache_with_warnings(
     root: Path,
 ) -> tuple[list[_DOCS_CACHE.DocsIndexEntry], list[str]]:
@@ -51,6 +52,7 @@ def rebuild_docs_index_cache_with_warnings(
     except OSError as exc:
         print(f"docs index cache write skipped: {exc}", file=sys.stderr)
     return entries, warnings
+# === ANCHOR: VIB_DOCS_BUILD_CMD_REBUILD_DOCS_INDEX_CACHE_WITH_WARNINGS_END ===
 
 
 def rebuild_docs_index_cache(root: Path) -> list[_DOCS_CACHE.DocsIndexEntry]:
@@ -98,6 +100,7 @@ def _atomic_write_text(target: Path, content: str) -> None:
 # === ANCHOR: VIB_DOCS_BUILD_CMD__ATOMIC_WRITE_TEXT_END ===
 
 
+# === ANCHOR: VIB_DOCS_BUILD_CMD__REPLACE_DOCS_VISUAL_DIR_START ===
 def _replace_docs_visual_dir(target: Path, replacement: Path) -> None:
     last_error: OSError | None = None
     backup: Path | None = None
@@ -127,6 +130,7 @@ def _replace_docs_visual_dir(target: Path, replacement: Path) -> None:
         "docs visual cache directory를 교체할 수 없어요. "
         "다른 앱이 cache 파일을 열고 있다면 닫고 다시 시도하세요."
     ) from last_error
+# === ANCHOR: VIB_DOCS_BUILD_CMD__REPLACE_DOCS_VISUAL_DIR_END ===
 
 
 # === ANCHOR: VIB_DOCS_BUILD_CMD__ENTRY_MAP_START ===
@@ -146,34 +150,37 @@ def _artifact_json_for_path(root: Path, relative_path: str) -> tuple[str, str]:
 # === ANCHOR: VIB_DOCS_BUILD_CMD__ARTIFACT_JSON_FOR_PATH_END ===
 
 
+# === ANCHOR: VIB_DOCS_BUILD_CMD__HTML_ARTIFACT_JSON_FOR_PATH_START ===
 def _html_artifact_json_for_path(root: Path, relative_path: str) -> tuple[str, str]:
     source_path = (root / relative_path).resolve()
     artifact = _DOCS_HTML_VISUALIZER.build_docs_html_artifact(source_path)
     return relative_path, json.dumps(
         artifact.to_dict(), ensure_ascii=False, indent=2
     ) + "\n"
+# === ANCHOR: VIB_DOCS_BUILD_CMD__HTML_ARTIFACT_JSON_FOR_PATH_END ===
 
 
 # === ANCHOR: VIB_DOCS_BUILD_CMD_RENDER_DOCS_VISUAL_ARTIFACTS_START ===
 def render_docs_visual_artifacts(
     root: Path, relative_paths: Iterable[str]
-# === ANCHOR: VIB_DOCS_BUILD_CMD_RENDER_DOCS_VISUAL_ARTIFACTS_END ===
 ) -> list[tuple[str, str]]:
     resolved_root = root.resolve()
     return [_artifact_json_for_path(resolved_root, path) for path in relative_paths]
+# === ANCHOR: VIB_DOCS_BUILD_CMD_RENDER_DOCS_VISUAL_ARTIFACTS_END ===
 
 
+# === ANCHOR: VIB_DOCS_BUILD_CMD_RENDER_DOCS_HTML_ARTIFACTS_START ===
 def render_docs_html_artifacts(
     root: Path, relative_paths: Iterable[str]
 ) -> list[tuple[str, str]]:
     resolved_root = root.resolve()
     return [_html_artifact_json_for_path(resolved_root, path) for path in relative_paths]
+# === ANCHOR: VIB_DOCS_BUILD_CMD_RENDER_DOCS_HTML_ARTIFACTS_END ===
 
 
 # === ANCHOR: VIB_DOCS_BUILD_CMD_BUILD_DOCS_VISUAL_CACHE_START ===
 def build_docs_visual_cache(
     root: Path, source_relative_path: str | None = None
-# === ANCHOR: VIB_DOCS_BUILD_CMD_BUILD_DOCS_VISUAL_CACHE_END ===
 ) -> dict[str, object]:
     root = root.resolve()
     meta = MetaPaths(root)
@@ -243,6 +250,7 @@ def build_docs_visual_cache(
         "html_written": [relative_path for relative_path, _ in html_rendered],
         "root": str(root),
     }
+# === ANCHOR: VIB_DOCS_BUILD_CMD_BUILD_DOCS_VISUAL_CACHE_END ===
 
 
 # === ANCHOR: VIB_DOCS_BUILD_CMD_RUN_VIB_DOCS_BUILD_START ===

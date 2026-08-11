@@ -49,18 +49,23 @@ def render_pptx(
     heading_name = font_def(fonts.heading).office_name if fonts and fonts.heading else None
     body_name = font_def(fonts.body).office_name if fonts and fonts.body else None
 
+    # === ANCHOR: PPTX_RENDERER__ACCENT_TITLE_START ===
     def _accent_title(shape) -> None:
         for para in shape.text_frame.paragraphs:
             for run in para.runs:
                 run.font.color.rgb = accent
+    # === ANCHOR: PPTX_RENDERER__ACCENT_TITLE_END ===
 
+    # === ANCHOR: PPTX_RENDERER__SIZE_TEXT_START ===
     def _size_text(shape, value: int | None) -> None:
         if value is None or not shape.has_text_frame:
             return
         for para in shape.text_frame.paragraphs:
             for run in para.runs:
                 run.font.size = Pt(value)
+    # === ANCHOR: PPTX_RENDERER__SIZE_TEXT_END ===
 
+    # === ANCHOR: PPTX_RENDERER__FONT_TEXT_START ===
     def _font_text(shape, name: str | None) -> None:
         if name is None or not shape.has_text_frame:
             return
@@ -74,6 +79,7 @@ def render_pptx(
                         el = rpr.makeelement(qn(tag), {})
                         rpr.append(el)
                     el.set("typeface", name)
+    # === ANCHOR: PPTX_RENDERER__FONT_TEXT_END ===
 
     prs = Presentation()
     title_slide = prs.slides.add_slide(prs.slide_layouts[0])
@@ -100,7 +106,7 @@ def render_pptx(
             _size_text(slide.placeholders[1], font_sizes.body if font_sizes is not None else None)
             _font_text(slide.placeholders[1], body_name)
     buf = io.BytesIO()
-# === ANCHOR: PPTX_RENDERER_RENDER_PPTX_END ===
     prs.save(buf)
     return buf.getvalue()
+# === ANCHOR: PPTX_RENDERER_RENDER_PPTX_END ===
 # === ANCHOR: PPTX_RENDERER_END ===

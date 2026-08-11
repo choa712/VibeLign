@@ -92,6 +92,31 @@ class TestNoCrossingGenerated:
         p.write_text("def f(:\n    pass\n", encoding="utf-8")
         _ = insert_python_symbol_anchors(p)
 
+    def test_outer_end_goes_past_a_retained_inner_end(self, tmp_path: Path) -> None:
+        """결함 4: 이미 놓인 안쪽 END 앞에 바깥 END 를 끼워 교차를 만든다.
+
+        마커가 일부만 남은 파일에 다시 넣을 때 드러난다(`--repair` 의 외과적
+        재생성). 심볼 끝은 마커를 걷어낸 코드 기준으로 잡히는데, 그 자리에
+        안쪽 앵커의 END 가 남아 있으면 바깥 END 가 그 앞에 들어간다 —
+        교차를 없애려고 돌린 명령이 새 교차를 만든다.
+        """
+        p = tmp_path / "retained.py"
+        marker = "=" * 3
+        # 안쪽 메서드 앵커만 남아 있고 클래스 앵커는 없는 상태.
+        p.write_text(
+            "class Holder:\n"
+            f"    # {marker} ANCHOR: RETAINED_LAST_START {marker}\n"
+            "    def last(self) -> int:\n"
+            "        return 1\n"
+            f"    # {marker} ANCHOR: RETAINED_LAST_END {marker}\n",
+            encoding="utf-8",
+        )
+
+        _ = insert_python_symbol_anchors(p)
+
+        assert find_crossing_anchors(p.read_text(encoding="utf-8")) == []
+        assert "RETAINED_HOLDER" in set(extract_anchors(p))
+
 
 # === ANCHOR: TEST_ANCHOR_GENERATOR_PLACEMENT_TESTNOCROSSINGGENERATED_END ===
 

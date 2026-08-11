@@ -39,9 +39,9 @@ def _add_page_number_footer(document) -> None:
     # === ANCHOR: DOCX_RENDERER__FIELD_END ===
 
     _field("PAGE")
-# === ANCHOR: DOCX_RENDERER__ADD_PAGE_NUMBER_FOOTER_END ===
     para.add_run(" / ")
     _field("NUMPAGES")
+# === ANCHOR: DOCX_RENDERER__ADD_PAGE_NUMBER_FOOTER_END ===
 
 
 # === ANCHOR: DOCX_RENDERER_RENDER_DOCX_START ===
@@ -66,16 +66,21 @@ def render_docx(
     )
     body_name = font_def(fonts.body).office_name if fonts and fonts.body else None
 
+    # === ANCHOR: DOCX_RENDERER__ACCENT_START ===
     def _accent(heading) -> None:
         for r in heading.runs:
             r.font.color.rgb = accent
+    # === ANCHOR: DOCX_RENDERER__ACCENT_END ===
 
+    # === ANCHOR: DOCX_RENDERER__SIZE_START ===
     def _size(paragraph, value: int | None) -> None:
         if value is None:
             return
         for run in paragraph.runs:
             run.font.size = Pt(value)
+    # === ANCHOR: DOCX_RENDERER__SIZE_END ===
 
+    # === ANCHOR: DOCX_RENDERER__FONT_START ===
     def _font(paragraph, name: str | None) -> None:
         if name is None:
             return
@@ -88,6 +93,7 @@ def render_docx(
                 rpr.insert(0, rfonts)
             for attr in ("w:ascii", "w:hAnsi", "w:eastAsia", "w:cs"):
                 rfonts.set(qn(attr), name)
+    # === ANCHOR: DOCX_RENDERER__FONT_END ===
 
     doc = Document()
     title = doc.add_heading(model.title, level=0)
@@ -121,7 +127,7 @@ def render_docx(
     if page_numbers:
         _add_page_number_footer(doc)
     buf = io.BytesIO()
-# === ANCHOR: DOCX_RENDERER_RENDER_DOCX_END ===
     doc.save(buf)
     return buf.getvalue()
+# === ANCHOR: DOCX_RENDERER_RENDER_DOCX_END ===
 # === ANCHOR: DOCX_RENDERER_END ===

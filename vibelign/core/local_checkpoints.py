@@ -21,9 +21,11 @@ from vibelign.core.structure_policy import (
 
 
 @dataclass
+# === ANCHOR: LOCAL_CHECKPOINTS_CHECKPOINTFILESUMMARY_START ===
 class CheckpointFileSummary:
     path: str
     size_bytes: int
+# === ANCHOR: LOCAL_CHECKPOINTS_CHECKPOINTFILESUMMARY_END ===
 
 
 @dataclass
@@ -64,27 +66,36 @@ _SAFE_CHECKPOINT_ID_RE = re.compile(r"^\d{8}T\d{6}\d{6}Z(?:_[\w가-힣-]{1,30})?
 _last_restore_error = ""
 
 
+# === ANCHOR: LOCAL_CHECKPOINTS__SET_RESTORE_ERROR_START ===
 def _set_restore_error(message: str) -> bool:
     global _last_restore_error
     _last_restore_error = message
     return False
+# === ANCHOR: LOCAL_CHECKPOINTS__SET_RESTORE_ERROR_END ===
 
 
+# === ANCHOR: LOCAL_CHECKPOINTS_GET_LAST_RESTORE_ERROR_START ===
 def get_last_restore_error() -> str:
     return (
         _last_restore_error or "되돌리기에 실패했어요. 체크포인트를 다시 확인해주세요."
     )
+# === ANCHOR: LOCAL_CHECKPOINTS_GET_LAST_RESTORE_ERROR_END ===
 
 
+# === ANCHOR: LOCAL_CHECKPOINTS__CLEAR_RESTORE_ERROR_START ===
 def _clear_restore_error() -> None:
     global _last_restore_error
     _last_restore_error = ""
+# === ANCHOR: LOCAL_CHECKPOINTS__CLEAR_RESTORE_ERROR_END ===
 
 
+# === ANCHOR: LOCAL_CHECKPOINTS__IS_SAFE_CHECKPOINT_ID_START ===
 def _is_safe_checkpoint_id(checkpoint_id: str) -> bool:
     return bool(_SAFE_CHECKPOINT_ID_RE.fullmatch(checkpoint_id))
+# === ANCHOR: LOCAL_CHECKPOINTS__IS_SAFE_CHECKPOINT_ID_END ===
 
 
+# === ANCHOR: LOCAL_CHECKPOINTS__RESOLVE_RELATIVE_PATH_START ===
 def _resolve_relative_path(base: Path, rel: str) -> Path | None:
     rel_path = Path(rel)
     if rel_path.is_absolute() or ".." in rel_path.parts:
@@ -96,6 +107,7 @@ def _resolve_relative_path(base: Path, rel: str) -> Path | None:
     except OSError:
         return None
     return candidate
+# === ANCHOR: LOCAL_CHECKPOINTS__RESOLVE_RELATIVE_PATH_END ===
 
 
 # === ANCHOR: LOCAL_CHECKPOINTS__SHA256_START ===
@@ -190,8 +202,10 @@ def _current_file_map(root: Path) -> dict[str, dict[str, object]]:
 # === ANCHOR: LOCAL_CHECKPOINTS__CURRENT_FILE_MAP_END ===
 
 
+# === ANCHOR: LOCAL_CHECKPOINTS_CURRENT_SNAPSHOT_FILE_MAP_START ===
 def current_snapshot_file_map(root: Path) -> dict[str, dict[str, object]]:
     return _current_file_map(root)
+# === ANCHOR: LOCAL_CHECKPOINTS_CURRENT_SNAPSHOT_FILE_MAP_END ===
 
 
 # === ANCHOR: LOCAL_CHECKPOINTS__LOAD_MANIFEST_START ===
@@ -223,6 +237,7 @@ def _manifest_files(manifest: dict[str, object]) -> list[dict[str, object]]:
 # === ANCHOR: LOCAL_CHECKPOINTS__MANIFEST_FILES_END ===
 
 
+# === ANCHOR: LOCAL_CHECKPOINTS__MANIFEST_FILE_SUMMARIES_START ===
 def _manifest_file_summaries(manifest: dict[str, object]) -> list[CheckpointFileSummary]:
     summaries: list[CheckpointFileSummary] = []
     for item in _manifest_files(manifest):
@@ -236,6 +251,7 @@ def _manifest_file_summaries(manifest: dict[str, object]) -> list[CheckpointFile
             )
         )
     return summaries
+# === ANCHOR: LOCAL_CHECKPOINTS__MANIFEST_FILE_SUMMARIES_END ===
 
 
 # === ANCHOR: LOCAL_CHECKPOINTS__COERCE_INT_START ===
@@ -351,6 +367,7 @@ def _manifest_file_map(manifest: dict[str, object]) -> dict[str, dict[str, objec
 # === ANCHOR: LOCAL_CHECKPOINTS__MANIFEST_FILE_MAP_END ===
 
 
+# === ANCHOR: LOCAL_CHECKPOINTS__EXTRACT_TAG_START ===
 def _extract_tag(message: str) -> str:
     """메시지에서 태그를 추출 (파일시스템 안전 문자만 허용, 최대 30자)."""
     import re as _re
@@ -370,6 +387,7 @@ def _extract_tag(message: str) -> str:
     # 연속 언더스코어 정리
     tag = _re.sub(r"_+", "_", tag).strip("_")
     return tag[:30]
+# === ANCHOR: LOCAL_CHECKPOINTS__EXTRACT_TAG_END ===
 
 
 # === ANCHOR: LOCAL_CHECKPOINTS_CREATE_CHECKPOINT_START ===
@@ -510,6 +528,7 @@ def restore_checkpoint(root: Path, checkpoint_id: str) -> bool:
         snapshot_files.add(rel_obj)
         validated_sources[rel_obj] = src
 
+    # === ANCHOR: LOCAL_CHECKPOINTS__FORCE_WRITABLE_START ===
     def _force_writable(p: Path) -> None:
         """읽기 전용이면 쓰기 권한을 임시로 추가한다."""
         try:
@@ -518,7 +537,9 @@ def restore_checkpoint(root: Path, checkpoint_id: str) -> bool:
                 os.chmod(p, current | stat.S_IWRITE)
         except OSError:
             pass
+    # === ANCHOR: LOCAL_CHECKPOINTS__FORCE_WRITABLE_END ===
 
+    # === ANCHOR: LOCAL_CHECKPOINTS__RESTORE_READONLY_START ===
     def _restore_readonly(p: Path) -> None:
         """쓰기 권한을 제거해 읽기 전용으로 되돌린다."""
         try:
@@ -526,6 +547,7 @@ def restore_checkpoint(root: Path, checkpoint_id: str) -> bool:
             os.chmod(p, current & ~(stat.S_IWRITE | stat.S_IWGRP | stat.S_IWOTH))
         except OSError:
             pass
+    # === ANCHOR: LOCAL_CHECKPOINTS__RESTORE_READONLY_END ===
 
     current_files = {str(path.relative_to(root)) for path in iter_snapshot_files(root)}
     for rel in sorted(current_files - snapshot_files, reverse=True):
@@ -567,7 +589,6 @@ def restore_checkpoint(root: Path, checkpoint_id: str) -> bool:
 def prune_checkpoints(
     root: Path,
     policy: RetentionPolicy = DEFAULT_RETENTION_POLICY,
-    # === ANCHOR: LOCAL_CHECKPOINTS_PRUNE_CHECKPOINTS_END ===
 ) -> dict[str, int]:
     checkpoints = list_checkpoints(root)
     now = datetime.now(timezone.utc)
@@ -636,6 +657,7 @@ def prune_checkpoints(
         kept = [item for item in kept if item.checkpoint_id != cp.checkpoint_id]
 
     return {"count": deleted_count, "bytes": deleted_bytes}
+# === ANCHOR: LOCAL_CHECKPOINTS_PRUNE_CHECKPOINTS_END ===
 
 
 # === ANCHOR: LOCAL_CHECKPOINTS_END ===

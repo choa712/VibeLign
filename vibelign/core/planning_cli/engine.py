@@ -25,7 +25,6 @@ def create_planning_with_persona(
     cli_choice: str = "auto",
     timeout_seconds: int = 300,
     runner: PlanningCliRunner | None = None,
-# === ANCHOR: ENGINE_CREATE_PLANNING_WITH_PERSONA_END ===
 ) -> PlanningResult:
     base = create_planning_template(root, planning_input)
     adapter = select_adapter(cli_choice)
@@ -64,6 +63,7 @@ def create_planning_with_persona(
         llm_status="ok",
         fallback_reason=None,
     )
+# === ANCHOR: ENGINE_CREATE_PLANNING_WITH_PERSONA_END ===
 
 
 # === ANCHOR: ENGINE__CONTAINS_FORBIDDEN_TERMS_START ===

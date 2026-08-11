@@ -9,7 +9,6 @@ def build_persona_prompt(
     persona: PlanningPersona,
     idea: str,
     template_markdown: str,
-# === ANCHOR: PROMPTS_BUILD_PERSONA_PROMPT_END ===
 ) -> str:
     return "\n".join(
         [
@@ -25,6 +24,7 @@ def build_persona_prompt(
             template_markdown,
         ]
     )
+# === ANCHOR: PROMPTS_BUILD_PERSONA_PROMPT_END ===
 
 
 # === ANCHOR: PROMPTS_APPEND_PERSONA_SECTION_START ===

@@ -108,7 +108,7 @@ export function useDesignJob(projectDir: string): DesignJob {
 
   const clearSynth = useCallback(() => setSynth(null), []);
 
-// === ANCHOR: USEDESIGNJOB_USEDESIGNJOB_END ===
   return { status, phaseMsg, html, synth, error, run, recolor, clearSynth, reset };
 }
+// === ANCHOR: USEDESIGNJOB_USEDESIGNJOB_END ===
 // === ANCHOR: USEDESIGNJOB_END ===

@@ -24,19 +24,24 @@ AllowedExts: TypeAlias = Collection[str]
 SymbolBlock: TypeAlias = tuple[int, int, str, str]
 
 
+# === ANCHOR: ANCHOR_TOOLS_ANCHORRECOMMENDATION_START ===
 class AnchorRecommendation(TypedDict):
     path: str
     score: int
     reasons: list[str]
     suggested_anchors: list[str]
     line_count: int
+# === ANCHOR: ANCHOR_TOOLS_ANCHORRECOMMENDATION_END ===
 
 
+# === ANCHOR: ANCHOR_TOOLS_ANCHORMETADATAENTRY_START ===
 class AnchorMetadataEntry(TypedDict):
     anchors: list[str]
     suggested_anchors: list[str]
+# === ANCHOR: ANCHOR_TOOLS_ANCHORMETADATAENTRY_END ===
 
 
+# === ANCHOR: ANCHOR_TOOLS_ANCHORMETAENTRY_START ===
 class AnchorMetaEntry(TypedDict, total=False):
     intent: str
     connects: list[str]
@@ -45,8 +50,10 @@ class AnchorMetaEntry(TypedDict, total=False):
     description: str
     _source: str
     _content_hash: str
+# === ANCHOR: ANCHOR_TOOLS_ANCHORMETAENTRY_END ===
 
 
+# === ANCHOR: ANCHOR_TOOLS__NORMALIZE_OBJECT_DICT_START ===
 def _normalize_object_dict(value: object) -> dict[str, object] | None:
     if not isinstance(value, dict):
         return None
@@ -55,8 +62,10 @@ def _normalize_object_dict(value: object) -> dict[str, object] | None:
     for key, item in raw.items():
         normalized[str(key)] = item
     return normalized
+# === ANCHOR: ANCHOR_TOOLS__NORMALIZE_OBJECT_DICT_END ===
 
 
+# === ANCHOR: ANCHOR_TOOLS__NORMALIZE_STRING_LIST_START ===
 def _normalize_string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -66,6 +75,7 @@ def _normalize_string_list(value: object) -> list[str]:
         if isinstance(item, str):
             normalized.append(item)
     return normalized
+# === ANCHOR: ANCHOR_TOOLS__NORMALIZE_STRING_LIST_END ===
 
 
 COMMENT_PREFIX = {
@@ -163,7 +173,6 @@ def anchor_recommendation_details(
     root: Path,
     path: Path,
     project_map: ProjectMapSnapshot | None = None,
-    # === ANCHOR: ANCHOR_TOOLS_ANCHOR_RECOMMENDATION_DETAILS_END ===
 ) -> AnchorRecommendation:
     rel = str(path.relative_to(root))
     text = safe_read_text(path)
@@ -223,6 +232,7 @@ def anchor_recommendation_details(
         "suggested_anchors": symbol_suggestions,
         "line_count": lines,
     }
+# === ANCHOR: ANCHOR_TOOLS_ANCHOR_RECOMMENDATION_DETAILS_END ===
 
 
 # === ANCHOR: ANCHOR_TOOLS_RECOMMEND_ANCHOR_TARGETS_START ===
@@ -230,7 +240,6 @@ def recommend_anchor_targets(
     root: Path,
     allowed_exts: AllowedExts | None = None,
     project_map: ProjectMapSnapshot | None = None,
-    # === ANCHOR: ANCHOR_TOOLS_RECOMMEND_ANCHOR_TARGETS_END ===
 ) -> list[AnchorRecommendation]:
     recommendations: list[AnchorRecommendation] = []
     for path in preview_anchor_targets(root, allowed_exts=allowed_exts):
@@ -243,6 +252,7 @@ def recommend_anchor_targets(
         )
     )
     return recommendations
+# === ANCHOR: ANCHOR_TOOLS_RECOMMEND_ANCHOR_TARGETS_END ===
 
 
 # === ANCHOR: ANCHOR_TOOLS__PYTHON_SYMBOL_BLOCKS_START ===
@@ -262,6 +272,7 @@ def _python_symbol_blocks(text: str) -> list[SymbolBlock]:
     return _python_symbol_blocks_by_indent(text)
 
 
+# === ANCHOR: ANCHOR_TOOLS__PYTHON_SYMBOL_BLOCKS_AST_START ===
 def _python_symbol_blocks_ast(text: str) -> list[SymbolBlock] | None:
     try:
         tree = ast.parse(text)
@@ -286,8 +297,10 @@ def _python_symbol_blocks_ast(text: str) -> list[SymbolBlock] | None:
         blocks.append((start, end, node.name, indent_match.group(0) if indent_match else ""))
     blocks.sort(key=lambda item: item[0])
     return blocks
+# === ANCHOR: ANCHOR_TOOLS__PYTHON_SYMBOL_BLOCKS_AST_END ===
 
 
+# === ANCHOR: ANCHOR_TOOLS__PYTHON_SYMBOL_BLOCKS_BY_INDENT_START ===
 def _python_symbol_blocks_by_indent(text: str) -> list[SymbolBlock]:
     lines = text.splitlines()
     blocks: list[SymbolBlock] = []
@@ -316,11 +329,13 @@ def _python_symbol_blocks_by_indent(text: str) -> list[SymbolBlock]:
             end_idx -= 1
         blocks.append((idx, end_idx, symbol_name, match.group(1)))
     return blocks
+# === ANCHOR: ANCHOR_TOOLS__PYTHON_SYMBOL_BLOCKS_BY_INDENT_END ===
 
 
 # === ANCHOR: ANCHOR_TOOLS__PYTHON_SYMBOL_BLOCKS_END ===
 
 
+# === ANCHOR: ANCHOR_TOOLS__JS_SCAN_LINE_START ===
 def _js_scan_line(line: str, state: dict) -> int:
     """`line` 의 코드 영역 중괄호 순증감({ 개수 − } 개수)을 돌려준다.
     문자열·템플릿 리터럴(${...} 보간 포함)·주석 안의 중괄호는 세지 않는다.
@@ -399,13 +414,16 @@ def _js_scan_line(line: str, state: dict) -> int:
             continue
         j += 1
     return delta
+# === ANCHOR: ANCHOR_TOOLS__JS_SCAN_LINE_END ===
 
 
 # === ANCHOR: ANCHOR_TOOLS__JS_SYMBOL_BLOCKS_START ===
+# === ANCHOR: ANCHOR_TOOLS__JS_STATEMENT_ENDS_START ===
 def _js_statement_ends(line: str) -> bool:
     """줄 끝이 문장 종료(세미콜론)인가 — 줄 끝 주석은 걷어내고 본다."""
     code = line.split("//", 1)[0].rstrip()
     return code.endswith(";")
+# === ANCHOR: ANCHOR_TOOLS__JS_STATEMENT_ENDS_END ===
 
 
 def _js_symbol_blocks(text: str) -> list[SymbolBlock]:
@@ -470,6 +488,32 @@ def _js_symbol_blocks(text: str) -> list[SymbolBlock]:
 
 
 # === ANCHOR: ANCHOR_TOOLS_INSERT_PYTHON_SYMBOL_ANCHORS_START ===
+def _end_insert_pos(lines: list[str], start_idx: int, end_idx: int) -> int:
+    """이 심볼의 END 를 넣을 위치. 안쪽 앵커의 닫는 마커 뒤로 밀어준다.
+
+    파일에 이미 마커가 있는 채로 일부만 다시 놓을 때 문제가 된다(`--repair`
+    의 외과적 재생성). 심볼 끝은 마커를 걷어낸 코드 기준으로 잡히는데, 그
+    자리에 안쪽 앵커의 END 가 그대로 남아 있으면 바깥 END 가 그 앞에 들어가
+    교차가 된다 — 고치려고 돌린 명령이 새 교차를 만든다.
+
+    안쪽에서 열린 앵커의 END 만 넘어간다. 이 블록 밖에서 열린 마커까지
+    넘어가면 남의 구역으로 END 를 밀어넣는 셈이다.
+    """
+    opened_inside: set[str] = set()
+    for probe in range(start_idx, min(end_idx + 1, len(lines))):
+        marker = _parse_anchor_marker(lines[probe])
+        if marker is not None and marker[1]:
+            opened_inside.add(marker[0])
+    pos = min(end_idx + 1, len(lines))
+    while pos < len(lines):
+        marker = _parse_anchor_marker(lines[pos])
+        if marker is None or marker[1] or marker[0] not in opened_inside:
+            break
+        opened_inside.discard(marker[0])
+        pos += 1
+    return pos
+
+
 def insert_python_symbol_anchors(path: Path) -> bool:
     if path.suffix.lower() != ".py":
         return False
@@ -499,7 +543,7 @@ def insert_python_symbol_anchors(path: Path) -> bool:
         # 보다 앞서야 하므로 END 의 kind 가 더 작아야 한다. 반대로 두면
         # 한 줄짜리 메서드가 연달아 있을 때 START/END 가 엇갈려 교차가 된다.
         inserts.append((start_idx, 1, start_marker))
-        inserts.append((min(end_idx + 1, len(lines)), 0, end_marker))
+        inserts.append((_end_insert_pos(lines, start_idx, end_idx), 0, end_marker))
     if not inserts:
         return False
     for pos, _kind, marker in sorted(inserts, key=lambda x: (x[0], x[1]), reverse=True):
@@ -544,7 +588,7 @@ def insert_js_symbol_anchors(path: Path) -> bool:
         # 보다 앞서야 하므로 END 의 kind 가 더 작아야 한다. 반대로 두면
         # 한 줄짜리 메서드가 연달아 있을 때 START/END 가 엇갈려 교차가 된다.
         inserts.append((start_idx, 1, start_marker))
-        inserts.append((min(end_idx + 1, len(lines)), 0, end_marker))
+        inserts.append((_end_insert_pos(lines, start_idx, end_idx), 0, end_marker))
     if not inserts:
         return False
     for pos, _kind, marker in sorted(inserts, key=lambda x: (x[0], x[1]), reverse=True):
@@ -561,6 +605,7 @@ def insert_js_symbol_anchors(path: Path) -> bool:
 
 
 # === ANCHOR: ANCHOR_TOOLS_INSERT_MODULE_ANCHORS_START ===
+# === ANCHOR: ANCHOR_TOOLS_INSERT_MODULE_ONLY_ANCHORS_START ===
 def insert_module_only_anchors(path: Path) -> bool:
     text = safe_read_text(path)
     if not text:
@@ -590,12 +635,15 @@ def insert_module_only_anchors(path: Path) -> bool:
         print(f"경고: {path}에 앵커를 쓸 수 없습니다: {e}")
         return False
     return True
+# === ANCHOR: ANCHOR_TOOLS_INSERT_MODULE_ONLY_ANCHORS_END ===
 
 
+# === ANCHOR: ANCHOR_TOOLS_INSERT_AUTO_ANCHORS_START ===
 def insert_auto_anchors(path: Path, *, module_only: bool = False) -> bool:
     if module_only:
         return insert_module_only_anchors(path)
     return insert_module_anchors(path)
+# === ANCHOR: ANCHOR_TOOLS_INSERT_AUTO_ANCHORS_END ===
 
 
 def insert_module_anchors(path: Path) -> bool:
@@ -642,6 +690,7 @@ _SIGNATURE_RE = re.compile(
 )
 
 
+# === ANCHOR: ANCHOR_TOOLS__FIND_SIGNATURE_START ===
 def _find_signature(lines: list[str], start_line: int) -> str | None:
     """_START 마커 다음 5줄 이내에서 함수/클래스 선언을 찾아 반환."""
     for i in range(start_line, min(start_line + 5, len(lines))):
@@ -649,6 +698,7 @@ def _find_signature(lines: list[str], start_line: int) -> str | None:
         if m:
             return lines[i].strip()
     return None
+# === ANCHOR: ANCHOR_TOOLS__FIND_SIGNATURE_END ===
 
 
 def extract_anchor_spans(path: Path) -> list[dict[str, object]]:
@@ -710,6 +760,7 @@ def compact_anchor_spans(spans: list[object]) -> list[str]:
     return out
 
 
+# === ANCHOR: ANCHOR_TOOLS_REHYDRATE_ANCHOR_SPANS_START ===
 def rehydrate_anchor_spans(spans: list[object]) -> list[dict[str, object]]:
     """compact_anchor_spans 의 역변환. "NAME:start-end" → {name,start,end}.
 
@@ -731,6 +782,7 @@ def rehydrate_anchor_spans(spans: list[object]) -> list[dict[str, object]]:
             except ValueError:
                 continue
     return out
+# === ANCHOR: ANCHOR_TOOLS_REHYDRATE_ANCHOR_SPANS_END ===
 # === ANCHOR: ANCHOR_TOOLS_COMPACT_ANCHOR_SPANS_END ===
 
 
@@ -788,7 +840,6 @@ def collect_anchor_index(
 def collect_anchor_metadata(
     root: Path,
     allowed_exts: AllowedExts | None = None,
-    # === ANCHOR: ANCHOR_TOOLS_COLLECT_ANCHOR_METADATA_END ===
 ) -> dict[str, AnchorMetadataEntry]:
     metadata: dict[str, AnchorMetadataEntry] = {}
     for path in iter_source_files(root):
@@ -802,6 +853,7 @@ def collect_anchor_metadata(
                 "suggested_anchors": suggested,
             }
     return metadata
+# === ANCHOR: ANCHOR_TOOLS_COLLECT_ANCHOR_METADATA_END ===
 
 
 # === ANCHOR: ANCHOR_TOOLS_LOAD_ANCHOR_META_START ===
@@ -879,7 +931,6 @@ def set_anchor_intent(
     warning: str | None = None,
     aliases: list[str] | None = None,
     description: str | None = None,
-    # === ANCHOR: ANCHOR_TOOLS_SET_ANCHOR_INTENT_END ===
 ) -> None:
     """특정 앵커에 의도(intent) 정보를 저장한다."""
     data = load_anchor_meta(root)
@@ -896,6 +947,7 @@ def set_anchor_intent(
     entry["_source"] = "manual"
     data[anchor_name] = entry
     save_anchor_meta(root, data)
+# === ANCHOR: ANCHOR_TOOLS_SET_ANCHOR_INTENT_END ===
 
 
 # === ANCHOR: ANCHOR_TOOLS_GET_ANCHOR_INTENT_START ===
@@ -962,6 +1014,7 @@ def extract_anchor_line_ranges(path: Path) -> dict[str, tuple[int, int]]:
 
 
 # === ANCHOR: ANCHOR_TOOLS__OCCURRENCE_NAMER_START ===
+# === ANCHOR: ANCHOR_TOOLS__ALL_MARKER_NAMES_START ===
 def _all_marker_names(lines: list[str]) -> set[str]:
     names: set[str] = set()
     for line in lines:
@@ -969,6 +1022,7 @@ def _all_marker_names(lines: list[str]) -> set[str]:
         if marker is not None:
             names.add(marker[0])
     return names
+# === ANCHOR: ANCHOR_TOOLS__ALL_MARKER_NAMES_END ===
 
 
 def _occurrence_namer(lines: list[str]) -> Callable[[str], str]:
@@ -993,6 +1047,7 @@ def _occurrence_namer(lines: list[str]) -> Callable[[str], str]:
     # 증가 방향으로만 소비되므로 커서를 들고 가면 전체가 선형이 된다.
     cursor: dict[str, int] = {}
 
+    # === ANCHOR: ANCHOR_TOOLS_ASSIGN_START ===
     def assign(name: str) -> str:
         seen[name] = seen.get(name, 0) + 1
         occurrence = seen[name]
@@ -1007,6 +1062,7 @@ def _occurrence_namer(lines: list[str]) -> Callable[[str], str]:
                 cursor[name] = candidate_index + 1
                 return candidate
             candidate_index += 1
+    # === ANCHOR: ANCHOR_TOOLS_ASSIGN_END ===
 
     return assign
 
@@ -1092,6 +1148,7 @@ def extract_anchor_blocks(
 _REVERSE_ALIASES: dict[str, list[str]] = {}  # 영어→한국어 역방향 매핑 (lazy init)
 
 
+# === ANCHOR: ANCHOR_TOOLS__GET_REVERSE_ALIASES_START ===
 def _get_reverse_aliases() -> dict[str, list[str]]:
     if _REVERSE_ALIASES:
         return _REVERSE_ALIASES
@@ -1099,11 +1156,14 @@ def _get_reverse_aliases() -> dict[str, list[str]]:
 
     _REVERSE_ALIASES.update(reverse_token_aliases())
     return _REVERSE_ALIASES
+# === ANCHOR: ANCHOR_TOOLS__GET_REVERSE_ALIASES_END ===
 
 
+# === ANCHOR: ANCHOR_TOOLS__SPLIT_ANCHOR_NAME_START ===
 def _split_anchor_name(anchor: str) -> list[str]:
     """MAIN_WINDOW__APPLY_BTN_STYLE → ['main', 'window', 'apply', 'btn', 'style']"""
     return [t.lower() for t in re.split(r"[_]+", anchor) if t]
+# === ANCHOR: ANCHOR_TOOLS__SPLIT_ANCHOR_NAME_END ===
 
 
 _CODE_IDENT_RE = re.compile(
@@ -1126,6 +1186,7 @@ _ABBREV_MAP = {
 }
 
 
+# === ANCHOR: ANCHOR_TOOLS__EXTRACT_CODE_IDENTIFIERS_START ===
 def _extract_code_identifiers(code: str) -> list[str]:
     """코드에서 class명, 함수명 등 식별자 추출 → 소문자 토큰 리스트."""
     idents = _CODE_IDENT_RE.findall(code)
@@ -1134,8 +1195,10 @@ def _extract_code_identifiers(code: str) -> list[str]:
         parts = re.findall(r"[a-z]+|[A-Z][a-z]*|[0-9]+", ident)
         tokens.extend(p.lower() for p in parts if len(p) > 1)
     return tokens
+# === ANCHOR: ANCHOR_TOOLS__EXTRACT_CODE_IDENTIFIERS_END ===
 
 
+# === ANCHOR: ANCHOR_TOOLS_GENERATE_CODE_BASED_ALIASES_START ===
 def generate_code_based_aliases(anchor: str, code: str) -> tuple[list[str], str]:
     """앵커 이름과 코드에서 규칙 기반으로 aliases/description 생성."""
     reverse = _get_reverse_aliases()
@@ -1175,8 +1238,10 @@ def generate_code_based_aliases(anchor: str, code: str) -> tuple[list[str], str]
     description = " ".join(desc_parts)
 
     return aliases, description
+# === ANCHOR: ANCHOR_TOOLS_GENERATE_CODE_BASED_ALIASES_END ===
 
 
+# === ANCHOR: ANCHOR_TOOLS_GENERATE_CODE_BASED_INTENTS_START ===
 def generate_code_based_intents(root: Path, paths: list[Path]) -> int:
     """코드 기반으로 모든 앵커의 aliases/description을 생성. 기존 앵커도 갱신."""
     existing = load_anchor_meta(root)
@@ -1198,6 +1263,7 @@ def generate_code_based_intents(root: Path, paths: list[Path]) -> int:
     if count:
         save_anchor_meta(root, existing)
     return count
+# === ANCHOR: ANCHOR_TOOLS_GENERATE_CODE_BASED_INTENTS_END ===
 
 
 # ─── AI 기반 aliases 보강 ──────────────────────────────────────────────────────
@@ -1206,6 +1272,7 @@ _BATCH_SIZE = 20  # 한 번에 AI에 보내는 앵커 수
 _MAX_PARALLEL = 4  # 동시 배치 수
 
 
+# === ANCHOR: ANCHOR_TOOLS__GENERATE_BATCH_START ===
 def _generate_batch(
     root: Path,
     batch: dict[str, str],
@@ -1277,16 +1344,20 @@ def _generate_batch(
         for anchor, intent in parsed.items():
             results[anchor] = {"intent": intent}
     return results
+# === ANCHOR: ANCHOR_TOOLS__GENERATE_BATCH_END ===
 
 
+# === ANCHOR: ANCHOR_TOOLS__ANCHOR_CONTENT_HASH_START ===
 def _anchor_content_hash(code: str) -> str:
     """AI 프롬프트에 쓰이는 구간(앞 400자)만 해시 — 내용이 같으면 AI 재호출 불필요."""
     return hashlib.sha1(code[:400].encode("utf-8")).hexdigest()[:16]
+# === ANCHOR: ANCHOR_TOOLS__ANCHOR_CONTENT_HASH_END ===
 
 
 _CACHEABLE_SOURCES = ("ai", "manual", "ai_failed")
 
 
+# === ANCHOR: ANCHOR_TOOLS__CLASSIFY_AI_ERROR_START ===
 def _classify_ai_error(exc: BaseException) -> str:
     """stderr 파서가 token 단위로 쪼개므로, 공백 없는 짧은 라벨로 분류한다."""
     name = type(exc).__name__.lower()
@@ -1301,8 +1372,10 @@ def _classify_ai_error(exc: BaseException) -> str:
     if "json" in name or "decode" in name:
         return "parse"
     return name or "unknown"
+# === ANCHOR: ANCHOR_TOOLS__CLASSIFY_AI_ERROR_END ===
 
 
+# === ANCHOR: ANCHOR_TOOLS__RUN_BATCHES_PARALLEL_START ===
 def _run_batches_parallel(
     root: Path,
     batches: list[dict[str, str]],
@@ -1346,6 +1419,7 @@ def _run_batches_parallel(
             )
             sys.stderr.flush()
     return results, failed_anchors
+# === ANCHOR: ANCHOR_TOOLS__RUN_BATCHES_PARALLEL_END ===
 
 
 def generate_anchor_intents_with_ai(
@@ -1627,11 +1701,13 @@ def find_legacy_anchor_markers(text: str) -> list[str]:
 
 
 # === ANCHOR: ANCHOR_TOOLS_REPAIR_CROSSING_ANCHORS_START ===
+# === ANCHOR: ANCHOR_TOOLS_REPAIROUTCOME_START ===
 class RepairOutcome(TypedDict):
     path: str
     status: str  # repaired | skipped | unchanged
     reason: str
     lost_names: list[str]
+# === ANCHOR: ANCHOR_TOOLS_REPAIROUTCOME_END ===
 
 
 def repair_crossing_anchors(
@@ -1759,6 +1835,7 @@ _CROSSING_SHOWN = 5
 _CROSSING_MAX_FINDINGS = 50
 
 
+# === ANCHOR: ANCHOR_TOOLS__WITHOUT_MARKERS_START ===
 def _without_markers(text: str, names: Collection[str]) -> str:
     """지정한 이름의 마커 줄만 걷어낸다. 나머지 앵커는 그대로 둔다."""
     kept: list[str] = []
@@ -1768,20 +1845,25 @@ def _without_markers(text: str, names: Collection[str]) -> str:
             continue
         kept.append(line)
     return "\n".join(kept) + "\n"
+# === ANCHOR: ANCHOR_TOOLS__WITHOUT_MARKERS_END ===
 
 
+# === ANCHOR: ANCHOR_TOOLS__CODE_ONLY_START ===
 def _code_only(body: str | None) -> str:
     """앵커 본문에서 마커 줄을 걷어낸 실제 코드."""
     if body is None:
         return ""
     return _code_only_lines(body.splitlines())
+# === ANCHOR: ANCHOR_TOOLS__CODE_ONLY_END ===
 
 
+# === ANCHOR: ANCHOR_TOOLS__CODE_ONLY_LINES_START ===
 def _code_only_lines(lines: Iterable[str]) -> str:
     """마커 줄을 걷어낸 실제 코드. 앵커 본문과 심볼 구역을 같은 자로 잰다."""
     return "\n".join(
         line for line in lines if not is_anchor_marker_line(line)
     ).strip()
+# === ANCHOR: ANCHOR_TOOLS__CODE_ONLY_LINES_END ===
 
 
 # === ANCHOR: ANCHOR_TOOLS_FIND_MISPLACED_ANCHORS_START ===
@@ -1789,6 +1871,7 @@ def _code_only_lines(lines: Iterable[str]) -> str:
 _MISPLACED_MAX_FINDINGS = 50
 
 
+# === ANCHOR: ANCHOR_TOOLS__SYMBOL_ZONES_START ===
 def _symbol_zones(path: Path, text: str) -> dict[str, list[tuple[int, int]]]:
     """생성 규칙으로 나올 앵커 이름 → 그 심볼이 차지하는 줄 범위 (1-based, 양끝 포함).
 
@@ -1811,6 +1894,7 @@ def _symbol_zones(path: Path, text: str) -> dict[str, list[tuple[int, int]]]:
         name = build_symbol_anchor_name(path, symbol_name)
         zones.setdefault(name, []).append((start_idx + 1, end_idx + 1))
     return zones
+# === ANCHOR: ANCHOR_TOOLS__SYMBOL_ZONES_END ===
 
 
 def find_misplaced_anchors(path: Path) -> list[str]:
@@ -1849,6 +1933,7 @@ def find_misplaced_anchors(path: Path) -> list[str]:
     return problems
 
 
+# === ANCHOR: ANCHOR_TOOLS__UNCOVERED_SYMBOLS_START ===
 def _uncovered_symbols(
     path: Path,
 ) -> list[tuple[str, tuple[int, int], tuple[int, int]]]:
@@ -1872,8 +1957,10 @@ def _uncovered_symbols(
             continue
         found.append((name, (start_line, end_line), candidates[0]))
     return found
+# === ANCHOR: ANCHOR_TOOLS__UNCOVERED_SYMBOLS_END ===
 
 
+# === ANCHOR: ANCHOR_TOOLS__MISPLACED_PARTICIPANTS_START ===
 def _misplaced_participants(path: Path) -> set[str]:
     """repair 가 옮겨도 되는 오배치 앵커 이름.
 
@@ -1891,11 +1978,13 @@ def _misplaced_participants(path: Path) -> set[str]:
         if start_line <= sym_end and sym_start <= end_line:
             names.add(name)
     return names
+# === ANCHOR: ANCHOR_TOOLS__MISPLACED_PARTICIPANTS_END ===
 
 
 # === ANCHOR: ANCHOR_TOOLS_FIND_MISPLACED_ANCHORS_END ===
 
 
+# === ANCHOR: ANCHOR_TOOLS__CROSSING_PARTICIPANTS_START ===
 def _crossing_participants(text: str) -> set[str]:
     """교차에 연루된 앵커 이름. 이들만 구역이 바뀌어도 된다."""
     names: set[str] = set()
@@ -1903,6 +1992,7 @@ def _crossing_participants(text: str) -> set[str]:
         for token in re.findall(r"[A-Z][A-Z0-9_]+", problem):
             names.add(re.sub(r"_(START|END)$", "", token))
     return names
+# === ANCHOR: ANCHOR_TOOLS__CROSSING_PARTICIPANTS_END ===
 
 
 def find_crossing_anchors(text: str) -> list[str]:
@@ -2000,6 +2090,7 @@ _MARKER_ONLY_LINE_RE = re.compile(
 )
 
 
+# === ANCHOR: ANCHOR_TOOLS_IS_ANCHOR_MARKER_LINE_START ===
 def is_anchor_marker_line(line: str) -> bool:
     """이 줄이 오직 앵커 마커로만 이루어져 있는가 (정본·구 형식·훼손 포함).
 
@@ -2010,6 +2101,7 @@ def is_anchor_marker_line(line: str) -> bool:
     if _parse_anchor_marker(line) is not None:
         return True
     return _MARKER_ONLY_LINE_RE.match(line) is not None
+# === ANCHOR: ANCHOR_TOOLS_IS_ANCHOR_MARKER_LINE_END ===
 
 
 def find_malformed_anchor_markers(text: str) -> list[str]:

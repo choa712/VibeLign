@@ -29,8 +29,8 @@ export function tokensToCssVars(t: StyleSpec["tokens"], motion?: StyleSpec["moti
   let s = `:root{--bg:${t.bg};--surface:${t.surface};--text:${t.text};--primary:${t.primary};--accent:${t.accent};--border:${t.border};--font:${t.fontFamily};--radius:${t.radius};--shadow:${t.shadow};}`;
   if (motion) {
     s = s.replace(/\}$/, `--dur:${motion.tokens.duration};--ease:${motion.tokens.easing};}`);
-// === ANCHOR: CUSTOMSTYLES_TOKENSTOCSSVARS_END ===
   }
+// === ANCHOR: CUSTOMSTYLES_TOKENSTOCSSVARS_END ===
   return s;
 }
 

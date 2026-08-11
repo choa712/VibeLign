@@ -32,7 +32,6 @@ def polish_try_order(provider: str | None) -> list[str]:
 # === ANCHOR: POLISH_POLISH_BLOCK_TEXT_START ===
 def polish_block_text(
     text: str, *, provider: str, runner: cli_adapters.PlanningCliRunner, root: Path, timeout_seconds: int
-# === ANCHOR: POLISH_POLISH_BLOCK_TEXT_END ===
 ) -> str | None:
     """텍스트 한 덩이를 비즈니스 보고 어조로 다듬는다. 실패 시 None."""
     if not text.strip():
@@ -56,6 +55,7 @@ def polish_block_text(
             if cleaned:
                 return cleaned
     return None
+# === ANCHOR: POLISH_POLISH_BLOCK_TEXT_END ===
 
 
 # === ANCHOR: POLISH_POLISH_REPORT_MODEL_WITH_GUARDS_START ===
@@ -66,7 +66,6 @@ def polish_report_model_with_guards(
     runner=None,
     root: Path | None = None,
     timeout_seconds: int = 60,
-# === ANCHOR: POLISH_POLISH_REPORT_MODEL_WITH_GUARDS_END ===
 ) -> tuple[ReportModel, list[dict]]:
     """paragraph/summary 블록을 다듬되, 수치 가드를 통과한 블록만 교체한다.
     가드 실패(숫자 누락/신규) 블록은 원문 유지 + guards 에 기록. 블록별 다듬기 실패도
@@ -103,6 +102,7 @@ def polish_report_model_with_guards(
                 new_blocks.append(block)
         new_sections.append(replace(section, blocks=new_blocks))
     return replace(model, sections=new_sections), guards
+# === ANCHOR: POLISH_POLISH_REPORT_MODEL_WITH_GUARDS_END ===
 
 
 # === ANCHOR: POLISH_POLISH_REPORT_MODEL_START ===

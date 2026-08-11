@@ -46,7 +46,7 @@ def questions_for_idea(idea: str) -> list[PlanningQuestion]:
 def normalize_answers(
     answers: dict[str, str | None],
     questions: list[PlanningQuestion],
-# === ANCHOR: QUESTIONS_NORMALIZE_ANSWERS_END ===
 ) -> dict[str, str]:
     return {question.id: (answers.get(question.id) or "").strip() for question in questions}
+# === ANCHOR: QUESTIONS_NORMALIZE_ANSWERS_END ===
 # === ANCHOR: QUESTIONS_END ===

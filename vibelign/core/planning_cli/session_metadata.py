@@ -54,7 +54,6 @@ def write_agent_session_metadata(
     agents_used: tuple[str, ...],
     agent_statuses: dict[str, str],
     runs: tuple[AgentRunMetadata, ...],
-# === ANCHOR: SESSION_METADATA_WRITE_AGENT_SESSION_METADATA_END ===
 ) -> None:
     session_path = root / ".vibelign" / "planning" / session_id / "session.json"
     session_path.parent.mkdir(parents=True, exist_ok=True)
@@ -71,6 +70,7 @@ def write_agent_session_metadata(
         json.dumps(session, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+# === ANCHOR: SESSION_METADATA_WRITE_AGENT_SESSION_METADATA_END ===
 
 
 # === ANCHOR: SESSION_METADATA__RUN_TO_JSON_START ===

@@ -69,7 +69,6 @@ def classify_event(
     new_lines: int,
     strict: bool = False,
     protected_files: set[str] | None = None,
-# === ANCHOR: WATCH_RULES_CLASSIFY_EVENT_END ===
 ) -> list[WatchWarning]:
     name = path.name
     warnings: list[WatchWarning] = []
@@ -192,4 +191,5 @@ def classify_event(
             "AI 수정 전에 처리 로직을 별도 모듈로 옮기세요.",
         )
     return warnings
+# === ANCHOR: WATCH_RULES_CLASSIFY_EVENT_END ===
 # === ANCHOR: WATCH_RULES_END ===

@@ -39,20 +39,25 @@ from vibelign.terminal_render import cli_print
 print = cli_print
 
 
+# === ANCHOR: VIB_GUARD_CMD_GUARDDOCTORDATA_START ===
 class GuardDoctorData(TypedDict):
     project_score: int
     status: str
     issues: list[object]
     recommended_actions: list[str]
+# === ANCHOR: VIB_GUARD_CMD_GUARDDOCTORDATA_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD_GUARDEXPLAINDATA_START ===
 class GuardExplainData(TypedDict):
     source: str
     risk_level: str
     files: list[FileSummary]
     summary: str
+# === ANCHOR: VIB_GUARD_CMD_GUARDEXPLAINDATA_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD_GUARDDATA_START ===
 class GuardData(TypedDict):
     status: str
     # 사람용 3단 판정(pass|prepare|stop) — status/blocked 는 기계 게이트로 의미 유지(2026-06-12)
@@ -69,8 +74,10 @@ class GuardData(TypedDict):
     doctor: dict[str, object] | GuardDoctorData
     explain: GuardExplainData
     planning: "PlanningData"
+# === ANCHOR: VIB_GUARD_CMD_GUARDDATA_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD_PLANNINGDATA_START ===
 class PlanningData(TypedDict):
     status: str
     strict: bool
@@ -82,30 +89,39 @@ class PlanningData(TypedDict):
     # 의도적으로 제거됐다 — 이 필드는 항상 빈 값이며 JSON 스키마 호환을 위해서만 남긴다.
     deviations: list[str]
     exempt_reasons: list[str]
+# === ANCHOR: VIB_GUARD_CMD_PLANNINGDATA_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD_FILECHANGEDETAILS_START ===
 class FileChangeDetails(TypedDict):
     added_lines: int
     ranges: list[tuple[int, int]]
+# === ANCHOR: VIB_GUARD_CMD_FILECHANGEDETAILS_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD_GUARDERROR_START ===
 class GuardError(TypedDict):
     code: str
     message: str
     hint: str
+# === ANCHOR: VIB_GUARD_CMD_GUARDERROR_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD_GUARDENVELOPE_START ===
 class GuardEnvelope(TypedDict):
     ok: bool
     error: GuardError | None
     data: GuardData
+# === ANCHOR: VIB_GUARD_CMD_GUARDENVELOPE_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD_GUARDARGS_START ===
 class GuardArgs(Protocol):
     strict: bool
     since_minutes: int
     json: bool
     write_report: bool
+# === ANCHOR: VIB_GUARD_CMD_GUARDARGS_END ===
 
 
 _PLAN_REQUIRED_RECOMMENDATION = (
@@ -115,6 +131,7 @@ _ANCHOR_REQUIRED_RECOMMENDATION = "신규 소스 파일에는 먼저 앵커를 �
 _SOURCE_EXTENSIONS = set(COMMENT_PREFIX.keys())
 
 
+# === ANCHOR: VIB_GUARD_CMD__PLANNING_MESSAGE_START ===
 def _planning_message(status: str) -> str:
     return {
         "planning_exempt": "현재 변경은 별도 기획 없이 진행 가능한 범위입니다.",
@@ -122,8 +139,10 @@ def _planning_message(status: str) -> str:
         "fail": "구조 영향 검증에 실패했습니다.",
         "pass": "구조 영향 검사를 통과했습니다.",
     }.get(status, "구조 영향 상태를 확인하세요.")
+# === ANCHOR: VIB_GUARD_CMD__PLANNING_MESSAGE_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD__PLANNING_EXEMPT_SUMMARY_START ===
 def _planning_exempt_summary(reasons: Sequence[str]) -> str:
     if "docs_only" in reasons:
         return "현재 변경은 문서만 수정하므로 별도 기획 없이 진행 가능한 범위입니다."
@@ -136,16 +155,20 @@ def _planning_exempt_summary(reasons: Sequence[str]) -> str:
     if "no_changed_files" in reasons:
         return "현재 변경 파일이 없어 별도 기획 없이 진행 가능한 상태입니다."
     return "현재 변경은 별도 기획 없이 진행 가능한 범위입니다."
+# === ANCHOR: VIB_GUARD_CMD__PLANNING_EXEMPT_SUMMARY_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD__PLANNING_GUARD_LEVEL_START ===
 def _planning_guard_level(status: str, strict: bool) -> str:
     if status in {"fail"}:
         return "fail"
     if status == "planning_required":
         return "fail" if strict else "warn"
     return "pass"
+# === ANCHOR: VIB_GUARD_CMD__PLANNING_GUARD_LEVEL_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD__MERGE_STATUS_START ===
 def _merge_status(current: str, planning_level: str) -> str:
     rank = {"pass": 0, "warn": 1, "fail": 2}
     return (
@@ -153,8 +176,10 @@ def _merge_status(current: str, planning_level: str) -> str:
         if rank.get(planning_level, 0) > rank.get(current, 0)
         else current
     )
+# === ANCHOR: VIB_GUARD_CMD__MERGE_STATUS_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD__RUN_GUARD_GIT_START ===
 def _run_guard_git(root: Path, args: Sequence[str]) -> tuple[bool, str]:
     try:
         proc = subprocess.run(
@@ -172,8 +197,10 @@ def _run_guard_git(root: Path, args: Sequence[str]) -> tuple[bool, str]:
         )
     except Exception as exc:
         return False, str(exc)
+# === ANCHOR: VIB_GUARD_CMD__RUN_GUARD_GIT_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD__DECODE_GUARD_GIT_PATH_START ===
 def _decode_guard_git_path(path: str) -> str:
     import unicodedata
 
@@ -197,8 +224,10 @@ def _decode_guard_git_path(path: str) -> str:
         return unicodedata.normalize("NFC", buf.decode("utf-8"))
     except UnicodeDecodeError:
         return path
+# === ANCHOR: VIB_GUARD_CMD__DECODE_GUARD_GIT_PATH_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD__STATUS_TO_CHANGE_START ===
 def _status_to_change(status_code: str) -> str:
     return {
         "M": "modified",
@@ -207,8 +236,10 @@ def _status_to_change(status_code: str) -> str:
         "R": "renamed",
         "??": "untracked",
     }.get(status_code, "changed")
+# === ANCHOR: VIB_GUARD_CMD__STATUS_TO_CHANGE_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD__GUARD_EXPLAIN_REPORT_START ===
 def _guard_explain_report(root: Path, since_minutes: int) -> ExplainReport:
     staged_ok, staged_out = _run_guard_git(
         root, ["diff", "--cached", "--name-status", "--", "."]
@@ -246,8 +277,10 @@ def _guard_explain_report(root: Path, since_minutes: int) -> ExplainReport:
     if explain_report is not None:
         return explain_report
     return explain_from_mtime(root, since_minutes=since_minutes)
+# === ANCHOR: VIB_GUARD_CMD__GUARD_EXPLAIN_REPORT_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD__PARSE_DIFF_LINE_RANGES_START ===
 def _parse_diff_line_ranges(diff_text: str) -> tuple[int, list[tuple[int, int]]]:
     added_lines = 0
     ranges: list[tuple[int, int]] = []
@@ -262,8 +295,10 @@ def _parse_diff_line_ranges(diff_text: str) -> tuple[int, list[tuple[int, int]]]
             ranges.append((start, start + count - 1))
             added_lines += count
     return added_lines, ranges
+# === ANCHOR: VIB_GUARD_CMD__PARSE_DIFF_LINE_RANGES_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD__FILE_CHANGE_DETAILS_START ===
 def _file_change_details(
     root: Path, item: FileSummary, *, staged_only: bool
 ) -> FileChangeDetails:
@@ -298,8 +333,10 @@ def _file_change_details(
         return {"added_lines": 0, "ranges": []}
     added_lines, ranges = _parse_diff_line_ranges(diff)
     return {"added_lines": added_lines, "ranges": ranges}
+# === ANCHOR: VIB_GUARD_CMD__FILE_CHANGE_DETAILS_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD__NEW_FILE_TEXT_START ===
 def _new_file_text(root: Path, rel_path: str, *, staged_only: bool) -> str:
     if staged_only:
         ok, staged_content = _run_guard_git(root, ["show", f":{rel_path}"])
@@ -309,8 +346,10 @@ def _new_file_text(root: Path, rel_path: str, *, staged_only: bool) -> str:
         return (root / rel_path).read_text(encoding="utf-8")
     except OSError:
         return ""
+# === ANCHOR: VIB_GUARD_CMD__NEW_FILE_TEXT_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD__ANCHOR_VIOLATIONS_START ===
 def _anchor_violations(
     root: Path, explain_files: Sequence[FileSummary], *, staged_only: bool
 ) -> list[str]:
@@ -330,8 +369,10 @@ def _anchor_violations(
             continue
         violations.append(rel_path)
     return violations
+# === ANCHOR: VIB_GUARD_CMD__ANCHOR_VIOLATIONS_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD__PLANNING_DATA_START ===
 def _planning_data(
     root: Path,
     meta: MetaPaths,
@@ -459,6 +500,7 @@ def _planning_data(
         "deviations": [],
         "exempt_reasons": exempt_reasons,
     }
+# === ANCHOR: VIB_GUARD_CMD__PLANNING_DATA_END ===
 
 
 # === ANCHOR: VIB_GUARD_CMD__GUARD_STATUS_START ===
@@ -506,6 +548,7 @@ def _protected_violations(
 # === ANCHOR: VIB_GUARD_CMD__PROTECTED_VIOLATIONS_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD__ENVELOPE_SUMMARY_START ===
 def _envelope_summary(
     doctor_v2_status: str, doctor_v2_score: int, legacy_guard: GuardReport
 ) -> str:
@@ -520,8 +563,10 @@ def _envelope_summary(
         f"프로젝트 기본 상태는 {doctor_v2_status}({doctor_v2_score}점), "
         f"최근 바뀐 내용의 위험도는 {_risk_label(legacy_guard.change_risk_level)}입니다."
     )
+# === ANCHOR: VIB_GUARD_CMD__ENVELOPE_SUMMARY_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD__VERDICT_TIER_START ===
 def _verdict_tier(
     protected_violations: list[str],
     anchor_violations: list[str],
@@ -548,8 +593,10 @@ def _verdict_tier(
     if status != "pass" or anchor_violations:
         return "prepare"
     return "pass"
+# === ANCHOR: VIB_GUARD_CMD__VERDICT_TIER_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD__VERDICT_LEAD_START ===
 def _verdict_lead(verdict: str) -> str:
     """요약 첫 줄 — 잘된 것을 먼저, 남은 것을 준비로 말한다(공포 어휘는 stop 전용)."""
     return {
@@ -557,6 +604,7 @@ def _verdict_lead(verdict: str) -> str:
         "prepare": "이번 변경은 약속 범위 안입니다 ✓ — 다음 AI 작업 전에 준비하면 좋은 항목이 있어요.",
         "pass": "이상 없음 — 약속 범위 안에서 작업했어요.",
     }.get(verdict, "")
+# === ANCHOR: VIB_GUARD_CMD__VERDICT_LEAD_END ===
 
 
 # === ANCHOR: VIB_GUARD_CMD__BUILD_GUARD_ENVELOPE_START ===
@@ -564,7 +612,6 @@ def _build_guard_envelope(
     root: Path,
     strict: bool,
     since_minutes: int,
-    # === ANCHOR: VIB_GUARD_CMD__BUILD_GUARD_ENVELOPE_END ===
 ) -> GuardEnvelope:
     legacy_doctor = analyze_project(root, strict=strict)
     explain_report_obj = _guard_explain_report(root, since_minutes)
@@ -658,10 +705,13 @@ def _build_guard_envelope(
             r for r in data["recommendations"] if "멈추세요" not in r
         ]
     return {"ok": True, "error": None, "data": data}
+# === ANCHOR: VIB_GUARD_CMD__BUILD_GUARD_ENVELOPE_END ===
 
 
+# === ANCHOR: VIB_GUARD_CMD_BUILD_GUARD_ENVELOPE_START ===
 def build_guard_envelope(root: Path, strict: bool, since_minutes: int) -> GuardEnvelope:
     return _build_guard_envelope(root, strict=strict, since_minutes=since_minutes)
+# === ANCHOR: VIB_GUARD_CMD_BUILD_GUARD_ENVELOPE_END ===
 
 
 # === ANCHOR: VIB_GUARD_CMD__RENDER_MARKDOWN_START ===

@@ -20,60 +20,88 @@ from vibelign.terminal_render import cli_print
 print = cli_print
 
 
+# === ANCHOR: ASK_CMD_ASKARGS_START ===
 class AskArgs(Protocol):
     file: str
     question: list[str] | None
     write: bool
+# === ANCHOR: ASK_CMD_ASKARGS_END ===
 
 
+# === ANCHOR: ASK_CMD_CHATMESSAGE_START ===
 class ChatMessage(TypedDict):
     role: str
     content: str
+# === ANCHOR: ASK_CMD_CHATMESSAGE_END ===
 
 
+# === ANCHOR: ASK_CMD_OPENAICOMPATIBLEREQUEST_START ===
 class OpenAICompatibleRequest(TypedDict):
     model: str
     messages: list[ChatMessage]
     max_tokens: int
+# === ANCHOR: ASK_CMD_OPENAICOMPATIBLEREQUEST_END ===
 
 
+# === ANCHOR: ASK_CMD_OPENAIMESSAGE_START ===
 class OpenAIMessage(TypedDict):
     content: str
+# === ANCHOR: ASK_CMD_OPENAIMESSAGE_END ===
 
 
+# === ANCHOR: ASK_CMD_OPENAICHOICE_START ===
 class OpenAIChoice(TypedDict):
     message: OpenAIMessage
+# === ANCHOR: ASK_CMD_OPENAICHOICE_END ===
 
 
+# === ANCHOR: ASK_CMD_OPENAIRESPONSE_START ===
 class OpenAIResponse(TypedDict):
     choices: list[OpenAIChoice]
+# === ANCHOR: ASK_CMD_OPENAIRESPONSE_END ===
 
 
+# === ANCHOR: ASK_CMD_GEMINIPART_START ===
 class GeminiPart(TypedDict):
     text: str
+# === ANCHOR: ASK_CMD_GEMINIPART_END ===
 
 
+# === ANCHOR: ASK_CMD_GEMINICONTENT_START ===
 class GeminiContent(TypedDict):
     parts: list[GeminiPart]
+# === ANCHOR: ASK_CMD_GEMINICONTENT_END ===
 
 
+# === ANCHOR: ASK_CMD_GEMINICANDIDATE_START ===
 class GeminiCandidate(TypedDict):
     content: GeminiContent
+# === ANCHOR: ASK_CMD_GEMINICANDIDATE_END ===
 
 
+# === ANCHOR: ASK_CMD_GEMINIRESPONSE_START ===
 class GeminiResponse(TypedDict):
     candidates: list[GeminiCandidate]
+# === ANCHOR: ASK_CMD_GEMINIRESPONSE_END ===
 
 
+# === ANCHOR: ASK_CMD_ANTHROPICTEXTSTREAM_START ===
 class AnthropicTextStream(Protocol):
     text_stream: object
 
+    # === ANCHOR: ASK_CMD___ENTER___START ===
     def __enter__(self) -> "AnthropicTextStream": ...
+    # === ANCHOR: ASK_CMD___ENTER___END ===
 
+    # === ANCHOR: ASK_CMD___EXIT___START ===
     def __exit__(self, exc_type: object, exc: object, tb: object) -> bool | None: ...
+    # === ANCHOR: ASK_CMD___EXIT___END ===
+# === ANCHOR: ASK_CMD_ANTHROPICTEXTSTREAM_END ===
 
 
+# === ANCHOR: ASK_CMD_ANTHROPICMESSAGES_START ===
 class AnthropicMessages(Protocol):
+    # === ANCHOR: ASK_CMD_STREAM_START ===
     def stream(
         self,
         *,
@@ -82,24 +110,41 @@ class AnthropicMessages(Protocol):
         system: str,
         messages: list[ChatMessage],
     ) -> AnthropicTextStream: ...
+    # === ANCHOR: ASK_CMD_STREAM_END ===
+# === ANCHOR: ASK_CMD_ANTHROPICMESSAGES_END ===
 
 
+# === ANCHOR: ASK_CMD_ANTHROPICCLIENT_START ===
 class AnthropicClient(Protocol):
     messages: AnthropicMessages
+# === ANCHOR: ASK_CMD_ANTHROPICCLIENT_END ===
 
 
+# === ANCHOR: ASK_CMD_ANTHROPICMODULE_START ===
 class AnthropicModule(Protocol):
+    # === ANCHOR: ASK_CMD_ANTHROPIC_START ===
     def Anthropic(self, *, api_key: str) -> AnthropicClient: ...
+    # === ANCHOR: ASK_CMD_ANTHROPIC_END ===
+# === ANCHOR: ASK_CMD_ANTHROPICMODULE_END ===
 
 
+# === ANCHOR: ASK_CMD_URLOPENRESPONSE_START ===
 class UrlopenResponse(Protocol):
+    # === ANCHOR: ASK_CMD_READ_START ===
     def read(self) -> bytes: ...
+    # === ANCHOR: ASK_CMD_READ_END ===
 
+    # === ANCHOR: ASK_CMD___ENTER___START ===
     def __enter__(self) -> "UrlopenResponse": ...
+    # === ANCHOR: ASK_CMD___ENTER___END ===
 
+    # === ANCHOR: ASK_CMD___EXIT___START ===
     def __exit__(self, exc_type: object, exc: object, tb: object) -> bool | None: ...
+    # === ANCHOR: ASK_CMD___EXIT___END ===
+# === ANCHOR: ASK_CMD_URLOPENRESPONSE_END ===
 
 
+# === ANCHOR: ASK_CMD__LOAD_JSON_OBJECT_START ===
 def _load_json_object(raw: bytes) -> dict[str, object] | None:
     parsed = cast(object, json.loads(raw))
     if not isinstance(parsed, dict):
@@ -109,8 +154,10 @@ def _load_json_object(raw: bytes) -> dict[str, object] | None:
     for key, value in source.items():
         normalized[str(key)] = value
     return normalized
+# === ANCHOR: ASK_CMD__LOAD_JSON_OBJECT_END ===
 
 
+# === ANCHOR: ASK_CMD__EXTRACT_OPENAI_TEXT_START ===
 def _extract_openai_text(result: dict[str, object]) -> str | None:
     choices = result.get("choices")
     if not isinstance(choices, list) or not choices:
@@ -123,8 +170,10 @@ def _extract_openai_text(result: dict[str, object]) -> str | None:
         return None
     content = cast(dict[object, object], message).get("content")
     return content if isinstance(content, str) else None
+# === ANCHOR: ASK_CMD__EXTRACT_OPENAI_TEXT_END ===
 
 
+# === ANCHOR: ASK_CMD__EXTRACT_GEMINI_TEXT_START ===
 def _extract_gemini_text(result: dict[str, object]) -> str | None:
     candidates = result.get("candidates")
     if not isinstance(candidates, list) or not candidates:
@@ -143,6 +192,7 @@ def _extract_gemini_text(result: dict[str, object]) -> str | None:
         return None
     text = cast(dict[object, object], first_part).get("text")
     return text if isinstance(text, str) else None
+# === ANCHOR: ASK_CMD__EXTRACT_GEMINI_TEXT_END ===
 
 
 MAX_LINES = 300  # 너무 긴 파일은 앞부분만 사용
@@ -254,13 +304,13 @@ def _build_file_header(rel_path: str, content: str, line_count: int) -> str:
     )
     suffix = Path(rel_path).suffix.lstrip(".") or "text"
     return f"""\
-# === ANCHOR: ASK_CMD__BUILD_FILE_HEADER_END ===
 파일명: {rel_path}
 줄 수: {line_count}줄{truncate_note}
 내용:
 ```{suffix}
 {display_content}
 ```"""
+# === ANCHOR: ASK_CMD__BUILD_FILE_HEADER_END ===
 
 
 # === ANCHOR: ASK_CMD__BUILD_FOCUSED_PROMPT_START ===
@@ -269,7 +319,6 @@ def _build_focused_prompt(
     content: str,
     line_count: int,
     selected: list[int],
-    # === ANCHOR: ASK_CMD__BUILD_FOCUSED_PROMPT_END ===
 ) -> str:
     header = _build_file_header(rel_path, content, line_count)
     section_format = _build_response_format(selected)
@@ -286,6 +335,7 @@ def _build_focused_prompt(
 
 {section_format}
 """
+# === ANCHOR: ASK_CMD__BUILD_FOCUSED_PROMPT_END ===
 
 
 # === ANCHOR: ASK_CMD__BUILD_PROMPT_START ===
@@ -294,7 +344,6 @@ def _build_prompt(
     content: str,
     line_count: int,
     question: str | None,
-    # === ANCHOR: ASK_CMD__BUILD_PROMPT_END ===
 ) -> str:
     header = _build_file_header(rel_path, content, line_count)
     specific_q = f"\n특히 이 부분이 궁금합니다: {question}\n" if question else ""
@@ -312,6 +361,7 @@ def _build_prompt(
 
 {section_format}
 """
+# === ANCHOR: ASK_CMD__BUILD_PROMPT_END ===
 
 
 # === ANCHOR: ASK_CMD__CALL_OPENAI_COMPATIBLE_START ===
@@ -320,7 +370,6 @@ def _call_openai_compatible(
     base_url: str,
     model: str,
     prompt: str,
-    # === ANCHOR: ASK_CMD__CALL_OPENAI_COMPATIBLE_END ===
 ) -> bool:
     """OpenAI 호환 API 공통 호출 (OpenAI / GLM / Kimi)"""
     data: OpenAICompatibleRequest = {
@@ -348,6 +397,7 @@ def _call_openai_compatible(
             raise RuntimeError("OpenAI 호환 응답에서 내용을 찾지 못했습니다.")
         print_ai_response(text)
     return True
+# === ANCHOR: ASK_CMD__CALL_OPENAI_COMPATIBLE_END ===
 
 
 # === ANCHOR: ASK_CMD__TRY_ANTHROPIC_START ===

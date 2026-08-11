@@ -67,7 +67,6 @@ def _resolve_report_dest(
     ext: str,
     output: str | None = None,
     force: bool = False,
-# === ANCHOR: STORAGE__RESOLVE_REPORT_DEST_END ===
 ) -> Path:
     """dest 경로를 해석하고 모든 보안 가드를 적용한 뒤 절대 경로를 반환한다.
 
@@ -97,6 +96,7 @@ def _resolve_report_dest(
     if output and dest.exists() and not force:
         raise FileExistsError(f"output already exists: {relative}")
     return dest
+# === ANCHOR: STORAGE__RESOLVE_REPORT_DEST_END ===
 
 
 # === ANCHOR: STORAGE_WRITE_REPORT_START ===
@@ -108,7 +108,6 @@ def write_report(
     slug_source: str,
     output: str | None = None,
     force: bool = False,
-# === ANCHOR: STORAGE_WRITE_REPORT_END ===
 ) -> Path:
     """보고서 HTML 을 디스크에 쓰고 최종 경로를 반환한다."""
     root = root.resolve()
@@ -116,6 +115,7 @@ def write_report(
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(html, encoding="utf-8")
     return dest
+# === ANCHOR: STORAGE_WRITE_REPORT_END ===
 
 
 # === ANCHOR: STORAGE_WRITE_REPORT_BYTES_START ===
@@ -128,7 +128,6 @@ def write_report_bytes(
     ext: str,
     output: str | None = None,
     force: bool = False,
-# === ANCHOR: STORAGE_WRITE_REPORT_BYTES_END ===
 ) -> Path:
     """보고서 바이너리(docx/pptx 등)를 디스크에 쓰고 최종 경로를 반환한다."""
     root = root.resolve()
@@ -136,4 +135,5 @@ def write_report_bytes(
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(data)
     return dest
+# === ANCHOR: STORAGE_WRITE_REPORT_BYTES_END ===
 # === ANCHOR: STORAGE_END ===

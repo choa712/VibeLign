@@ -57,7 +57,6 @@ def materialize_card_news_assets(
     cards: list[VisualCardDict],
     runner: cli_adapters.PlanningCliRunner | None = None,
     timeout_seconds: int = _ASSET_TIMEOUT_SECONDS,
-# === ANCHOR: REPORT_CARD_NEWS_ASSET_GENERATOR_MATERIALIZE_CARD_NEWS_ASSETS_END ===
 ) -> list[VisualCardDict]:
     context = _AssetRenderContext(root=root, slug=slug, runner=runner, timeout_seconds=timeout_seconds)
     asset_dir = _safe_asset_dir(root, slug)
@@ -72,8 +71,10 @@ def materialize_card_news_assets(
             for index, card in enumerate(cards, 1)
         ]
         return [future.result() for future in futures]
+# === ANCHOR: REPORT_CARD_NEWS_ASSET_GENERATOR_MATERIALIZE_CARD_NEWS_ASSETS_END ===
 
 
+# === ANCHOR: REPORT_CARD_NEWS_ASSET_GENERATOR__MATERIALIZE_CARD_ASSET_START ===
 def _materialize_card_asset(
     context: _AssetRenderContext,
     asset_dir: Path,
@@ -91,6 +92,7 @@ def _materialize_card_asset(
     svg = _asset_svg(context, card)
     _ = asset_path.write_text(svg, encoding="utf-8")
     return _card_with_asset(card, asset_relative, _asset_source(card["image"]["provider"], svg))
+# === ANCHOR: REPORT_CARD_NEWS_ASSET_GENERATOR__MATERIALIZE_CARD_ASSET_END ===
 
 
 # === ANCHOR: REPORT_CARD_NEWS_ASSET_GENERATOR__SHARED_CLI_PROVIDER_START ===

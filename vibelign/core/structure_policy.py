@@ -62,6 +62,7 @@ ANCHOR_MARKER_PATTERN = (
 _ANCHOR_MARKER_RE = re.compile(ANCHOR_MARKER_PATTERN, re.MULTILINE)
 
 
+# === ANCHOR: STRUCTURE_POLICY_HAS_ANCHOR_MARKERS_START ===
 def has_anchor_markers(text: str) -> bool:
     """정본 형식 앵커 마커가 하나라도 있는가.
 
@@ -91,6 +92,7 @@ def has_anchor_markers(text: str) -> bool:
             # 없으므로, 이름만 양쪽에 있다고 참으로 보면 안 된다.
             return True
     return False
+# === ANCHOR: STRUCTURE_POLICY_HAS_ANCHOR_MARKERS_END ===
 
 GENERATED_ARTIFACT_DIR_NAMES: frozenset[str] = frozenset(
     {"dist", "build", "target", ".next", ".pnpm-store", "node_modules"}
@@ -280,12 +282,12 @@ def normalize_ignored_names(names: Iterable[str]) -> frozenset[str]:
 def has_ignored_part(
     parts: tuple[str, ...],
     ignored: Iterable[str] = SCAN_IGNORED_DIRS_LOWER,
-    # === ANCHOR: STRUCTURE_POLICY_HAS_IGNORED_PART_END ===
 ) -> bool:
     ignored_lower = (
         ignored if isinstance(ignored, frozenset) else normalize_ignored_names(ignored)
     )
     return any(part.lower() in ignored_lower for part in parts)
+# === ANCHOR: STRUCTURE_POLICY_HAS_IGNORED_PART_END ===
 
 
 # === ANCHOR: STRUCTURE_POLICY_IS_SOURCE_FILE_START ===

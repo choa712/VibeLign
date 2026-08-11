@@ -50,6 +50,7 @@ def run_cli(build_parser: Callable[[], argparse.ArgumentParser]) -> None:
 # === ANCHOR: CLI_RUNTIME_RUN_CLI_END ===
 
 
+# === ANCHOR: CLI_RUNTIME__RECORD_UNHANDLED_CLI_ERROR_START ===
 def _record_unhandled_cli_error() -> None:
     try:
         from vibelign.core.error_log import record_cli_error
@@ -65,15 +66,16 @@ def _record_unhandled_cli_error() -> None:
         )
     except Exception as exc:
         _ = exc
+# === ANCHOR: CLI_RUNTIME__RECORD_UNHANDLED_CLI_ERROR_END ===
 
 
 # === ANCHOR: CLI_RUNTIME_RUN_CLI_WITH_ARGS_START ===
 def run_cli_with_args(
     build_parser: Callable[[], argparse.ArgumentParser], argv: Sequence[str]
-# === ANCHOR: CLI_RUNTIME_RUN_CLI_WITH_ARGS_END ===
 ) -> object:
     parser = build_parser()
     args = parser.parse_args(list(argv))
     func = cast(Callable[[object], object], args.func)
     return func(args)
+# === ANCHOR: CLI_RUNTIME_RUN_CLI_WITH_ARGS_END ===
 # === ANCHOR: CLI_RUNTIME_END ===

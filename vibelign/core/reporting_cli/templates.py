@@ -81,7 +81,6 @@ def meta_line(model: ReportModel) -> str:
 # === ANCHOR: TEMPLATES_BUILD_REPORT_MODEL_START ===
 def build_report_model(
     data: PlanningData, report_type: str, *, date: str, source_plan_path: str = "", author: str = ""
-# === ANCHOR: TEMPLATES_BUILD_REPORT_MODEL_END ===
 ) -> ReportModel:
     specs = REPORT_TEMPLATES.get(report_type)
     if specs is None:
@@ -100,4 +99,5 @@ def build_report_model(
         author=author,
         sections=sections,
     )
+# === ANCHOR: TEMPLATES_BUILD_REPORT_MODEL_END ===
 # === ANCHOR: TEMPLATES_END ===

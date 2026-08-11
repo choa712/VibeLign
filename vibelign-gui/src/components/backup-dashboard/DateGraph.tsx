@@ -143,9 +143,9 @@ function TimelineMark({ point, index, active, onSelect }: { point: TimelinePoint
       <span style={{ width: active ? 18 : 13, height: active ? 18 : 13, background: color, border: "2px solid #1A1A1A", boxShadow: active ? "3px 3px 0 #1A1A1A" : "2px 2px 0 rgba(26, 26, 26, 0.75)", borderRadius: 999 }} />
       <span style={{ fontSize: 10, fontWeight: 900, color: "#1A1A1A", background: active ? "#FFD84D" : "#FEFBF0", border: "1px solid #1A1A1A", padding: "1px 4px", whiteSpace: "nowrap" }}>{point.timeLabel}</span>
     </button>
-// === ANCHOR: DATEGRAPH_TIMELINEMARK_END ===
   );
 }
+// === ANCHOR: DATEGRAPH_TIMELINEMARK_END ===
 
 // === ANCHOR: DATEGRAPH_TIMELINETICK_START ===
 function TimelineTick({ point, index, tickEvery }: { point: TimelinePoint; index: number; tickEvery: number }) {

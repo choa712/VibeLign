@@ -160,7 +160,7 @@ export function AdvancedHomeCards(props: AdvancedHomeCardsProps) {
         </div>
       </SortableContext>
     </DndContext>
-// === ANCHOR: ADVANCEDHOMECARDS_ADVANCEDHOMECARDS_END ===
   );
 }
+// === ANCHOR: ADVANCEDHOMECARDS_ADVANCEDHOMECARDS_END ===
 // === ANCHOR: ADVANCEDHOMECARDS_END ===

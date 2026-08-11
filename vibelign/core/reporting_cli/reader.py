@@ -78,9 +78,9 @@ def parse_plan_markdown(text: str) -> PlanningData:
         else:
             buf.append(line)
 
-# === ANCHOR: READER_PARSE_PLAN_MARKDOWN_END ===
     flush()
     return data
+# === ANCHOR: READER_PARSE_PLAN_MARKDOWN_END ===
 
 
 _BULLET_RE = re.compile(r"^(?:[-*]\s+|\d+[.)]\s+)")
@@ -147,13 +147,13 @@ def parse_generic_markdown(text: str) -> tuple[str, list[Section]]:
         if not stripped:
             flush_bullets()
             flush_para()
-# === ANCHOR: READER_PARSE_GENERIC_MARKDOWN_END ===
             continue
         flush_bullets()
         para.append(line)
 
     flush_section()
     return title, sections
+# === ANCHOR: READER_PARSE_GENERIC_MARKDOWN_END ===
 
 
 # === ANCHOR: READER_BUILD_DOC_REPORT_MODEL_START ===
@@ -164,7 +164,6 @@ def build_doc_report_model(
     source_plan_path: str = "",
     author: str = "",
     default_title: str = "문서 보고서",
-# === ANCHOR: READER_BUILD_DOC_REPORT_MODEL_END ===
 ) -> ReportModel:
     """임의 .md → '문서 그대로' ReportModel(report_type='doc')."""
     title, sections = parse_generic_markdown(text)
@@ -176,4 +175,5 @@ def build_doc_report_model(
         author=author,
         sections=sections,
     )
+# === ANCHOR: READER_BUILD_DOC_REPORT_MODEL_END ===
 # === ANCHOR: READER_END ===

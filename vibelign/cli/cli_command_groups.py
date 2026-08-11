@@ -46,7 +46,6 @@ def register_extended_commands(
     sub: SubparserFactory,
     lazy_command: Callable[[str, str], Callable[[object], None]],
     run_vib_guard: Callable[[object], None],
-    # === ANCHOR: CLI_COMMAND_GROUPS_REGISTER_EXTENDED_COMMANDS_END ===
 ) -> None:
     p = sub.add_parser(
         "protect",
@@ -627,6 +626,7 @@ def register_extended_commands(
 
     register_report_command_group(sub, lazy_command)
     register_workflow_command_group(sub, lazy_command)
+# === ANCHOR: CLI_COMMAND_GROUPS_REGISTER_EXTENDED_COMMANDS_END ===
 
 
 # === ANCHOR: CLI_COMMAND_GROUPS_END ===

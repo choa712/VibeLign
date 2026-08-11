@@ -35,7 +35,6 @@ def build_template_markdown(idea: str, *, language: str = "auto") -> str:
     question_lines = "\n".join(f"- {question.label}" for question in questions)
     markdown = f"""# {title}
 ## 한 줄 목표
-# === ANCHOR: MARKDOWN_WRITER_BUILD_TEMPLATE_MARKDOWN_END ===
 {idea.strip()}
 
 ## 만들고 싶은 이유
@@ -69,4 +68,5 @@ def build_template_markdown(idea: str, *, language: str = "auto") -> str:
     if "patch" in markdown.lower():
         raise ValueError("forbidden planning term generated: patch")
     return markdown
+# === ANCHOR: MARKDOWN_WRITER_BUILD_TEMPLATE_MARKDOWN_END ===
 # === ANCHOR: MARKDOWN_WRITER_END ===

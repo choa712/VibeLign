@@ -42,7 +42,7 @@ export function OnboardingPromptTextarea({ value, onChange, onSubmit, inputRef }
         paddingBottom: 7,
       }}
     />
-// === ANCHOR: ONBOARDINGPROMPTTEXTAREA_ONBOARDINGPROMPTTEXTAREA_END ===
   );
 }
+// === ANCHOR: ONBOARDINGPROMPTTEXTAREA_ONBOARDINGPROMPTTEXTAREA_END ===
 // === ANCHOR: ONBOARDINGPROMPTTEXTAREA_END ===

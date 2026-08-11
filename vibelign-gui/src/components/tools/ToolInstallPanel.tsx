@@ -253,9 +253,9 @@ export function ToolInstallPanel({ id, onDone }: Props) {
             설치 후 다시 확인
           </button>
         </div>
-// === ANCHOR: TOOLINSTALLPANEL_TOOLINSTALLPANEL_END ===
       )}
     </div>
   );
 }
+// === ANCHOR: TOOLINSTALLPANEL_TOOLINSTALLPANEL_END ===
 // === ANCHOR: TOOLINSTALLPANEL_END ===

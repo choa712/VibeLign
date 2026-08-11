@@ -109,9 +109,9 @@ function parseMemorySummaryPayload(raw: unknown): MemorySummaryResult {
     risks: (typed.risks ?? []).map((item) => item.text ?? "").filter(Boolean),
     verificationFreshness: verificationFreshness(verification),
     warning: typed.downgrade_warning || undefined,
-// === ANCHOR: MEMORY_PARSEMEMORYSUMMARYPAYLOAD_END ===
   };
 }
+// === ANCHOR: MEMORY_PARSEMEMORYSUMMARYPAYLOAD_END ===
 
 // === ANCHOR: MEMORY_VERIFICATIONFRESHNESS_START ===
 function verificationFreshness(lines: string[]): "fresh" | "stale" | "missing" {

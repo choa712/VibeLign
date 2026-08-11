@@ -27,7 +27,6 @@ def create_planning_with_agents(
     timeout_seconds: int = 300,
     save_transcript: bool = False,
     runner: PlanningCliRunner | None = None,
-# === ANCHOR: ORCHESTRATOR_CREATE_PLANNING_WITH_AGENTS_END ===
 ) -> PlanningResult:
     mention_result = resolve_persona_mentions(planning_input.idea)
     clean_input = PlanningInput(
@@ -48,6 +47,7 @@ def create_planning_with_agents(
         save_transcript=save_transcript,
         runner=runner,
     )
+# === ANCHOR: ORCHESTRATOR_CREATE_PLANNING_WITH_AGENTS_END ===
 
 
 # === ANCHOR: ORCHESTRATOR_APPEND_PLANNING_WITH_AGENTS_START ===
@@ -61,7 +61,6 @@ def append_planning_with_agents(
     timeout_seconds: int = 300,
     save_transcript: bool = False,
     runner: PlanningCliRunner | None = None,
-# === ANCHOR: ORCHESTRATOR_APPEND_PLANNING_WITH_AGENTS_END ===
 ) -> PlanningResult:
     root = root.resolve()
     relative_path = _safe_relative_output_path(output_path)
@@ -85,6 +84,7 @@ def append_planning_with_agents(
         save_transcript=save_transcript,
         runner=runner,
     )
+# === ANCHOR: ORCHESTRATOR_APPEND_PLANNING_WITH_AGENTS_END ===
 
 
 # === ANCHOR: ORCHESTRATOR__APPLY_AGENTS_TO_RESULT_START ===
@@ -99,7 +99,6 @@ def _apply_agents_to_result(
     timeout_seconds: int,
     save_transcript: bool,
     runner: PlanningCliRunner | None,
-# === ANCHOR: ORCHESTRATOR__APPLY_AGENTS_TO_RESULT_END ===
 ) -> PlanningResult:
     mention_result = resolve_persona_mentions(message)
     personas = _resolve_personas(
@@ -159,23 +158,23 @@ def _apply_agents_to_result(
         runs=tuple(runs),
     )
     return final_result
+# === ANCHOR: ORCHESTRATOR__APPLY_AGENTS_TO_RESULT_END ===
 
 
 # === ANCHOR: ORCHESTRATOR__RESOLVE_PERSONAS_START ===
 def _resolve_personas(
     default_persona_ids: tuple[str, ...],
     agents_choice: str | None,
-# === ANCHOR: ORCHESTRATOR__RESOLVE_PERSONAS_END ===
 ) -> tuple[PlanningPersona, ...]:
     persona_ids = _parse_csv(agents_choice) if agents_choice else default_persona_ids
     return ordered_personas_for_ids(persona_ids)
+# === ANCHOR: ORCHESTRATOR__RESOLVE_PERSONAS_END ===
 
 
 # === ANCHOR: ORCHESTRATOR__RESOLVE_ADAPTERS_START ===
 def _resolve_adapters(
     cli_choice: str,
     personas: tuple[PlanningPersona, ...],
-# === ANCHOR: ORCHESTRATOR__RESOLVE_ADAPTERS_END ===
 ) -> dict[str, str]:
     cli_ids = _parse_csv(cli_choice)
     if cli_ids and cli_ids != ("auto",):
@@ -191,6 +190,7 @@ def _resolve_adapters(
         persona.id: (config[persona.id].provider if config.get(persona.id) and config[persona.id].provider else persona.adapter)
         for persona in personas
     }
+# === ANCHOR: ORCHESTRATOR__RESOLVE_ADAPTERS_END ===
 
 
 # === ANCHOR: ORCHESTRATOR__PARSE_CSV_START ===
@@ -201,11 +201,13 @@ def _parse_csv(raw: str | None) -> tuple[str, ...]:
 # === ANCHOR: ORCHESTRATOR__PARSE_CSV_END ===
 
 
+# === ANCHOR: ORCHESTRATOR__FILTER_ENABLED_PERSONAS_START ===
 def _filter_enabled_personas(
     personas: tuple[PlanningPersona, ...],
 ) -> tuple[PlanningPersona, ...]:
     config = load_persona_config()
     return tuple(p for p in personas if not config.get(p.id) or config[p.id].enabled)
+# === ANCHOR: ORCHESTRATOR__FILTER_ENABLED_PERSONAS_END ===
 
 
 # === ANCHOR: ORCHESTRATOR__SAFE_RELATIVE_OUTPUT_PATH_START ===
@@ -225,7 +227,6 @@ def _finalize_agent_result(
     adapters: dict[str, str],
     statuses: dict[str, str],
     used_agents: tuple[str, ...],
-# === ANCHOR: ORCHESTRATOR__FINALIZE_AGENT_RESULT_END ===
 ) -> PlanningResult:
     first_persona = personas[0] if personas else None
     persona_id = used_agents[0] if used_agents else (
@@ -243,4 +244,5 @@ def _finalize_agent_result(
         llm_status=llm_status,
         fallback_reason=fallback_reason,
     )
+# === ANCHOR: ORCHESTRATOR__FINALIZE_AGENT_RESULT_END ===
 # === ANCHOR: ORCHESTRATOR_END ===

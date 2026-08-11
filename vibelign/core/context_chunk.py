@@ -56,7 +56,6 @@ def _python_prefix_lines_before(
     window_start_idx: int,
     *,
     max_prefix: int,
-    # === ANCHOR: CONTEXT_CHUNK__PYTHON_PREFIX_LINES_BEFORE_END ===
 ) -> list[str]:
     """윈도우 시작(window_start_idx) 앞 구간 중, 컨텍스트에 붙일 상단 줄들."""
     if window_start_idx <= 0:
@@ -68,6 +67,7 @@ def _python_prefix_lines_before(
     if take < 1:
         return []
     return lines[0:take]
+# === ANCHOR: CONTEXT_CHUNK__PYTHON_PREFIX_LINES_BEFORE_END ===
 
 
 # === ANCHOR: CONTEXT_CHUNK__JS_TS_HEAD_EXCLUSIVE_END_START ===
@@ -89,7 +89,6 @@ def _js_ts_prefix_lines_before(
     window_start_idx: int,
     *,
     max_prefix: int,
-    # === ANCHOR: CONTEXT_CHUNK__JS_TS_PREFIX_LINES_BEFORE_END ===
 ) -> list[str]:
     if window_start_idx <= 0:
         return []
@@ -100,6 +99,7 @@ def _js_ts_prefix_lines_before(
     if take < 1:
         return []
     return lines[0:take]
+# === ANCHOR: CONTEXT_CHUNK__JS_TS_PREFIX_LINES_BEFORE_END ===
 
 
 # === ANCHOR: CONTEXT_CHUNK_FETCH_ANCHOR_CONTEXT_WINDOW_START ===
@@ -111,7 +111,6 @@ def fetch_anchor_context_window(
     pad_after: int = DEFAULT_PAD_AFTER,
     py_prefix_max_lines: int = DEFAULT_PY_PREFIX_MAX_LINES,
     js_ts_prefix_max_lines: int = DEFAULT_JS_TS_PREFIX_MAX_LINES,
-    # === ANCHOR: CONTEXT_CHUNK_FETCH_ANCHOR_CONTEXT_WINDOW_END ===
 ) -> str | None:
     if (
         not path.is_file()
@@ -161,6 +160,7 @@ def fetch_anchor_context_window(
             )
             return (prefix + sep + body).strip()
     return body
+# === ANCHOR: CONTEXT_CHUNK_FETCH_ANCHOR_CONTEXT_WINDOW_END ===
 
 
 # === ANCHOR: CONTEXT_CHUNK_END ===

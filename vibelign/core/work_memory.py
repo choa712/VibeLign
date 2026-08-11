@@ -110,8 +110,10 @@ def _truncate_text(value: object, limit: int = MAX_TEXT_LENGTH) -> str:
 # === ANCHOR: WORK_MEMORY__TRUNCATE_TEXT_END ===
 
 
+# === ANCHOR: WORK_MEMORY__WARN_WORK_MEMORY_FAILURE_START ===
 def _warn_work_memory_failure(operation: str, path: Path, error: Exception) -> None:
     print(f"[WARN] work memory {operation} failed for {path}: {error}", file=sys.stderr)
+# === ANCHOR: WORK_MEMORY__WARN_WORK_MEMORY_FAILURE_END ===
 
 
 # === ANCHOR: WORK_MEMORY__SAFE_RELATIVE_PATH_START ===
@@ -128,6 +130,7 @@ def _safe_relative_path(value: object) -> str:
 # === ANCHOR: WORK_MEMORY__SAFE_RELATIVE_PATH_END ===
 
 
+# === ANCHOR: WORK_MEMORY__IS_EXCLUDED_MEMORY_PATH_START ===
 def _is_excluded_memory_path(parts: list[str]) -> bool:
     for part in parts:
         normalized = part.lower()
@@ -136,6 +139,7 @@ def _is_excluded_memory_path(parts: list[str]) -> bool:
         if any(normalized.endswith(suffix) for suffix in WORK_MEMORY_EXCLUDED_DIR_SUFFIXES):
             return True
     return False
+# === ANCHOR: WORK_MEMORY__IS_EXCLUDED_MEMORY_PATH_END ===
 
 
 # === ANCHOR: WORK_MEMORY__NORMALIZE_EVENT_START ===
@@ -329,7 +333,6 @@ def save_work_memory(path: Path, state: WorkMemoryState) -> None:
 # === ANCHOR: WORK_MEMORY__APPEND_RELEVANT_FILE_START ===
 def _append_relevant_file(
     entries: list[RelevantFileEntry], path: str, why: str, source: str = "watch",
-# === ANCHOR: WORK_MEMORY__APPEND_RELEVANT_FILE_END ===
 ) -> list[RelevantFileEntry]:
     rel_path = _safe_relative_path(path)
     rel_why = _truncate_text(why)
@@ -345,6 +348,7 @@ def _append_relevant_file(
         }
     )
     return _prune_relevant_files(updated)
+# === ANCHOR: WORK_MEMORY__APPEND_RELEVANT_FILE_END ===
 
 
 # === ANCHOR: WORK_MEMORY_ADD_RELEVANT_FILE_START ===
@@ -374,7 +378,6 @@ def record_event(
     message: str,
     action: str = "",
     relevant_reason: str = "",
-# === ANCHOR: WORK_MEMORY_RECORD_EVENT_END ===
 ) -> None:
     safe_rel_path = _safe_relative_path(rel_path)
     if not safe_rel_path:
@@ -399,6 +402,7 @@ def record_event(
     except Exception as exc:
         _warn_work_memory_failure("record_event", path, exc)
         return
+# === ANCHOR: WORK_MEMORY_RECORD_EVENT_END ===
 
 
 # === ANCHOR: WORK_MEMORY_RECORD_WARNING_START ===
@@ -408,7 +412,6 @@ def record_warning(
     rel_path: str,
     message: str,
     action: str = "",
-# === ANCHOR: WORK_MEMORY_RECORD_WARNING_END ===
 ) -> None:
     safe_rel_path = _safe_relative_path(rel_path)
     if not safe_rel_path:
@@ -434,6 +437,7 @@ def record_warning(
     except Exception as exc:
         _warn_work_memory_failure("record_warning", path, exc)
         return
+# === ANCHOR: WORK_MEMORY_RECORD_WARNING_END ===
 
 
 # === ANCHOR: WORK_MEMORY_RECORD_COMMIT_START ===
@@ -511,11 +515,13 @@ def add_verification(path: Path, message: str) -> None:
 # === ANCHOR: WORK_MEMORY_ADD_VERIFICATION_END ===
 
 
+# === ANCHOR: WORK_MEMORY__VERIFICATION_KEY_START ===
 def _verification_key(value: str) -> str:
     command, _, _result = value.partition(" -> ")
     if command.startswith("uv run python -m py_compile"):
         return "uv run python -m py_compile"
     return command.strip() or value.strip()
+# === ANCHOR: WORK_MEMORY__VERIFICATION_KEY_END ===
 
 
 # === ANCHOR: WORK_MEMORY_ADD_DECISION_START ===
@@ -530,6 +536,7 @@ def add_decision(path: Path, message: str) -> None:
 # === ANCHOR: WORK_MEMORY_ADD_DECISION_END ===
 
 
+# === ANCHOR: WORK_MEMORY_SET_NEXT_ACTION_START ===
 def set_next_action(path: Path, message: str) -> None:
     state = load_work_memory(path)
     text = _truncate_text(message)
@@ -538,6 +545,7 @@ def set_next_action(path: Path, message: str) -> None:
     state["next_action"] = text
     state["updated_at"] = _utc_now()
     save_work_memory(path, state)
+# === ANCHOR: WORK_MEMORY_SET_NEXT_ACTION_END ===
 
 
 # === ANCHOR: WORK_MEMORY__IS_SYNTHETIC_EVENT_PATH_START ===

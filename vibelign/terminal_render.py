@@ -9,47 +9,90 @@ import builtins
 from typing import IO, Protocol, TypedDict, cast
 
 
+# === ANCHOR: TERMINAL_RENDER_RICHTEXTLIKE_START ===
 class RichTextLike(Protocol):
+    # === ANCHOR: TERMINAL_RENDER_APPEND_START ===
     def append(self, text: str, style: str = "") -> object: ...
+    # === ANCHOR: TERMINAL_RENDER_APPEND_END ===
+# === ANCHOR: TERMINAL_RENDER_RICHTEXTLIKE_END ===
 
 
+# === ANCHOR: TERMINAL_RENDER_RICHCONSOLELIKE_START ===
 class RichConsoleLike(Protocol):
+    # === ANCHOR: TERMINAL_RENDER_PRINT_START ===
     def print(self, *objects: object, **kwargs: object) -> object: ...
+    # === ANCHOR: TERMINAL_RENDER_PRINT_END ===
+# === ANCHOR: TERMINAL_RENDER_RICHCONSOLELIKE_END ===
 
 
+# === ANCHOR: TERMINAL_RENDER_RICHCONSOLEFACTORY_START ===
 class RichConsoleFactory(Protocol):
+    # === ANCHOR: TERMINAL_RENDER___CALL___START ===
     def __call__(self, *args: object, **kwargs: object) -> RichConsoleLike: ...
+    # === ANCHOR: TERMINAL_RENDER___CALL___END ===
+# === ANCHOR: TERMINAL_RENDER_RICHCONSOLEFACTORY_END ===
 
 
+# === ANCHOR: TERMINAL_RENDER_RICHGROUPFACTORY_START ===
 class RichGroupFactory(Protocol):
+    # === ANCHOR: TERMINAL_RENDER___CALL___START ===
     def __call__(self, *args: object, **kwargs: object) -> object: ...
+    # === ANCHOR: TERMINAL_RENDER___CALL___END ===
+# === ANCHOR: TERMINAL_RENDER_RICHGROUPFACTORY_END ===
 
 
+# === ANCHOR: TERMINAL_RENDER_RICHCOLUMNSFACTORY_START ===
 class RichColumnsFactory(Protocol):
+    # === ANCHOR: TERMINAL_RENDER___CALL___START ===
     def __call__(self, *args: object, **kwargs: object) -> object: ...
+    # === ANCHOR: TERMINAL_RENDER___CALL___END ===
+# === ANCHOR: TERMINAL_RENDER_RICHCOLUMNSFACTORY_END ===
 
 
+# === ANCHOR: TERMINAL_RENDER_RICHPANELFACTORY_START ===
 class RichPanelFactory(Protocol):
+    # === ANCHOR: TERMINAL_RENDER___CALL___START ===
     def __call__(self, *args: object, **kwargs: object) -> object: ...
+    # === ANCHOR: TERMINAL_RENDER___CALL___END ===
+    # === ANCHOR: TERMINAL_RENDER_FIT_START ===
     def fit(self, *args: object, **kwargs: object) -> object: ...
+    # === ANCHOR: TERMINAL_RENDER_FIT_END ===
+# === ANCHOR: TERMINAL_RENDER_RICHPANELFACTORY_END ===
 
 
+# === ANCHOR: TERMINAL_RENDER_RICHRULEFACTORY_START ===
 class RichRuleFactory(Protocol):
+    # === ANCHOR: TERMINAL_RENDER___CALL___START ===
     def __call__(self, *args: object, **kwargs: object) -> object: ...
+    # === ANCHOR: TERMINAL_RENDER___CALL___END ===
+# === ANCHOR: TERMINAL_RENDER_RICHRULEFACTORY_END ===
 
 
+# === ANCHOR: TERMINAL_RENDER_RICHSYNTAXFACTORY_START ===
 class RichSyntaxFactory(Protocol):
+    # === ANCHOR: TERMINAL_RENDER___CALL___START ===
     def __call__(self, *args: object, **kwargs: object) -> object: ...
+    # === ANCHOR: TERMINAL_RENDER___CALL___END ===
+# === ANCHOR: TERMINAL_RENDER_RICHSYNTAXFACTORY_END ===
 
 
+# === ANCHOR: TERMINAL_RENDER_RICHTEXTFACTORY_START ===
 class RichTextFactory(Protocol):
+    # === ANCHOR: TERMINAL_RENDER___CALL___START ===
     def __call__(self, *args: object, **kwargs: object) -> RichTextLike: ...
+    # === ANCHOR: TERMINAL_RENDER___CALL___END ===
+# === ANCHOR: TERMINAL_RENDER_RICHTEXTFACTORY_END ===
 
 
+# === ANCHOR: TERMINAL_RENDER_RICHPADDINGFACTORY_START ===
 class RichPaddingFactory(Protocol):
+    # === ANCHOR: TERMINAL_RENDER___CALL___START ===
     def __call__(self, *args: object, **kwargs: object) -> object: ...
+    # === ANCHOR: TERMINAL_RENDER___CALL___END ===
+# === ANCHOR: TERMINAL_RENDER_RICHPADDINGFACTORY_END ===
 
 
+# === ANCHOR: TERMINAL_RENDER_RICHMODULE_START ===
 class RichModule(TypedDict):
     Console: RichConsoleFactory
     Group: RichGroupFactory
@@ -59,6 +102,7 @@ class RichModule(TypedDict):
     Syntax: RichSyntaxFactory
     Text: RichTextFactory
     Padding: RichPaddingFactory
+# === ANCHOR: TERMINAL_RENDER_RICHMODULE_END ===
 
 
 _ONBOARDING_STYLE_ENV = "VIBELIGN_ONBOARDING_STYLE"
@@ -208,12 +252,12 @@ def _flush_list(
     blocks: list[tuple[str, object]],
     items: list[str],
     ordered: bool,
-    # === ANCHOR: TERMINAL_RENDER__FLUSH_LIST_END ===
 ) -> None:
     if not items:
         return
     blocks.append(("ordered_list" if ordered else "bullet_list", items[:]))
     items.clear()
+# === ANCHOR: TERMINAL_RENDER__FLUSH_LIST_END ===
 
 
 # === ANCHOR: TERMINAL_RENDER__PARSE_BLOCKS_START ===
@@ -474,7 +518,6 @@ def print_provider_status(
     model: str,
     console: RichConsoleLike | None = None,
     use_rich: bool | None = None,
-    # === ANCHOR: TERMINAL_RENDER_PRINT_PROVIDER_STATUS_END ===
 ) -> None:
     if use_rich is None:
         use_rich = should_use_rich()
@@ -497,6 +540,7 @@ def print_provider_status(
     _ = rich_console.print(
         rich_mod["Panel"].fit(label, border_style="bright_black", padding=(0, 1))
     )
+# === ANCHOR: TERMINAL_RENDER_PRINT_PROVIDER_STATUS_END ===
 
 
 # === ANCHOR: TERMINAL_RENDER_PRINT_ATTEMPTED_PROVIDERS_START ===
@@ -504,7 +548,6 @@ def print_attempted_providers(
     attempted: list[str],
     console: RichConsoleLike | None = None,
     use_rich: bool | None = None,
-    # === ANCHOR: TERMINAL_RENDER_PRINT_ATTEMPTED_PROVIDERS_END ===
 ) -> None:
     if not attempted:
         return
@@ -532,6 +575,7 @@ def print_attempted_providers(
             padding=(0, 1),
         )
     )
+# === ANCHOR: TERMINAL_RENDER_PRINT_ATTEMPTED_PROVIDERS_END ===
 
 
 # === ANCHOR: TERMINAL_RENDER_PRINT_AI_RESPONSE_START ===
@@ -539,7 +583,6 @@ def print_ai_response(
     text: str,
     console: RichConsoleLike | None = None,
     use_rich: bool | None = None,
-    # === ANCHOR: TERMINAL_RENDER_PRINT_AI_RESPONSE_END ===
 ) -> None:
     if use_rich is None:
         use_rich = should_use_rich()
@@ -658,6 +701,7 @@ def print_ai_response(
         return
 
     _ = rich_console.print(rich_mod["Group"](*renderables))
+# === ANCHOR: TERMINAL_RENDER_PRINT_AI_RESPONSE_END ===
 
 
 # === ANCHOR: TERMINAL_RENDER_CLI_PRINT_START ===
@@ -667,7 +711,6 @@ def cli_print(
     end: str = "\n",
     file: IO[str] | None = None,
     flush: bool = False,
-    # === ANCHOR: TERMINAL_RENDER_CLI_PRINT_END ===
 ) -> None:
     plain_print = builtins.print
     text = sep.join(str(arg) for arg in args)
@@ -703,6 +746,7 @@ def cli_print(
         enc = getattr(sys.stdout, "encoding", None) or "utf-8"
         safe = text.encode(enc, errors="replace").decode(enc, errors="replace")
         plain_print(safe)
+# === ANCHOR: TERMINAL_RENDER_CLI_PRINT_END ===
 
 
 # === ANCHOR: TERMINAL_RENDER__CLACK_LINE_START ===
@@ -711,7 +755,6 @@ def _clack_line(
     message: str,
     style: str,
     console: RichConsoleLike | None = None,
-    # === ANCHOR: TERMINAL_RENDER__CLACK_LINE_END ===
 ) -> None:
     plain_print = builtins.print
     onboarding_style = (
@@ -754,6 +797,7 @@ def _clack_line(
         enc = getattr(sys.stdout, "encoding", None) or "utf-8"
         safe = line.encode(enc, errors="replace").decode(enc, errors="replace")
         plain_print(safe)
+# === ANCHOR: TERMINAL_RENDER__CLACK_LINE_END ===
 
 
 # === ANCHOR: TERMINAL_RENDER_CLACK_INTRO_START ===
@@ -922,9 +966,9 @@ def print_cli_help(message: str, console: RichConsoleLike | None = None) -> None
                 epilog_text,
                 border_style="bright_blue",
                 padding=(0, 1),
-                # === ANCHOR: TERMINAL_RENDER_PRINT_CLI_HELP_END ===
             )
         )
+# === ANCHOR: TERMINAL_RENDER_PRINT_CLI_HELP_END ===
 
 
 # === ANCHOR: TERMINAL_RENDER_END ===
