@@ -19,6 +19,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from vibelign.core.anchor_tools import (
+    extract_anchor_blocks,
     extract_anchors,
     find_crossing_anchors,
     find_misplaced_anchors,
@@ -182,6 +183,46 @@ def test_second_occurrence_of_a_duplicate_name_is_checked(tmp_path: Path) -> Non
     body = path.read_text(encoding="utf-8")
     assert "return 1" in body
     assert "return value" in body
+
+
+def test_repair_skips_when_a_sibling_occurrence_would_shrink(tmp_path: Path) -> None:
+    """같은 이름의 정상인 등장이 줄어들 위험이 있으면 통째로 건너뛴다.
+
+    마커를 걷어내는 건 이름 단위다. 두 번째 등장을 고치려고 걷어내면 정상인
+    첫 번째까지 함께 지워졌다가 심볼 크기로 다시 놓인다 — 사람이 이웃 상수까지
+    넓게 걸어둔 구역이 조용히 줄어든다.
+
+    면제를 마커 이름 단위로 주면 drift 가드가 이걸 못 잡는다. 지목된 **그
+    등장**에만 면제를 줘야 한다.
+    """
+    path = _write(
+        tmp_path,
+        "dup.py",
+        # 첫 번째는 사람이 상수까지 넓게 걸어둔 정상 구역.
+        "# === ANCHOR: DUP_RUN_START ===\n"
+        "LIMIT = 5\n"
+        "\n"
+        "\n"
+        "def run() -> int:\n"
+        "    return LIMIT\n"
+        "# === ANCHOR: DUP_RUN_END ===\n"
+        "\n"
+        "\n"
+        "class Second:\n"
+        "    # === ANCHOR: DUP_RUN_START ===\n"
+        "    def run(self) -> int:\n"
+        "        value = 2\n"
+        "    # === ANCHOR: DUP_RUN_END ===\n"  # 잘렸다
+        "        return value\n",
+    )
+    original = path.read_text(encoding="utf-8")
+
+    outcome = repair_crossing_anchors(tmp_path, path, dry_run=False)
+
+    assert outcome["status"] == "skipped"
+    assert path.read_text(encoding="utf-8") == original
+    # 넓게 걸어둔 보호 구역은 그대로다.
+    assert "LIMIT = 5" in extract_anchor_blocks(path)["DUP_RUN"]
 
 
 def test_typescript_end_before_return_is_reported(tmp_path: Path) -> None:

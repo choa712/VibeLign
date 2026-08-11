@@ -1743,6 +1743,8 @@ def repair_crossing_anchors(
     rel = str(path.relative_to(root)) if path.is_relative_to(root) else str(path)
     original = safe_read_text(path)
     moved_ok = _crossing_participants(original or "") | _misplaced_participants(path)
+    # 교차 참가자는 이름이 곧 표시 이름이다(교차 진단이 마커 이름을 낸다).
+    flagged_displays = _crossing_participants(original or "") | _misplaced_displays(path)
     if not original or not moved_ok:
         return {
             "path": rel,
@@ -1804,14 +1806,14 @@ def repair_crossing_anchors(
     # 마커 줄은 빼고 비교한다. 바깥 앵커의 본문에는 안쪽 마커 줄이 섞여
     # 들어가므로, 그대로 비교하면 안쪽이 옮겨진 것만으로 바깥까지 "구역이
     # 바뀌었다" 가 된다. 우리가 지켜야 할 것은 **보호되는 코드**가 같은가다.
-    # 같은 이름이 두 번 열리면 표시 이름은 NAME, NAME_2 로 갈리지만 마커 이름은
-    # 둘 다 NAME 이다. 표시 이름으로 비교하면 옮기기로 한 마커의 두 번째 등장이
-    # "무관한 앵커가 움직였다" 로 잡혀, 정작 고쳐야 할 파일을 영영 건너뛴다.
-    marker_names = _all_marker_names(original.splitlines())
+    # 면제는 **오배치로 지목된 그 등장**에만 준다. 마커 이름 단위로 면제하면,
+    # 같은 이름의 정상인 등장(사람이 이웃 상수까지 넓게 걸어둔 구역)이 재생성
+    # 으로 심볼 크기까지 줄어드는데도 가드가 못 잡는다 — 마커를 걷어내는 건
+    # 이름 단위라 정상인 쪽까지 함께 지워졌다 다시 놓이기 때문이다.
     drifted = sorted(
         name
         for name, body in before_blocks.items()
-        if _marker_name_for(name, marker_names) not in moved_ok
+        if name not in flagged_displays
         and _code_only(after_blocks.get(name)) != _code_only(body)
     )
     if drifted:
@@ -2017,14 +2019,28 @@ def _misplaced_participants(path: Path) -> set[str]:
     잘못 잡았다" 는 뜻이고, 그게 #7 생성기 결함이 남긴 모양이다. 완전히
     떨어져 있으면 감싸려던 대상이 애초에 그 심볼이 아니었다고 본다.
     """
-    names: set[str] = set()
+    return {item.marker for item in _repairable_uncovered(path)}
+
+
+def _misplaced_displays(path: Path) -> set[str]:
+    """오배치로 지목된 **그 등장**의 표시 이름 (두 번째면 NAME_2).
+
+    마커를 걷어내는 건 이름 단위지만, "구역이 바뀌어도 되는가" 는 등장 단위로
+    따져야 한다. 같은 이름의 정상인 등장까지 면제하면 그쪽 보호 구역이
+    조용히 줄어든다.
+    """
+    return {item.display for item in _repairable_uncovered(path)}
+
+
+def _repairable_uncovered(path: Path) -> list[_Uncovered]:
+    """심볼과 겹치는 오배치만 — 떨어져 있으면 감싸려던 대상이 아니었다고 본다."""
+    out: list[_Uncovered] = []
     for item in _uncovered_symbols(path):
         start_line, end_line = item.anchor
         sym_start, sym_end = item.symbol
         if start_line <= sym_end and sym_start <= end_line:
-            # 마커 이름을 담는다. 표시 이름(NAME_2)으로는 마커를 걷어낼 수 없다.
-            names.add(item.marker)
-    return names
+            out.append(item)
+    return out
 # === ANCHOR: ANCHOR_TOOLS__MISPLACED_PARTICIPANTS_END ===
 
 
