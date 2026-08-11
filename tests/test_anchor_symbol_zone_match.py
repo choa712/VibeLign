@@ -606,6 +606,28 @@ def test_regex_after_else_and_throw_is_recognized(tmp_path: Path) -> None:
     assert find_misplaced_anchors(path) == []
 
 
+def test_paren_inside_a_string_does_not_flip_the_regex_judgment(
+    tmp_path: Path,
+) -> None:
+    """괄호를 뒤로 짚을 때 문자열 속 괄호를 코드로 세면 짝이 어긋난다.
+
+    `if (v.includes(")")) /re/.test(v)` 가 나눗셈으로 읽히면 정규식 안의
+    중괄호가 함수를 일찍 닫고, 같은 파서를 쓰는 검사도 그걸 정상으로 본다.
+    """
+    path = _write(
+        tmp_path,
+        "guard.ts",
+        "// === ANCHOR: GUARD_CHECK_START ===\n"
+        "export function check(v: string): boolean {\n"
+        '  if (v.includes(")")) /\\}$/.test(v);\n'
+        "  return true;\n"
+        "}\n"
+        "// === ANCHOR: GUARD_CHECK_END ===\n",
+    )
+
+    assert find_misplaced_anchors(path) == []
+
+
 def test_repair_leaves_clean_file_untouched(tmp_path: Path) -> None:
     path = _write(
         tmp_path,

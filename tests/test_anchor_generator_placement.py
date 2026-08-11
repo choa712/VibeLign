@@ -92,6 +92,35 @@ class TestNoCrossingGenerated:
         p.write_text("def f(:\n    pass\n", encoding="utf-8")
         _ = insert_python_symbol_anchors(p)
 
+    def test_outer_end_goes_past_a_comment_before_the_inner_end(
+        self, tmp_path: Path
+    ) -> None:
+        """안쪽 END 앞에 주석이나 빈 줄이 있어도 넘어가야 한다.
+
+        심볼 끝은 코드 기준이라 그 뒤의 주석은 블록 밖이다. 거기서 멈추면
+        바깥 END 가 주석과 안쪽 END 앞에 끼어들어 새 교차가 된다.
+
+        마커 판정이 주석 건너뛰기보다 먼저여야 한다 — 파이썬 마커는 `#` 로
+        시작하므로 순서를 뒤집으면 마커를 주석으로 삼켜 아무것도 못 넘긴다.
+        """
+        p = tmp_path / "commented.py"
+        marker = "=" * 3
+        p.write_text(
+            "class Holder:\n"
+            f"    # {marker} ANCHOR: COMMENTED_LAST_START {marker}\n"
+            "    def last(self) -> int:\n"
+            "        return 1\n"
+            "\n"
+            "    # 이 주석이 END 앞에 있다\n"
+            f"    # {marker} ANCHOR: COMMENTED_LAST_END {marker}\n",
+            encoding="utf-8",
+        )
+
+        _ = insert_python_symbol_anchors(p)
+
+        assert find_crossing_anchors(p.read_text(encoding="utf-8")) == []
+        assert "COMMENTED_HOLDER" in set(extract_anchors(p))
+
     def test_outer_end_goes_past_a_retained_inner_end(self, tmp_path: Path) -> None:
         """결함 4: 이미 놓인 안쪽 END 앞에 바깥 END 를 끼워 교차를 만든다.
 

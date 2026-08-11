@@ -440,12 +440,47 @@ def _js_scan_line(line: str, state: dict) -> int:
 _JS_REGEX_PREV_OK = set("(,=:[!&|?{;}+-*%~^<>")
 
 
+def _js_mask_quoted(line: str) -> str:
+    """문자열 안의 내용을 공백으로 덮는다 — 길이는 그대로 둔다.
+
+    괄호를 뒤로 짚을 때 `v.includes(")")` 같은 문자열 속 괄호를 코드로 세면
+    짝이 어긋나 판정이 뒤집힌다. 인덱스를 그대로 쓰려면 길이가 같아야 한다.
+    """
+    out = list(line)
+    quote: str | None = None
+    k = 0
+    while k < len(line):
+        c = line[k]
+        if quote is not None:
+            if c == "\\":
+                if k + 1 < len(out):
+                    out[k + 1] = " "
+                out[k] = " "
+                k += 2
+                continue
+            if c == quote:
+                quote = None
+            else:
+                out[k] = " "
+            k += 1
+            continue
+        if c in ("'", '"', "`"):
+            quote = c
+        elif c == "/" and k + 1 < len(line) and line[k + 1] == "/":
+            for j in range(k, len(out)):
+                out[j] = " "
+            break
+        k += 1
+    return "".join(out)
+
+
 def _js_control_paren_before(line: str, idx: int) -> bool:
     """`idx` 의 `)` 가 if/while/for 의 조건 괄호인가.
 
     `if (ok) /re/.test(v)` 는 정규식 자리인데, `)` 를 값의 끝으로만 보면
     나눗셈으로 읽혀 정규식 안의 중괄호가 블록 깊이를 망친다.
     """
+    line = _js_mask_quoted(line)
     depth = 0
     k = idx
     while k >= 0:
@@ -618,11 +653,18 @@ def _end_insert_pos(lines: list[str], start_idx: int, end_idx: int) -> int:
     probe = pos
     while probe < len(lines):
         line = lines[probe]
-        if not line.strip():
-            probe += 1  # 빈 줄로는 멈추지 않는다 — 그 뒤에 안쪽 END 가 있을 수 있다
-            continue
+        # 마커 판정이 먼저다. 파이썬 마커는 `#` 로 시작하므로, 주석 건너뛰기를
+        # 앞에 두면 마커를 주석으로 삼켜 아무것도 넘기지 못한다.
         marker = _parse_anchor_marker(line)
-        if marker is None or marker[1] or not opened_inside.get(marker[0]):
+        if marker is None:
+            stripped = line.strip()
+            # 빈 줄과 주석으로는 멈추지 않는다 — 그 뒤에 안쪽 END 가 있을 수 있다.
+            # 실제로 END 를 넘겼을 때만 위치를 옮기므로, 넘겨보고 아니면 제자리다.
+            if not stripped or stripped.startswith(("//", "/*", "*", "#")):
+                probe += 1
+                continue
+            break
+        if marker[1] or not opened_inside.get(marker[0]):
             break
         opened_inside[marker[0]] -= 1
         probe += 1
