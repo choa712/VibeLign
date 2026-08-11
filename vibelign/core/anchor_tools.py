@@ -492,7 +492,11 @@ def _js_control_paren_before(line: str, idx: int) -> bool:
                 break
         k -= 1
     if k < 0:
-        return False
+        # 여는 괄호가 이 줄에 없다 = 여러 줄 조건이다. 그런 줄이 `)` 로 시작해
+        # 곧바로 `/` 가 오면 대개 `if (\n ok\n) /re/.test(v)` 형태다.
+        # 틀려도 손해가 없다: 여러 줄 나눗셈(`) / 2;`)이라면 이 줄에 닫는 `/`
+        # 가 없어 _js_skip_regex 가 한 칸만 전진하고 나눗셈과 같아진다.
+        return True
     k -= 1
     while k >= 0 and line[k] in " \t":
         k -= 1
@@ -503,6 +507,12 @@ def _js_control_paren_before(line: str, idx: int) -> bool:
 
 
 def _js_regex_can_start(line: str, idx: int) -> bool:
+    # `/>` 는 JSX 자기닫힘 태그다. `<A attr={x} />` 처럼 앞이 `}` 로 끝나면
+    # 값이 올 수 없는 자리로 보여 정규식으로 오인되고, 그러면 다음 `/` 까지
+    # 삼켜 그 사이의 `{` 를 가린 채 `}` 만 세어 블록 깊이가 샌다.
+    # `/>/` 같은 진짜 정규식은 드물고, 오판해도 중괄호가 없어 깊이에 무해하다.
+    if idx + 1 < len(line) and line[idx + 1] == ">":
+        return False
     k = idx - 1
     while k >= 0 and line[k] in " \t":
         k -= 1
@@ -2035,6 +2045,15 @@ def repair_crossing_anchors(
             ),
             "lost_names": [],
         }
+    # 마지막 안전망. 위 검사들은 전부 "앵커" 를 본다 — 이건 **코드** 를 본다.
+    # 마커 아닌 줄이 한 글자라도 달라지면 그건 마커를 옮긴 결과가 아니다.
+    if _non_marker_lines(original) != _non_marker_lines(rebuilt):
+        return {
+            "path": rel,
+            "status": "skipped",
+            "reason": "마커가 아닌 내용이 바뀝니다 — 코드 손실 위험",
+            "lost_names": [],
+        }
     if rebuilt == original:
         return {"path": rel, "status": "unchanged", "reason": "바뀔 내용 없음", "lost_names": []}
     if not dry_run:
@@ -2085,6 +2104,16 @@ def _code_only(body: str | None) -> str:
 
 
 # === ANCHOR: ANCHOR_TOOLS__CODE_ONLY_LINES_START ===
+def _non_marker_lines(text: str) -> list[str]:
+    """정본 마커 줄만 걷어낸 나머지 — repair 가 절대 바꾸면 안 되는 것.
+
+    repair 는 마커를 옮기기만 한다. 그러니 마커 아닌 줄은 재생성 전후로
+    한 글자도 달라지면 안 된다. 이 불변식을 쓰기 직전에 확인하면, 어떤
+    경로로 생긴 코드 손실이든 파일에 닿기 전에 걸린다.
+    """
+    return [line for line in text.splitlines() if _parse_anchor_marker(line) is None]
+
+
 def _code_only_lines(lines: Iterable[str]) -> str:
     """마커 줄을 걷어낸 실제 코드. 앵커 본문과 심볼 구역을 같은 자로 잰다."""
     return "\n".join(

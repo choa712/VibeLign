@@ -111,8 +111,8 @@ def _validate_anchor_file(path: Path) -> Iterable[str]:
 _MISPLACED_SHOWN = 10
 
 
-def _print_misplaced_warnings(warnings: list[str]) -> None:
-    """오배치 경고를 출력한다 — 종료 코드는 건드리지 않는다.
+def _print_misplaced_warnings(warnings: list[str], *, strict: bool = False) -> None:
+    """오배치 경고를 출력한다. 종료 코드는 호출자가 정한다(--strict).
 
     전부 쏟아내면(이 리포만 102건) 정작 차단 사유가 묻힌다. 앞의 몇 건만
     보여주고 나머지는 수로 알린 뒤 고치는 방법을 가리킨다.
@@ -120,7 +120,8 @@ def _print_misplaced_warnings(warnings: list[str]) -> None:
     if not warnings:
         return
     print("")
-    print(f"⚠️  심볼을 다 덮지 못하는 앵커 {len(warnings)}건 (경고 — 차단하지 않습니다):")
+    tail = "실패로 처리합니다" if strict else "경고 — 차단하지 않습니다"
+    print(f"⚠️  심볼을 다 덮지 못하는 앵커 {len(warnings)}건 ({tail}):")
     for item in warnings[:_MISPLACED_SHOWN]:
         print(f"- {item}")
     if len(warnings) > _MISPLACED_SHOWN:
@@ -562,15 +563,21 @@ def run_vib_anchor(args: object) -> None:
         for path, rel in _unindexed_source_files(root, index, allowed_exts):
             for problem in _marker_format_problems(path):
                 problems.append(f"{rel}: {problem}")
+        # --strict 는 경고를 실패로 올린다. 기본값이 경고인 이유는 `--auto` 를
+        # 한 번이라도 돌린 기존 프로젝트가 전부 깨지기 때문이고(issue #11),
+        # 자동화가 보호 구역을 강제하고 싶을 때 쓸 문은 열어둔다.
+        strict = bool(getattr(args, "strict", False))
+        failed = bool(problems) or (strict and bool(warnings))
         if json_mode:
             print(
                 json.dumps(
                     {
-                        "ok": not problems,
+                        "ok": not failed,
                         "error": None,
                         "data": {
                             "problems": problems,
                             "warnings": warnings,
+                            "strict": strict,
                             "anchor_index": index,
                         },
                     },
@@ -578,18 +585,19 @@ def run_vib_anchor(args: object) -> None:
                     ensure_ascii=False,
                 )
             )
-            if problems:
+            if failed:
                 raise SystemExit(1)
             return
         if problems:
             print("Anchor validation problems:")
             for item in problems:
                 print(f"- {item}")
-            _print_misplaced_warnings(warnings)
+        else:
+            print("Anchor validation passed.")
+            print(f"Anchor index saved: {meta.anchor_index_path.relative_to(root)}")
+        _print_misplaced_warnings(warnings, strict=strict)
+        if failed:
             raise SystemExit(1)
-        print("Anchor validation passed.")
-        print(f"Anchor index saved: {meta.anchor_index_path.relative_to(root)}")
-        _print_misplaced_warnings(warnings)
         return
 
     recommendations = (

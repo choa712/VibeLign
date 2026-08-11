@@ -209,6 +209,11 @@ def register_extended_commands(
         help="잘못 놓인 마커를 올바른 위치로 다시 놓기 — 교차와 단독 오배치 양쪽 (--dry-run 권장)",
     )
     _ = p.add_argument(
+        "--strict",
+        action="store_true",
+        help="--validate 에서 '심볼을 다 덮지 못하는 앵커' 경고도 실패로 처리 (CI 용)",
+    )
+    _ = p.add_argument(
         "--dry-run", action="store_true", help="실제로 바꾸지 않고 미리 보기"
     )
     _ = p.add_argument("--json", action="store_true", help="JSON으로 출력")

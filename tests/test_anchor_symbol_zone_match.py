@@ -628,6 +628,104 @@ def test_paren_inside_a_string_does_not_flip_the_regex_judgment(
     assert find_misplaced_anchors(path) == []
 
 
+def test_inline_marker_after_code_is_not_a_marker_line(tmp_path: Path) -> None:
+    """줄 끝에 붙은 마커 흉내는 마커가 아니다 — 그 줄을 지우면 코드가 사라진다.
+
+    정본 패턴은 줄 시작에 고정돼 있어 `return authorize(user)  # === ANCHOR: ...`
+    는 마커로 읽히지 않는다. 이 계약이 깨지면 repair 가 실행 가능한 코드를
+    통째로 지운다.
+    """
+    path = _write(
+        tmp_path,
+        "inline.py",
+        "# === ANCHOR: INLINE_HANDLE_START ===\n"
+        "def handle(user: str) -> str:\n"
+        "    return authorize(user)  # === ANCHOR: INLINE_HANDLE_END ===\n"
+        "# === ANCHOR: INLINE_HANDLE_END ===\n",
+    )
+
+    outcome = repair_crossing_anchors(tmp_path, path, dry_run=False)
+
+    assert outcome["status"] in {"unchanged", "repaired", "skipped"}
+    assert "return authorize(user)" in path.read_text(encoding="utf-8")
+
+
+def test_repair_never_changes_non_marker_lines(tmp_path: Path) -> None:
+    """마지막 안전망 — 다른 검사는 앵커를 보고 이건 코드를 본다.
+
+    마커 아닌 줄이 한 글자라도 달라지면 그건 마커를 옮긴 결과가 아니다.
+    어떤 경로로 생긴 손실이든 파일에 닿기 전에 걸려야 한다.
+    """
+    path = _write(
+        tmp_path,
+        "sample.py",
+        "# === ANCHOR: SAMPLE_HANDLE_START ===\n"
+        "def handle(\n"
+        "    value: int,\n"
+        "# === ANCHOR: SAMPLE_HANDLE_END ===\n"
+        ") -> int:\n"
+        "    total = value * 2\n"
+        "    return total\n",
+    )
+    before = [
+        line
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if "ANCHOR:" not in line
+    ]
+
+    assert repair_crossing_anchors(tmp_path, path, dry_run=False)["status"] == "repaired"
+
+    after = [
+        line
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if "ANCHOR:" not in line
+    ]
+    assert before == after
+
+
+def test_jsx_self_closing_tag_is_not_a_regex(tmp_path: Path) -> None:
+    """`<A attr={x} />` 의 슬래시를 정규식 시작으로 읽으면 깊이가 샌다.
+
+    앞이 `}` 로 끝나 값이 올 수 없는 자리처럼 보인다. 정규식으로 오인하면
+    다음 슬래시까지 삼켜 그 사이의 `{` 를 가린 채 `}` 만 세고, 함수가 일찍
+    끝난 것으로 잡힌다. TSX 가 많은 리포에서는 흔한 모양이다.
+    """
+    path = _write(
+        tmp_path,
+        "View.tsx",
+        "// === ANCHOR: VIEW_RENDER_START ===\n"
+        "export function render(ok: boolean, x: number) {\n"
+        "  return <><A attr={x} />{ok && <B />}</>;\n"
+        "}\n"
+        "// === ANCHOR: VIEW_RENDER_END ===\n",
+    )
+
+    assert find_misplaced_anchors(path) == []
+
+
+def test_multiline_condition_paren_before_a_regex(tmp_path: Path) -> None:
+    """여러 줄 조건의 닫는 괄호 뒤도 정규식 자리다.
+
+    여는 괄호가 그 줄에 없으면 여러 줄 조건으로 본다. 틀려도 손해가 없다 —
+    여러 줄 나눗셈이면 그 줄에 닫는 슬래시가 없어 한 칸만 전진하고
+    나눗셈과 같아진다.
+    """
+    path = _write(
+        tmp_path,
+        "multi.ts",
+        "// === ANCHOR: MULTI_CHECK_START ===\n"
+        "export function check(v: string, ok: boolean): boolean {\n"
+        "  if (\n"
+        "    ok\n"
+        "  ) /\\}$/.test(v);\n"
+        "  return ok;\n"
+        "}\n"
+        "// === ANCHOR: MULTI_CHECK_END ===\n",
+    )
+
+    assert find_misplaced_anchors(path) == []
+
+
 def test_repair_leaves_clean_file_untouched(tmp_path: Path) -> None:
     path = _write(
         tmp_path,
