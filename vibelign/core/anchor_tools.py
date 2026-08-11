@@ -483,7 +483,10 @@ def _js_regex_can_start(line: str, idx: int) -> bool:
     while k >= 0 and (line[k].isalnum() or line[k] == "_"):
         k -= 1
     word = line[k + 1 : word_end]
-    return word in {"return", "typeof", "case", "in", "of", "delete", "void", "yield", "await", "new"}
+    return word in {
+        "return", "typeof", "case", "in", "of", "delete", "void", "yield",
+        "await", "new", "else", "throw", "instanceof", "do", "default",
+    }
 
 
 def _js_skip_regex(line: str, idx: int) -> int:
@@ -599,18 +602,31 @@ def _end_insert_pos(lines: list[str], start_idx: int, end_idx: int) -> int:
     안쪽에서 열린 앵커의 END 만 넘어간다. 이 블록 밖에서 열린 마커까지
     넘어가면 남의 구역으로 END 를 밀어넣는 셈이다.
     """
-    opened_inside: set[str] = set()
+    # 집합이 아니라 개수로 센다. 같은 이름이 블록 안에서 두 번 열리면 집합은
+    # 한 번만 기록해, 두 번째 END 앞에 바깥 END 가 끼어들어 교차가 된다.
+    opened_inside: dict[str, int] = {}
     for probe in range(start_idx, min(end_idx + 1, len(lines))):
         marker = _parse_anchor_marker(lines[probe])
-        if marker is not None and marker[1]:
-            opened_inside.add(marker[0])
+        if marker is None:
+            continue
+        name, is_start = marker
+        if is_start:
+            opened_inside[name] = opened_inside.get(name, 0) + 1
+        elif opened_inside.get(name):
+            opened_inside[name] -= 1
     pos = min(end_idx + 1, len(lines))
-    while pos < len(lines):
-        marker = _parse_anchor_marker(lines[pos])
-        if marker is None or marker[1] or marker[0] not in opened_inside:
+    probe = pos
+    while probe < len(lines):
+        line = lines[probe]
+        if not line.strip():
+            probe += 1  # 빈 줄로는 멈추지 않는다 — 그 뒤에 안쪽 END 가 있을 수 있다
+            continue
+        marker = _parse_anchor_marker(line)
+        if marker is None or marker[1] or not opened_inside.get(marker[0]):
             break
-        opened_inside.discard(marker[0])
-        pos += 1
+        opened_inside[marker[0]] -= 1
+        probe += 1
+        pos = probe  # 실제로 END 를 넘겼을 때만 위치를 옮긴다
     return pos
 
 
@@ -1841,6 +1857,26 @@ def repair_crossing_anchors(
     intent 와 보호 구역이 함께 날아간다. 그런 파일은 사람이 판단할 몫이다.
     """
     rel = str(path.relative_to(root)) if path.is_relative_to(root) else str(path)
+    # safe_read_text 는 errors="ignore" 다 — 읽기 전용 경로에서는 관대해도 되지만
+    # 그걸 그대로 되쓰면 UTF-8 이 아닌 바이트가 말없이 사라진다. 문자열·주석·
+    # 식별자가 영구 손실되고, 전후 비교도 이미 잃은 것끼리 대조해 못 잡는다.
+    # 마커를 옮기려다 코드를 잃는 건 이 도구가 가장 하면 안 되는 일이다.
+    try:
+        _ = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return {
+            "path": rel,
+            "status": "skipped",
+            "reason": "UTF-8 로 읽히지 않는 파일입니다 — 되쓰면 바이트가 사라집니다",
+            "lost_names": [],
+        }
+    except OSError as exc:
+        return {
+            "path": rel,
+            "status": "skipped",
+            "reason": f"읽기 실패: {exc}",
+            "lost_names": [],
+        }
     original = safe_read_text(path)
     moved_ok = _crossing_participants(original or "") | _misplaced_participants(path)
     # 교차 참가자는 이름이 곧 표시 이름이다(교차 진단이 마커 이름을 낸다).

@@ -563,6 +563,49 @@ def test_regex_after_a_control_paren_is_recognized(tmp_path: Path) -> None:
     assert find_misplaced_anchors(path) == []
 
 
+def test_repair_refuses_a_non_utf8_file(tmp_path: Path) -> None:
+    """읽기는 관대해도 되지만 되쓰기는 아니다.
+
+    safe_read_text 는 errors="ignore" 라 UTF-8 이 아닌 바이트를 버린다.
+    그걸 그대로 되쓰면 문자열·주석·식별자가 영구히 사라지고, 전후 비교도
+    이미 잃은 것끼리 대조해 못 잡는다. 마커를 옮기려다 코드를 잃는 건
+    이 도구가 가장 하면 안 되는 일이다.
+    """
+    path = tmp_path / "latin.py"
+    path.write_bytes(
+        (
+            "# === ANCHOR: LATIN_HANDLE_START ===\n"
+            "def handle(\n"
+            "    a: int,\n"
+            "# === ANCHOR: LATIN_HANDLE_END ===\n"
+            ") -> str:\n"
+            "    return 'café'\n"
+        ).encode("latin-1")
+    )
+    before = path.read_bytes()
+
+    outcome = repair_crossing_anchors(tmp_path, path, dry_run=False)
+
+    assert outcome["status"] == "skipped"
+    assert "UTF-8" in outcome["reason"]
+    assert path.read_bytes() == before
+
+
+def test_regex_after_else_and_throw_is_recognized(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "branch.ts",
+        "// === ANCHOR: BRANCH_PICK_START ===\n"
+        "export function pick(v: string, ok: boolean): boolean {\n"
+        "  if (ok) run(); else /\\}$/.test(v);\n"
+        "  return ok;\n"
+        "}\n"
+        "// === ANCHOR: BRANCH_PICK_END ===\n",
+    )
+
+    assert find_misplaced_anchors(path) == []
+
+
 def test_repair_leaves_clean_file_untouched(tmp_path: Path) -> None:
     path = _write(
         tmp_path,
