@@ -262,7 +262,9 @@ def recommend_anchor_targets(
 
 
 # === ANCHOR: ANCHOR_TOOLS__PYTHON_SYMBOL_BLOCKS_START ===
-def _python_symbol_blocks(text: str) -> list[SymbolBlock]:
+def _python_symbol_blocks(
+    text: str, *, strict_decorators: bool = False
+) -> list[SymbolBlock]:
     """심볼별 (시작줄, 끝줄, 이름, 들여쓰기). 끝줄은 본문의 마지막 줄이다.
 
     AST 를 먼저 쓴다. 들여쓰기만 보고 끝을 찾으면 여러 줄 시그니처에서 닫는
@@ -275,7 +277,7 @@ def _python_symbol_blocks(text: str) -> list[SymbolBlock]:
     parsed = _python_symbol_blocks_ast(text)
     if parsed is not None:
         return parsed
-    return _python_symbol_blocks_by_indent(text)
+    return _python_symbol_blocks_by_indent(text, strict_decorators=strict_decorators)
 
 
 # === ANCHOR: ANCHOR_TOOLS__PYTHON_SYMBOL_BLOCKS_AST_START ===
@@ -320,12 +322,15 @@ _PY_SYMBOL_SCAN_CAP = 2000
 _PY_SYMBOL_START_RE = re.compile(r"^\s*(?:async\s+def|def|class)\s+[A-Za-z_]", re.M)
 
 
-def _python_symbol_blocks_by_indent(text: str) -> list[SymbolBlock]:
+def _python_symbol_blocks_by_indent(
+    text: str, *, strict_decorators: bool = False
+) -> list[SymbolBlock]:
     # 이 폴백은 정의마다 앞으로 훑어서 들여쓰기가 계단식으로 깊어지는 파일에
     # 이차식이 된다. AST 가 못 읽는 파일에서만 오지만, 검사가 읽기 전용
     # 경로(--validate)에까지 들어온 이상 파일 하나로 멈춰 세울 수 있다.
     lines = text.splitlines()
     blocks: list[SymbolBlock] = []
+    work = 0
     for idx, line in enumerate(lines):
         stripped = line.lstrip()
         if not stripped or stripped.startswith("#"):
@@ -340,9 +345,18 @@ def _python_symbol_blocks_by_indent(text: str) -> list[SymbolBlock]:
         # AST 경로와 같은 계약: 데코레이터는 정의의 일부다. 폴백만 빼두면
         # 무관한 문법 오류 하나로 폴백을 유도해 @authorized 를 보호 밖으로
         # 밀어낼 수 있고, 마커 아닌 줄은 그대로라 안전망도 통과한다.
-        start_idx = _decorator_start(lines, idx)
+        if strict_decorators:
+            start_idx = _decorator_start(lines, idx)
+        else:
+            maybe_start = _decorator_start_safe(lines, idx)
+            if maybe_start is None:
+                continue  # 경계를 확신할 수 없다 — 이 심볼은 건너뛴다
+            start_idx = maybe_start
         end_idx = len(lines) - 1
         for probe in range(idx + 1, len(lines)):
+            work += 1
+            if work > _SYMBOL_SCAN_WORK_CAP:
+                raise _TooManySymbols
             probe_line = lines[probe]
             probe_stripped = probe_line.strip()
             if not probe_stripped:
@@ -591,9 +605,10 @@ def _js_statement_ends(line: str) -> bool:
 # === ANCHOR: ANCHOR_TOOLS__JS_STATEMENT_ENDS_END ===
 
 
-def _js_symbol_blocks(text: str) -> list[SymbolBlock]:
+def _js_symbol_blocks(text: str, *, strict_decorators: bool = False) -> list[SymbolBlock]:
     lines = text.splitlines()
     blocks: list[SymbolBlock] = []
+    work = 0
     patterns = [
         re.compile(
             r"^(\s*)(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)"
@@ -620,7 +635,13 @@ def _js_symbol_blocks(text: str) -> list[SymbolBlock]:
         # 라우팅·권한 메타데이터가 보호 구역 밖에 남는데 검사는 정상으로 본다.
         # 데코레이터는 정의의 일부다(@Controller, @Authorized 등). 빼두면
         # 라우팅·권한 메타데이터가 보호 구역 밖에 남는데 검사는 정상으로 본다.
-        start_idx = _decorator_start(lines, idx)
+        if strict_decorators:
+            start_idx = _decorator_start(lines, idx)
+        else:
+            maybe_start = _decorator_start_safe(lines, idx)
+            if maybe_start is None:
+                continue  # 경계를 확신할 수 없다 — 이 심볼은 건너뛴다
+            start_idx = maybe_start
         # 문자열·템플릿·주석을 인식하는 정확한 중괄호 카운터로 블록 끝을 찾는다.
         # depth 는 줄 끝에서만 검사해 한 줄짜리 시그니처(구조분해 파라미터 { ... })를
         # 본문 블록과 혼동하지 않는다.
@@ -629,6 +650,9 @@ def _js_symbol_blocks(text: str) -> list[SymbolBlock]:
         end_idx = idx
         closed = False
         for probe in range(idx, len(lines)):
+            work += 1
+            if work > _SYMBOL_SCAN_WORK_CAP:
+                raise _TooManySymbols
             depth += _js_scan_line(lines[probe], state)
             end_idx = probe
             if state["opened"] and depth <= 0:
@@ -1171,6 +1195,20 @@ def _parse_anchor_marker(line: str) -> tuple[str, bool] | None:
 
 
 # === ANCHOR: ANCHOR_TOOLS__PARSE_ANCHOR_MARKER_END ===
+
+def _decorator_start_safe(lines: list[str], idx: int) -> int | None:
+    """생성기용 — 한도를 넘으면 None. 그 심볼에는 앵커를 달지 않는다.
+
+    검사는 "모른다" 고 말하면 되지만 생성기는 두 갈래 다 나쁘다: 죽으면
+    프로젝트가 앵커를 아예 못 달고, 데코레이터가 없는 셈 치면 권한
+    메타데이터 아래에 START 를 박아 바로 그 보호 구멍을 만든다.
+    확신할 수 없으면 손대지 않는 쪽을 고른다.
+    """
+    try:
+        return _decorator_start(lines, idx)
+    except _TooManySymbols:
+        return None
+
 
 def _decorator_start(lines: list[str], idx: int) -> int:
     """`idx` 의 정의 위에 붙은 데코레이터까지 올라간 시작 줄.
@@ -2285,6 +2323,11 @@ class _TooManySymbols(Exception):
 # 상한을 둔다. 이 리포의 JS/TS 최대가 32개이므로 6배 여유다. 넘는 파일은
 # 조용히 넘기지 않고 건너뛴 사실을 보고한다.
 _JS_SYMBOL_SCAN_CAP = 200
+# 심볼 수 상한만으로는 부족하다 — 상한 이하라도 본문이 크면 심볼마다 파일
+# 끝까지 훑어 이차식이 된다. 실제로 훑은 줄 수를 세어 묶는다.
+# 이 리포에서 가장 무거운 파일이 약 6.4만(2천 줄 × 32 심볼)이라 3배 여유다.
+# 200만으로 뒀더니 걸리기까지 37초가 걸려 상한의 의미가 없었다.
+_SYMBOL_SCAN_WORK_CAP = 200_000
 _JS_SYMBOL_START_RE = re.compile(
     r"^\s*(?:export\s+)?(?:(?:async\s+)?function\s+[A-Za-z_]"
     r"|class\s+[A-Za-z_]"
@@ -2314,11 +2357,11 @@ def _symbol_zones(path: Path, text: str) -> dict[str, list[tuple[int, int]]]:
             and len(_PY_SYMBOL_START_RE.findall(text)) > _PY_SYMBOL_SCAN_CAP
         ):
             raise _TooManySymbols
-        blocks = _python_symbol_blocks(text)
+        blocks = _python_symbol_blocks(text, strict_decorators=True)
     elif suffix in {".js", ".ts", ".jsx", ".tsx"}:
         if _js_symbol_count(text) > _JS_SYMBOL_SCAN_CAP:
             raise _TooManySymbols
-        blocks = _js_symbol_blocks(text)
+        blocks = _js_symbol_blocks(text, strict_decorators=True)
     else:
         return {}
     total = len(text.splitlines())

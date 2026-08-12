@@ -982,4 +982,44 @@ def test_overlong_decorator_is_reported_not_silently_accepted(tmp_path: Path) ->
     assert len(problems) == 1
     assert "건너뜁니다" in problems[0]
 
+
+def test_auto_does_not_crash_on_an_overlong_decorator(tmp_path: Path) -> None:
+    """검사는 "모른다" 고 말해야 하지만 생성기는 멈추면 안 된다.
+
+    `vib anchor --auto` 가 긴 데코레이터 하나로 죽으면 그 프로젝트는 앵커를
+    아예 못 단다. 한도 초과 신호를 검사와 생성기가 다르게 받아야 한다.
+    """
+    decorator = "@Authorized({\n" + "".join(f"  k{i}: {i},\n" for i in range(60)) + "})\n"
+    path = _write(
+        tmp_path,
+        "long.ts",
+        decorator + "export class Service {\n  run() { return 1; }\n}\n",
+    )
+
+    # 죽지 않는다. 그리고 앵커를 달지도 않는다 — 경계를 확신할 수 없으면
+    # 손대지 않는다. 데코레이터가 없는 셈 치고 START 를 그 아래 박으면
+    # 검사가 잡으려던 바로 그 보호 구멍을 생성기가 만든다.
+    _ = anchor_tools.insert_js_symbol_anchors(path)
+    assert "LONG_SERVICE" not in set(extract_anchors(path))
+
+
+def test_scan_work_is_bounded_not_just_symbol_count(tmp_path: Path) -> None:
+    """심볼 수 상한만으로는 부족하다.
+
+    상한 이하라도 본문이 크면 심볼마다 파일 끝까지 훑어 이차식이 된다.
+    실제로 훑은 줄 수를 세어 묶어야 악성 파일 하나로 CI 를 멈춰 세울 수 없다.
+    """
+    depth = 150
+    body = "".join(
+        f"{'  ' * i}function f{i}() {{\n" + f"{'  ' * (i + 1)}const x{i} = 1;\n" * 200
+        for i in range(depth)
+    )
+    body += "".join(f"{'  ' * (depth - 1 - i)}}}\n" for i in range(depth))
+    path = _write(tmp_path, "heavy.ts", body)
+
+    problems = find_misplaced_anchors(path)
+
+    assert len(problems) == 1
+    assert "건너뜁니다" in problems[0]
+
 # === ANCHOR: TEST_ANCHOR_SYMBOL_ZONE_MATCH_END ===
