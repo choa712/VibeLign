@@ -280,12 +280,12 @@ def normalize_ignored_names(names: Iterable[str]) -> frozenset[str]:
 def has_ignored_part(
     parts: tuple[str, ...],
     ignored: Iterable[str] = SCAN_IGNORED_DIRS_LOWER,
-    # === ANCHOR: STRUCTURE_POLICY_HAS_IGNORED_PART_END ===
 ) -> bool:
     ignored_lower = (
         ignored if isinstance(ignored, frozenset) else normalize_ignored_names(ignored)
     )
     return any(part.lower() in ignored_lower for part in parts)
+# === ANCHOR: STRUCTURE_POLICY_HAS_IGNORED_PART_END ===
 
 
 # === ANCHOR: STRUCTURE_POLICY_IS_SOURCE_FILE_START ===

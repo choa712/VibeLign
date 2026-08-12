@@ -154,9 +154,9 @@ export function flattenVisibleTree(root: CodeTreeNode, expandedPaths: ReadonlySe
   }
   // === ANCHOR: TREE_VISIT_END ===
   visit(root, 0);
-// === ANCHOR: TREE_FLATTENVISIBLETREE_END ===
   return result;
 }
+// === ANCHOR: TREE_FLATTENVISIBLETREE_END ===
 
 // === ANCHOR: TREE_COLLECTDIRECTORYPATHS_START ===
 export function collectDirectoryPaths(root: CodeTreeNode): Set<string> {
@@ -172,9 +172,9 @@ export function collectDirectoryPaths(root: CodeTreeNode): Set<string> {
   }
   // === ANCHOR: TREE_VISIT_END ===
   visit(root);
-// === ANCHOR: TREE_COLLECTDIRECTORYPATHS_END ===
   return paths;
 }
+// === ANCHOR: TREE_COLLECTDIRECTORYPATHS_END ===
 
 // === ANCHOR: TREE_COMPARENODES_START ===
 function compareNodes(left: CodeTreeNode, right: CodeTreeNode): number {

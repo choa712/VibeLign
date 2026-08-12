@@ -67,8 +67,8 @@ FUNCTION_PATTERNS = [
 IssueDict = dict[str, object]
 
 
-@dataclass
 # === ANCHOR: RISK_ANALYZER_RISKREPORT_START ===
+@dataclass
 class RiskReport:
     level: str = "GOOD"
     score: int = 0

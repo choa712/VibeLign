@@ -254,13 +254,13 @@ def _build_file_header(rel_path: str, content: str, line_count: int) -> str:
     )
     suffix = Path(rel_path).suffix.lstrip(".") or "text"
     return f"""\
-# === ANCHOR: ASK_CMD__BUILD_FILE_HEADER_END ===
 파일명: {rel_path}
 줄 수: {line_count}줄{truncate_note}
 내용:
 ```{suffix}
 {display_content}
 ```"""
+# === ANCHOR: ASK_CMD__BUILD_FILE_HEADER_END ===
 
 
 # === ANCHOR: ASK_CMD__BUILD_FOCUSED_PROMPT_START ===
@@ -269,7 +269,6 @@ def _build_focused_prompt(
     content: str,
     line_count: int,
     selected: list[int],
-    # === ANCHOR: ASK_CMD__BUILD_FOCUSED_PROMPT_END ===
 ) -> str:
     header = _build_file_header(rel_path, content, line_count)
     section_format = _build_response_format(selected)
@@ -286,6 +285,7 @@ def _build_focused_prompt(
 
 {section_format}
 """
+# === ANCHOR: ASK_CMD__BUILD_FOCUSED_PROMPT_END ===
 
 
 # === ANCHOR: ASK_CMD__BUILD_PROMPT_START ===
@@ -294,7 +294,6 @@ def _build_prompt(
     content: str,
     line_count: int,
     question: str | None,
-    # === ANCHOR: ASK_CMD__BUILD_PROMPT_END ===
 ) -> str:
     header = _build_file_header(rel_path, content, line_count)
     specific_q = f"\n특히 이 부분이 궁금합니다: {question}\n" if question else ""
@@ -312,6 +311,7 @@ def _build_prompt(
 
 {section_format}
 """
+# === ANCHOR: ASK_CMD__BUILD_PROMPT_END ===
 
 
 # === ANCHOR: ASK_CMD__CALL_OPENAI_COMPATIBLE_START ===
@@ -320,7 +320,6 @@ def _call_openai_compatible(
     base_url: str,
     model: str,
     prompt: str,
-    # === ANCHOR: ASK_CMD__CALL_OPENAI_COMPATIBLE_END ===
 ) -> bool:
     """OpenAI 호환 API 공통 호출 (OpenAI / GLM / Kimi)"""
     data: OpenAICompatibleRequest = {
@@ -348,6 +347,7 @@ def _call_openai_compatible(
             raise RuntimeError("OpenAI 호환 응답에서 내용을 찾지 못했습니다.")
         print_ai_response(text)
     return True
+# === ANCHOR: ASK_CMD__CALL_OPENAI_COMPATIBLE_END ===
 
 
 # === ANCHOR: ASK_CMD__TRY_ANTHROPIC_START ===

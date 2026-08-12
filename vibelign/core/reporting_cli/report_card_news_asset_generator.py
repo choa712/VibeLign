@@ -40,8 +40,8 @@ class CardNewsAssetError(ValueError):
 # === ANCHOR: REPORT_CARD_NEWS_ASSET_GENERATOR_CARDNEWSASSETERROR_END ===
 
 
-@dataclass(frozen=True, slots=True)
 # === ANCHOR: REPORT_CARD_NEWS_ASSET_GENERATOR__ASSETRENDERCONTEXT_START ===
+@dataclass(frozen=True, slots=True)
 class _AssetRenderContext:
     root: Path
     slug: str
@@ -57,7 +57,6 @@ def materialize_card_news_assets(
     cards: list[VisualCardDict],
     runner: cli_adapters.PlanningCliRunner | None = None,
     timeout_seconds: int = _ASSET_TIMEOUT_SECONDS,
-# === ANCHOR: REPORT_CARD_NEWS_ASSET_GENERATOR_MATERIALIZE_CARD_NEWS_ASSETS_END ===
 ) -> list[VisualCardDict]:
     context = _AssetRenderContext(root=root, slug=slug, runner=runner, timeout_seconds=timeout_seconds)
     asset_dir = _safe_asset_dir(root, slug)
@@ -72,6 +71,7 @@ def materialize_card_news_assets(
             for index, card in enumerate(cards, 1)
         ]
         return [future.result() for future in futures]
+# === ANCHOR: REPORT_CARD_NEWS_ASSET_GENERATOR_MATERIALIZE_CARD_NEWS_ASSETS_END ===
 
 
 def _materialize_card_asset(

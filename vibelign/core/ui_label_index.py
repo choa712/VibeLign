@@ -34,7 +34,6 @@ def _record(
     label: str,
     rel: str,
     line_no: int,
-# === ANCHOR: UI_LABEL_INDEX__RECORD_END ===
 ) -> None:
     key = label.strip()
     if len(key) < 3:
@@ -46,6 +45,7 @@ def _record(
     if any(e["path"] == rel and e["line"] == line_no for e in bucket):
         return
     bucket.append(entry)
+# === ANCHOR: UI_LABEL_INDEX__RECORD_END ===
 
 
 # === ANCHOR: UI_LABEL_INDEX_BUILD_UI_LABEL_INDEX_START ===
@@ -132,7 +132,6 @@ def score_boost_for_ui_labels(
     request_tokens: list[str],
     index: dict[str, list[dict[str, int | str]]],
     path_tokens: set[str] | None = None,
-# === ANCHOR: UI_LABEL_INDEX_SCORE_BOOST_FOR_UI_LABELS_END ===
 ) -> tuple[int, list[str]]:
     """요청 토큰이 인덱스 라벨과 일치하고 해당 파일이 후보일 때 점수 가산.
 
@@ -171,4 +170,5 @@ def score_boost_for_ui_labels(
                     )
                     return boost, reasons[:2]
     return 0, []
+# === ANCHOR: UI_LABEL_INDEX_SCORE_BOOST_FOR_UI_LABELS_END ===
 # === ANCHOR: UI_LABEL_INDEX_END ===

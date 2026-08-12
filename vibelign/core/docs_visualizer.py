@@ -107,7 +107,6 @@ read_document_text = _DOCS_CACHE.read_document_text
 # === ANCHOR: DOCS_VISUALIZER_BUILD_ARTIFACT_SHELL_START ===
 def build_artifact_shell(
     source_path: Path, *, title: str, summary: str = ""
-# === ANCHOR: DOCS_VISUALIZER_BUILD_ARTIFACT_SHELL_END ===
 ) -> DocsVisualArtifact:
     resolved = source_path.resolve()
     return DocsVisualArtifact(
@@ -119,6 +118,7 @@ def build_artifact_shell(
         title=title,
         summary=summary,
     )
+# === ANCHOR: DOCS_VISUALIZER_BUILD_ARTIFACT_SHELL_END ===
 
 
 # === ANCHOR: DOCS_VISUALIZER__DERIVE_TITLE_START ===
@@ -164,7 +164,6 @@ def _truncate_with_warning(
     limit: int,
     warnings: list[str],
     label: str,
-# === ANCHOR: DOCS_VISUALIZER__TRUNCATE_WITH_WARNING_END ===
 ) -> list[TItem]:
     if len(items) <= limit:
         return items
@@ -172,6 +171,7 @@ def _truncate_with_warning(
         f"enhancement_partial_disabled: {label}가 {len(items)}개여서 상위 {limit}개만 유지했습니다."
     )
     return items[:limit]
+# === ANCHOR: DOCS_VISUALIZER__TRUNCATE_WITH_WARNING_END ===
 
 
 # === ANCHOR: DOCS_VISUALIZER_VISUALIZE_MARKDOWN_BYTES_START ===

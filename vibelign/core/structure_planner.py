@@ -13,17 +13,17 @@ _MAX_INLINE_EDIT_LINES = 20
 _NEW_FILE_LINE_THRESHOLD = 150
 
 
-@dataclass(frozen=True)
 # === ANCHOR: STRUCTURE_PLANNER_PLANNERRULE_START ===
+@dataclass(frozen=True)
 class PlannerRule:
     tokens: tuple[str, ...]
     target_category: str
     default_filename: str
     path_signals: tuple[str, ...]
     preferred_existing_names: tuple[str, ...] = ()
-
-
 # === ANCHOR: STRUCTURE_PLANNER_PLANNERRULE_END ===
+
+
 
 
 _CATEGORY_PATHS: dict[str, str] = {
@@ -228,7 +228,6 @@ def _match_rule(keywords: list[str]) -> tuple[PlannerRule, list[str]]:
 def _iter_candidate_files(
     files: dict[str, dict[str, object]],
     scope: str | None,
-    # === ANCHOR: STRUCTURE_PLANNER__ITER_CANDIDATE_FILES_END ===
 ) -> list[tuple[str, dict[str, object]]]:
     normalized_scope = (scope or "").strip().replace("\\", "/")
     candidates: list[tuple[str, dict[str, object]]] = []
@@ -237,6 +236,7 @@ def _iter_candidate_files(
             continue
         candidates.append((path, data))
     return candidates
+# === ANCHOR: STRUCTURE_PLANNER__ITER_CANDIDATE_FILES_END ===
 
 
 # === ANCHOR: STRUCTURE_PLANNER__PATH_MATCH_SIGNALS_START ===
@@ -260,12 +260,12 @@ def _candidate_has_anchors(
     path: str,
     data: dict[str, object],
     anchor_index: dict[str, list[str]],
-    # === ANCHOR: STRUCTURE_PLANNER__CANDIDATE_HAS_ANCHORS_END ===
 ) -> bool:
     anchors_obj = data.get("anchors")
     if isinstance(anchors_obj, list) and anchors_obj:
         return True
     return bool(anchor_index.get(path, []))
+# === ANCHOR: STRUCTURE_PLANNER__CANDIDATE_HAS_ANCHORS_END ===
 
 
 # === ANCHOR: STRUCTURE_PLANNER__CHOOSE_EXISTING_FILE_START ===
@@ -274,7 +274,6 @@ def _choose_existing_file(
     keywords: list[str],
     rule: PlannerRule,
     anchor_index: dict[str, list[str]],
-    # === ANCHOR: STRUCTURE_PLANNER__CHOOSE_EXISTING_FILE_END ===
 ) -> tuple[str | None, dict[str, object] | None, list[str]]:
     scored: list[tuple[int, str, dict[str, object]]] = []
     for path, data in candidates:
@@ -309,6 +308,7 @@ def _choose_existing_file(
     narrowed_candidates = [path for _, path, _ in scored[:10]]
     _, path, data = scored[0]
     return path, data, narrowed_candidates
+# === ANCHOR: STRUCTURE_PLANNER__CHOOSE_EXISTING_FILE_END ===
 
 
 # === ANCHOR: STRUCTURE_PLANNER__LOAD_ANCHORS_START ===
@@ -316,13 +316,13 @@ def _load_anchors(
     existing_path: str,
     existing_data: dict[str, object],
     anchor_index: dict[str, list[str]],
-    # === ANCHOR: STRUCTURE_PLANNER__LOAD_ANCHORS_END ===
 ) -> list[str]:
     anchors_obj = existing_data.get("anchors", [])
     if isinstance(anchors_obj, list) and anchors_obj:
         return [str(item) for item in cast(list[object], anchors_obj)]
     indexed = anchor_index.get(existing_path, [])
     return [str(item) for item in indexed]
+# === ANCHOR: STRUCTURE_PLANNER__LOAD_ANCHORS_END ===
 
 
 # === ANCHOR: STRUCTURE_PLANNER__PICK_ANCHOR_START ===
@@ -332,7 +332,6 @@ def _pick_anchor(
     keywords: list[str],
     rule: PlannerRule,
     matched_path_signals: list[str],
-    # === ANCHOR: STRUCTURE_PLANNER__PICK_ANCHOR_END ===
 ) -> tuple[str | None, str | None]:
     lowered_keywords = [keyword.lower() for keyword in keywords if keyword]
     for anchor in anchors:
@@ -343,6 +342,7 @@ def _pick_anchor(
     if anchors and (preferred_name_match or len(matched_path_signals) >= 2):
         return anchors[0], "strong_path_signal_fallback"
     return None, None
+# === ANCHOR: STRUCTURE_PLANNER__PICK_ANCHOR_END ===
 
 
 # === ANCHOR: STRUCTURE_PLANNER_BUILD_STRUCTURE_PLAN_START ===
@@ -352,7 +352,6 @@ def build_structure_plan(
     *,
     mode: str = "rules",
     scope: str | None = None,
-    # === ANCHOR: STRUCTURE_PLANNER_BUILD_STRUCTURE_PLAN_END ===
 ) -> dict[str, object]:
     keywords = _extract_keywords(feature)
     rule, matched_keywords = _match_rule(keywords)
@@ -489,6 +488,7 @@ def build_structure_plan(
             "warnings": planner_warnings,
         },
     }
+# === ANCHOR: STRUCTURE_PLANNER_BUILD_STRUCTURE_PLAN_END ===
 
 
 # === ANCHOR: STRUCTURE_PLANNER_END ===

@@ -329,7 +329,6 @@ def save_work_memory(path: Path, state: WorkMemoryState) -> None:
 # === ANCHOR: WORK_MEMORY__APPEND_RELEVANT_FILE_START ===
 def _append_relevant_file(
     entries: list[RelevantFileEntry], path: str, why: str, source: str = "watch",
-# === ANCHOR: WORK_MEMORY__APPEND_RELEVANT_FILE_END ===
 ) -> list[RelevantFileEntry]:
     rel_path = _safe_relative_path(path)
     rel_why = _truncate_text(why)
@@ -345,6 +344,7 @@ def _append_relevant_file(
         }
     )
     return _prune_relevant_files(updated)
+# === ANCHOR: WORK_MEMORY__APPEND_RELEVANT_FILE_END ===
 
 
 # === ANCHOR: WORK_MEMORY_ADD_RELEVANT_FILE_START ===
@@ -374,7 +374,6 @@ def record_event(
     message: str,
     action: str = "",
     relevant_reason: str = "",
-# === ANCHOR: WORK_MEMORY_RECORD_EVENT_END ===
 ) -> None:
     safe_rel_path = _safe_relative_path(rel_path)
     if not safe_rel_path:
@@ -399,6 +398,7 @@ def record_event(
     except Exception as exc:
         _warn_work_memory_failure("record_event", path, exc)
         return
+# === ANCHOR: WORK_MEMORY_RECORD_EVENT_END ===
 
 
 # === ANCHOR: WORK_MEMORY_RECORD_WARNING_START ===
@@ -408,7 +408,6 @@ def record_warning(
     rel_path: str,
     message: str,
     action: str = "",
-# === ANCHOR: WORK_MEMORY_RECORD_WARNING_END ===
 ) -> None:
     safe_rel_path = _safe_relative_path(rel_path)
     if not safe_rel_path:
@@ -434,6 +433,7 @@ def record_warning(
     except Exception as exc:
         _warn_work_memory_failure("record_warning", path, exc)
         return
+# === ANCHOR: WORK_MEMORY_RECORD_WARNING_END ===
 
 
 # === ANCHOR: WORK_MEMORY_RECORD_COMMIT_START ===

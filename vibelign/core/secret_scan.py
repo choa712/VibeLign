@@ -232,7 +232,6 @@ def _scan_unified_diff_routed(
 # === ANCHOR: SECRET_SCAN_SCAN_UNIFIED_DIFF_FOR_SECRETS_START ===
 def scan_unified_diff_for_secrets(
     diff_text: str, path_hint: str
-# === ANCHOR: SECRET_SCAN_SCAN_UNIFIED_DIFF_FOR_SECRETS_END ===
 ) -> list[SecretFinding]:
     findings: list[SecretFinding] = []
     current_line_number: int | None = None
@@ -289,6 +288,7 @@ def scan_unified_diff_for_secrets(
         )
 
     return findings
+# === ANCHOR: SECRET_SCAN_SCAN_UNIFIED_DIFF_FOR_SECRETS_END ===
 
 
 # === ANCHOR: SECRET_SCAN_SCAN_STAGED_SECRETS_START ===

@@ -108,6 +108,27 @@ def _validate_anchor_file(path: Path) -> Iterable[str]:
     return cast(Iterable[str], anchor_tools_mod.validate_anchor_file(path))
 
 
+_MISPLACED_SHOWN = 10
+
+
+def _print_misplaced_warnings(warnings: list[str], *, strict: bool = False) -> None:
+    """오배치 경고를 출력한다. 종료 코드는 호출자가 정한다(--strict).
+
+    전부 쏟아내면(이 리포만 102건) 정작 차단 사유가 묻힌다. 앞의 몇 건만
+    보여주고 나머지는 수로 알린 뒤 고치는 방법을 가리킨다.
+    """
+    if not warnings:
+        return
+    print("")
+    tail = "실패로 처리합니다" if strict else "경고 — 차단하지 않습니다"
+    print(f"⚠️  심볼을 다 덮지 못하는 앵커 {len(warnings)}건 ({tail}):")
+    for item in warnings[:_MISPLACED_SHOWN]:
+        print(f"- {item}")
+    if len(warnings) > _MISPLACED_SHOWN:
+        print(f"  ... 외 {len(warnings) - _MISPLACED_SHOWN}건")
+    print("  vib anchor --repair --dry-run 으로 고칠 수 있는 파일을 확인하세요.")
+
+
 def _unindexed_source_files(
     root: Path, index: dict[str, object], allowed_exts: set[str] | None
 ) -> list[tuple[Path, str]]:
@@ -129,7 +150,7 @@ def _unindexed_source_files(
 def _run_crossing_repair(
     root: Path, allowed_exts: set[str] | None, *, dry_run: bool, json_mode: bool
 ) -> None:
-    """교차 앵커가 있는 파일의 마커를 다시 놓는다.
+    """잘못 놓인 마커를 다시 놓는다 — 교차와 단독 오배치 양쪽.
 
     마커 위치를 옮기는 것은 코드 변경이므로 무엇이 바뀌는지 먼저 보여준다.
     되살릴 수 없는 이름이 사라지는 파일은 건너뛰고 이유를 밝힌다 — 사람이
@@ -169,7 +190,7 @@ def _run_crossing_repair(
         for item in repaired:
             print(f"- {item['path']}")
     else:
-        print("교차 앵커가 있는 파일이 없거나, 자동으로 고칠 수 있는 파일이 없습니다.")
+        print("잘못 놓인 마커가 없거나, 자동으로 고칠 수 있는 파일이 없습니다.")
     if skipped:
         print("")
         print(f"건너뛴 파일 {len(skipped)}개 (사람이 판단해야 합니다):")
@@ -524,10 +545,16 @@ def run_vib_anchor(args: object) -> None:
     if validate:
         index = _write_anchor_index(root, meta, allowed_exts)
         problems: list[str] = []
+        # 오배치는 경고다 — problems 에 섞지 않는다. 차단으로 올리면 --auto 를
+        # 한 번이라도 돌린 프로젝트가 전부 깨진다. 교차 때와 같은 순서를 지킨다:
+        # 원인(생성기)을 먼저 고치고, 리포가 0이 된 뒤에 승격한다 (issue #11).
+        warnings: list[str] = []
         for rel in sorted(index):
             path = root / rel
             for problem in _validate_anchor_file(path):
                 problems.append(f"{rel}: {problem}")
+            for warning in anchor_tools_mod.find_misplaced_anchors(path):
+                warnings.append(f"{rel}: {warning}")
         # 인덱스는 "정본 앵커가 있는 파일"만 담는다. 인덱스만 돌면 구 형식·훼손
         # 마커만 가진 파일은 아예 순회되지 않아, 보호가 0인 프로젝트가 조용히
         # validation passed 를 받는다. 앵커가 없는 파일도 훑되 "앵커가 없습니다"
@@ -536,14 +563,21 @@ def run_vib_anchor(args: object) -> None:
         for path, rel in _unindexed_source_files(root, index, allowed_exts):
             for problem in _marker_format_problems(path):
                 problems.append(f"{rel}: {problem}")
+        # --strict 는 경고를 실패로 올린다. 기본값이 경고인 이유는 `--auto` 를
+        # 한 번이라도 돌린 기존 프로젝트가 전부 깨지기 때문이고(issue #11),
+        # 자동화가 보호 구역을 강제하고 싶을 때 쓸 문은 열어둔다.
+        strict = bool(getattr(args, "strict", False))
+        failed = bool(problems) or (strict and bool(warnings))
         if json_mode:
             print(
                 json.dumps(
                     {
-                        "ok": not problems,
+                        "ok": not failed,
                         "error": None,
                         "data": {
                             "problems": problems,
+                            "warnings": warnings,
+                            "strict": strict,
                             "anchor_index": index,
                         },
                     },
@@ -551,16 +585,19 @@ def run_vib_anchor(args: object) -> None:
                     ensure_ascii=False,
                 )
             )
-            if problems:
+            if failed:
                 raise SystemExit(1)
             return
         if problems:
             print("Anchor validation problems:")
             for item in problems:
                 print(f"- {item}")
+        else:
+            print("Anchor validation passed.")
+            print(f"Anchor index saved: {meta.anchor_index_path.relative_to(root)}")
+        _print_misplaced_warnings(warnings, strict=strict)
+        if failed:
             raise SystemExit(1)
-        print("Anchor validation passed.")
-        print(f"Anchor index saved: {meta.anchor_index_path.relative_to(root)}")
         return
 
     recommendations = (

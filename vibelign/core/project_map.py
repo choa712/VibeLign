@@ -12,8 +12,8 @@ from vibelign.core.meta_paths import MetaPaths
 SUPPORTED_PROJECT_MAP_SCHEMA = 3
 
 
-@dataclass(frozen=True)
 # === ANCHOR: PROJECT_MAP_PROJECTMAPSNAPSHOT_START ===
+@dataclass(frozen=True)
 class ProjectMapSnapshot:
     schema_version: int
     project_name: str

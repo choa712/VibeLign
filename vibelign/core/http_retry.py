@@ -116,11 +116,11 @@ def _compute_backoff_wait(
     base_delay: float,
     max_delay: float,
     jitter_ratio: float = 0.12,
-    # === ANCHOR: HTTP_RETRY__COMPUTE_BACKOFF_WAIT_END ===
 ) -> float:
     raw = min(max_delay, base_delay * (2**attempt))
     jitter = 1.0 + random.uniform(-jitter_ratio, jitter_ratio)
     return max(0.25, min(max_delay, raw * jitter))
+# === ANCHOR: HTTP_RETRY__COMPUTE_BACKOFF_WAIT_END ===
 
 
 # === ANCHOR: HTTP_RETRY_URLOPEN_READ_WITH_RETRY_START ===
@@ -131,7 +131,6 @@ def urlopen_read_with_retry(
     max_attempts: int | None = None,
     base_delay: float | None = None,
     max_delay: float | None = None,
-    # === ANCHOR: HTTP_RETRY_URLOPEN_READ_WITH_RETRY_END ===
 ) -> bytes:
     """`urllib.request.urlopen` 후 본문을 읽어 반환. 429·502·503·504에 지수 백오프로 재시도."""
     attempts = max_attempts or _env_int("GEMINI_HTTP_MAX_ATTEMPTS", 6)
@@ -181,6 +180,7 @@ def urlopen_read_with_retry(
     raise RuntimeError(
         "urlopen_read_with_retry: exhausted without result"
     ) from last_exc
+# === ANCHOR: HTTP_RETRY_URLOPEN_READ_WITH_RETRY_END ===
 
 
 # === ANCHOR: HTTP_RETRY_END ===

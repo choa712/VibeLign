@@ -30,8 +30,8 @@ class ExplainLike(Protocol):
 # === ANCHOR: GUARD_REPORT_EXPLAINLIKE_END ===
 
 
-@dataclass
 # === ANCHOR: GUARD_REPORT_GUARDREPORT_START ===
+@dataclass
 class GuardReport:
     overall_level: str
     doctor_level: str

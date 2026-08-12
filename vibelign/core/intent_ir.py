@@ -2,8 +2,8 @@
 from dataclasses import dataclass, field, asdict
 
 
-@dataclass
 # === ANCHOR: INTENT_IR_INTENTIR_START ===
+@dataclass
 class IntentIR:
     raw_request: str
     operation: str
@@ -28,9 +28,9 @@ class IntentIR:
         }
     # === ANCHOR: INTENT_IR_TO_PATCH_POINTS_END ===
 
-# === ANCHOR: INTENT_IR_INTENTIR_END ===
     # === ANCHOR: INTENT_IR_TO_DICT_START ===
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
     # === ANCHOR: INTENT_IR_TO_DICT_END ===
+# === ANCHOR: INTENT_IR_INTENTIR_END ===
 # === ANCHOR: INTENT_IR_END ===

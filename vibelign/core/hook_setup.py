@@ -17,8 +17,8 @@ _CLAUDE_SETTINGS = ".claude/settings.json"
 _PRETOOLUSE_MARKER = "vibelign-claude-pretooluse-v1"
 
 
-@dataclass(frozen=True)
 # === ANCHOR: HOOK_SETUP_CLAUDEHOOKRESULT_START ===
+@dataclass(frozen=True)
 class ClaudeHookResult:
     status: str
     path: Path | None

@@ -100,7 +100,7 @@ def render_pptx(
             _size_text(slide.placeholders[1], font_sizes.body if font_sizes is not None else None)
             _font_text(slide.placeholders[1], body_name)
     buf = io.BytesIO()
-# === ANCHOR: PPTX_RENDERER_RENDER_PPTX_END ===
     prs.save(buf)
     return buf.getvalue()
+# === ANCHOR: PPTX_RENDERER_RENDER_PPTX_END ===
 # === ANCHOR: PPTX_RENDERER_END ===

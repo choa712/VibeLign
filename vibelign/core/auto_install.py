@@ -100,7 +100,6 @@ def _try_install_homebrew(
     clack_info: PrintFn,
     clack_warn: PrintFn,
     clack_success: PrintFn,
-    # === ANCHOR: AUTO_INSTALL__TRY_INSTALL_HOMEBREW_END ===
 ) -> bool:
     """Mac에 Homebrew가 없을 때 설치를 제안. 성공 여부 반환."""
     clack_warn("Homebrew(Mac 패키지 관리자)가 설치되어 있지 않아요.")
@@ -128,6 +127,7 @@ def _try_install_homebrew(
         "Homebrew 설치에 실패했어요. https://brew.sh 를 직접 방문해서 설치하세요."
     )
     return False
+# === ANCHOR: AUTO_INSTALL__TRY_INSTALL_HOMEBREW_END ===
 
 
 # === ANCHOR: AUTO_INSTALL_TRY_INSTALL_FAST_TOOLS_START ===
@@ -136,7 +136,6 @@ def try_install_fast_tools(
     clack_info: PrintFn,
     clack_warn: PrintFn,
     clack_success: PrintFn,
-    # === ANCHOR: AUTO_INSTALL_TRY_INSTALL_FAST_TOOLS_END ===
 ) -> None:
     """fd/ripgrep이 없을 때 y/N 프롬프트로 설치를 제안."""
     if not missing_tools:
@@ -175,6 +174,7 @@ def try_install_fast_tools(
         clack_success(f"{tool_names} 설치 완료!")
     else:
         clack_warn(f"설치에 실패했어요. 터미널에서 직접 실행해 보세요: {cmd_str}")
+# === ANCHOR: AUTO_INSTALL_TRY_INSTALL_FAST_TOOLS_END ===
 
 
 # === ANCHOR: AUTO_INSTALL_ENSURE_PYPROJECT_START ===
@@ -233,7 +233,6 @@ def try_install_watchdog(
     clack_info: PrintFn,
     clack_warn: PrintFn,
     clack_success: PrintFn,
-    # === ANCHOR: AUTO_INSTALL_TRY_INSTALL_WATCHDOG_END ===
 ) -> None:
     """watchdog이 없을 때 y/N 프롬프트로 설치를 제안."""
     try:
@@ -264,6 +263,7 @@ def try_install_watchdog(
         clack_success("watchdog 설치 완료!")
     else:
         clack_warn("설치에 실패했어요. `pip install watchdog`을 직접 실행하세요.")
+# === ANCHOR: AUTO_INSTALL_TRY_INSTALL_WATCHDOG_END ===
 
 
 # === ANCHOR: AUTO_INSTALL_END ===

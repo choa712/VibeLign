@@ -217,7 +217,6 @@ def _generate_anchor_prompt(
     scenario: BenchmarkScenario,
     root: Path,
     _project_files: list[str],
-    # === ANCHOR: VIB_BENCH_CMD__GENERATE_ANCHOR_PROMPT_END ===
 ) -> str:
     """B조건: 앵커+코드맵 포함 handoff prompt 생성."""
     from vibelign.core.anchor_tools import collect_anchor_index
@@ -293,6 +292,7 @@ def _generate_anchor_prompt(
         ]
     )
     return "\n".join(lines)
+# === ANCHOR: VIB_BENCH_CMD__GENERATE_ANCHOR_PROMPT_END ===
 
 
 # === ANCHOR: VIB_BENCH_CMD__RUN_GENERATE_START ===
@@ -489,9 +489,9 @@ def _run_report(scores: BenchScores) -> str:
             diff = b_avg - a_avg
             sign = "+" if diff >= 0 else ""
             lines.append(f"| {label} | {a_avg:.0%} | {b_avg:.0%} | {sign}{diff:.0%} |")
-    # === ANCHOR: VIB_BENCH_CMD__RUN_REPORT_END ===
 
     return "\n".join(lines)
+# === ANCHOR: VIB_BENCH_CMD__RUN_REPORT_END ===
 
 
 # === ANCHOR: VIB_BENCH_CMD_RUN_VIB_BENCH_START ===

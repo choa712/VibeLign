@@ -32,8 +32,8 @@ class CardNewsExportError(ValueError):
 # === ANCHOR: REPORT_CARD_NEWS_EXPORT_CARDNEWSEXPORTERROR_END ===
 
 
-@dataclass(frozen=True, slots=True)
 # === ANCHOR: REPORT_CARD_NEWS_EXPORT_CARDNEWSEXPORT_START ===
+@dataclass(frozen=True, slots=True)
 class CardNewsExport:
     json_path: Path
     html_path: Path
@@ -143,10 +143,10 @@ def _write_prompt_pack(
     slug: str,
     payload: VisualCardsDict,
     approved: list[VisualCardDict],
-# === ANCHOR: REPORT_CARD_NEWS_EXPORT__WRITE_PROMPT_PACK_END ===
 ) -> CardNewsPromptPack:
     prompt_dir = _safe_prompt_dir(root, slug)
     return write_card_news_prompt_pack(prompt_dir, payload, approved)
+# === ANCHOR: REPORT_CARD_NEWS_EXPORT__WRITE_PROMPT_PACK_END ===
 
 
 # === ANCHOR: REPORT_CARD_NEWS_EXPORT__CARD_NEWS_SLUG_START ===

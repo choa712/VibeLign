@@ -91,7 +91,7 @@ export function GuardResultModal({ guardResult, onClose, onOpenDoctor }: GuardRe
         </div>
       </div>
     </div>
-// === ANCHOR: GUARDRESULTMODAL_GUARDRESULTMODAL_END ===
   );
 }
+// === ANCHOR: GUARDRESULTMODAL_GUARDRESULTMODAL_END ===
 // === ANCHOR: GUARDRESULTMODAL_END ===

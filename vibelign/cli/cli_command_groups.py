@@ -46,7 +46,6 @@ def register_extended_commands(
     sub: SubparserFactory,
     lazy_command: Callable[[str, str], Callable[[object], None]],
     run_vib_guard: Callable[[object], None],
-    # === ANCHOR: CLI_COMMAND_GROUPS_REGISTER_EXTENDED_COMMANDS_END ===
 ) -> None:
     p = sub.add_parser(
         "protect",
@@ -207,7 +206,12 @@ def register_extended_commands(
     _ = p.add_argument(
         "--repair",
         action="store_true",
-        help="교차 앵커가 있는 파일의 마커를 올바른 위치로 다시 놓기 (--dry-run 권장)",
+        help="잘못 놓인 마커를 올바른 위치로 다시 놓기 — 교차와 단독 오배치 양쪽 (--dry-run 권장)",
+    )
+    _ = p.add_argument(
+        "--strict",
+        action="store_true",
+        help="--validate 에서 '심볼을 다 덮지 못하는 앵커' 경고도 실패로 처리 (CI 용)",
     )
     _ = p.add_argument(
         "--dry-run", action="store_true", help="실제로 바꾸지 않고 미리 보기"
@@ -627,6 +631,7 @@ def register_extended_commands(
 
     register_report_command_group(sub, lazy_command)
     register_workflow_command_group(sub, lazy_command)
+# === ANCHOR: CLI_COMMAND_GROUPS_REGISTER_EXTENDED_COMMANDS_END ===
 
 
 # === ANCHOR: CLI_COMMAND_GROUPS_END ===

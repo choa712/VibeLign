@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from typing import Final
 
 
-@dataclass(frozen=True, slots=True)
 # === ANCHOR: PERSONAS_PLANNINGPERSONA_START ===
+@dataclass(frozen=True, slots=True)
 class PlanningPersona:
     id: str
     name: str

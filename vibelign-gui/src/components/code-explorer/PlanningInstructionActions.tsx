@@ -169,9 +169,9 @@ export function PlanningInstructionActions({ prompt, outputPath, contract = null
             {previewInstruction}
           </pre>
         </div>
-// === ANCHOR: PLANNINGINSTRUCTIONACTIONS_PLANNINGINSTRUCTIONACTIONS_END ===
       )}
     </>
   );
 }
+// === ANCHOR: PLANNINGINSTRUCTIONACTIONS_PLANNINGINSTRUCTIONACTIONS_END ===
 // === ANCHOR: PLANNINGINSTRUCTIONACTIONS_END ===

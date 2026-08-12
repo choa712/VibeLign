@@ -133,7 +133,6 @@ def generate_completion_script(parser) -> str:
 
     return f'''# VibeLign (vib) 쉘 자동완성
 # 이 스크립트는 vib completion 으로 자동 생성되었습니다.
-# === ANCHOR: CLI_COMPLETION_GENERATE_COMPLETION_SCRIPT_END ===
 
 if [ -n "${{ZSH_VERSION:-}}" ]; then
     autoload -Uz compinit 2>/dev/null
@@ -182,6 +181,7 @@ else
     complete -F _vib_completions vib
 fi
 '''
+# === ANCHOR: CLI_COMPLETION_GENERATE_COMPLETION_SCRIPT_END ===
 
 
 # === ANCHOR: CLI_COMPLETION_GENERATE_POWERSHELL_SCRIPT_START ===
@@ -211,7 +211,6 @@ def generate_powershell_script(parser) -> str:
 
     return f"""# VibeLign (vib) PowerShell 탭 자동완성
 # 이 스크립트는 vib completion --install 로 자동 추가되었습니다.
-# === ANCHOR: CLI_COMPLETION_GENERATE_POWERSHELL_SCRIPT_END ===
 
 Register-ArgumentCompleter -Native -CommandName vib -ScriptBlock {{
     param($wordToComplete, $commandAst, $cursorPosition)
@@ -242,6 +241,7 @@ Register-ArgumentCompleter -Native -CommandName vib -ScriptBlock {{
     }}
 }}
 """
+# === ANCHOR: CLI_COMPLETION_GENERATE_POWERSHELL_SCRIPT_END ===
 
 
 # === ANCHOR: CLI_COMPLETION_RUN_COMPLETION_START ===
@@ -403,7 +403,7 @@ def install_completion_powershell(parser, clack_info, clack_success, clack_warn)
             if str(comp_file) not in profile_text:
                 file.write(f"{source_line}\n")
         clack_success(f"자동완성 설정 완료! ({profile}에 추가)")
-# === ANCHOR: CLI_COMPLETION_INSTALL_COMPLETION_POWERSHELL_END ===
         clack_info("새 PowerShell 창을 열면 vib + 탭키로 명령어가 자동 완성돼요.")
         clack_info(f"지금 바로 쓰려면: . {profile}")
+# === ANCHOR: CLI_COMPLETION_INSTALL_COMPLETION_POWERSHELL_END ===
 # === ANCHOR: CLI_COMPLETION_END ===

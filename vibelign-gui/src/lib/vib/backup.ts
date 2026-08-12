@@ -381,9 +381,9 @@ function cleanRawBackupNote(raw: RawCheckpointEntry): string {
   if (raw.trigger === "post_commit") {
     return note ? `코드 저장 뒤 자동 보관 - ${note}` : "코드 저장 뒤 자동 보관";
   }
-// === ANCHOR: BACKUP_CLEANRAWBACKUPNOTE_END ===
   return note || "메모 없는 저장본";
 }
+// === ANCHOR: BACKUP_CLEANRAWBACKUPNOTE_END ===
 
 // === ANCHOR: BACKUP_NORMALIZEBACKUPENTRY_START ===
 function normalizeBackupEntry(raw: RawCheckpointEntry): BackupEntry {

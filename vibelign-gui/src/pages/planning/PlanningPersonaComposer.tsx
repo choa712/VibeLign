@@ -254,7 +254,7 @@ export function PlanningPersonaComposer({ projectDir, result, sessionId, onResul
         </button>
       </div>
     </section>
-// === ANCHOR: PLANNINGPERSONACOMPOSER_PLANNINGPERSONACOMPOSER_END ===
   );
 }
+// === ANCHOR: PLANNINGPERSONACOMPOSER_PLANNINGPERSONACOMPOSER_END ===
 // === ANCHOR: PLANNINGPERSONACOMPOSER_END ===

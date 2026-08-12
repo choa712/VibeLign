@@ -564,7 +564,6 @@ def _build_guard_envelope(
     root: Path,
     strict: bool,
     since_minutes: int,
-    # === ANCHOR: VIB_GUARD_CMD__BUILD_GUARD_ENVELOPE_END ===
 ) -> GuardEnvelope:
     legacy_doctor = analyze_project(root, strict=strict)
     explain_report_obj = _guard_explain_report(root, since_minutes)
@@ -658,6 +657,7 @@ def _build_guard_envelope(
             r for r in data["recommendations"] if "멈추세요" not in r
         ]
     return {"ok": True, "error": None, "data": data}
+# === ANCHOR: VIB_GUARD_CMD__BUILD_GUARD_ENVELOPE_END ===
 
 
 def build_guard_envelope(root: Path, strict: bool, since_minutes: int) -> GuardEnvelope:

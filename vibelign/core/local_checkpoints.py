@@ -26,8 +26,8 @@ class CheckpointFileSummary:
     size_bytes: int
 
 
-@dataclass
 # === ANCHOR: LOCAL_CHECKPOINTS_CHECKPOINTSUMMARY_START ===
+@dataclass
 class CheckpointSummary:
     checkpoint_id: str
     created_at: str
@@ -40,13 +40,13 @@ class CheckpointSummary:
     trigger: str | None = None
     git_commit_message: str | None = None
     files: list[CheckpointFileSummary] = field(default_factory=list)
-
-
 # === ANCHOR: LOCAL_CHECKPOINTS_CHECKPOINTSUMMARY_END ===
 
 
-@dataclass
+
+
 # === ANCHOR: LOCAL_CHECKPOINTS_RETENTIONPOLICY_START ===
+@dataclass
 class RetentionPolicy:
     keep_latest: int = 30
     keep_daily_days: int = 14
@@ -54,9 +54,9 @@ class RetentionPolicy:
     max_total_size_bytes: int = 1024 * 1024 * 1024
     max_age_days: int = 180
     min_keep: int = 20
-
-
 # === ANCHOR: LOCAL_CHECKPOINTS_RETENTIONPOLICY_END ===
+
+
 
 
 DEFAULT_RETENTION_POLICY = RetentionPolicy()
@@ -567,7 +567,6 @@ def restore_checkpoint(root: Path, checkpoint_id: str) -> bool:
 def prune_checkpoints(
     root: Path,
     policy: RetentionPolicy = DEFAULT_RETENTION_POLICY,
-    # === ANCHOR: LOCAL_CHECKPOINTS_PRUNE_CHECKPOINTS_END ===
 ) -> dict[str, int]:
     checkpoints = list_checkpoints(root)
     now = datetime.now(timezone.utc)
@@ -636,6 +635,7 @@ def prune_checkpoints(
         kept = [item for item in kept if item.checkpoint_id != cp.checkpoint_id]
 
     return {"count": deleted_count, "bytes": deleted_bytes}
+# === ANCHOR: LOCAL_CHECKPOINTS_PRUNE_CHECKPOINTS_END ===
 
 
 # === ANCHOR: LOCAL_CHECKPOINTS_END ===

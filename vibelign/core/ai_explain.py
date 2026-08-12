@@ -224,7 +224,6 @@ def build_explain_ai_prompt(data: ExplainPromptData) -> str:
         file_lines.append(f"- {path} ({status}, {kind})")
     files = "\n".join(file_lines)
     return f"""다음 변경 요약을 바탕으로 코딩을 모르는 사람도 이해할 수 있게 한국어로 다시 설명해주세요.
-# === ANCHOR: AI_EXPLAIN_BUILD_EXPLAIN_AI_PROMPT_END ===
 형식은 반드시 아래 4개 섹션을 유지하세요.
 
 ## 1. 한 줄 요약
@@ -255,6 +254,7 @@ what_to_do_next:
 files:
 {files or "- 없음"}
 """
+# === ANCHOR: AI_EXPLAIN_BUILD_EXPLAIN_AI_PROMPT_END ===
 
 
 # === ANCHOR: AI_EXPLAIN__CALL_OPENAI_COMPATIBLE_START ===
@@ -263,7 +263,6 @@ def _call_openai_compatible(
     base_url: str,
     model: str,
     prompt: str,
-    # === ANCHOR: AI_EXPLAIN__CALL_OPENAI_COMPATIBLE_END ===
 ) -> str:
     data: OpenAICompatibleRequest = {
         "model": model,
@@ -288,6 +287,7 @@ def _call_openai_compatible(
         if text is None:
             raise RuntimeError("OpenAI 호환 응답에서 내용을 찾지 못했습니다.")
         return text
+# === ANCHOR: AI_EXPLAIN__CALL_OPENAI_COMPATIBLE_END ===
 
 
 # === ANCHOR: AI_EXPLAIN__TRY_ANTHROPIC_START ===
@@ -295,7 +295,6 @@ def _try_anthropic(
     prompt: str,
     attempted: list[str],
     quiet: bool = False,
-    # === ANCHOR: AI_EXPLAIN__TRY_ANTHROPIC_END ===
 ) -> str | None:
     from vibelign.core.keys_store import get_key
     api_key = get_key("ANTHROPIC_API_KEY")
@@ -331,6 +330,7 @@ def _try_anthropic(
         if not quiet:
             print(_friendly_error("Anthropic", exc) + "\n")
         return None
+# === ANCHOR: AI_EXPLAIN__TRY_ANTHROPIC_END ===
 
 
 # === ANCHOR: AI_EXPLAIN__TRY_OPENAI_START ===
@@ -338,7 +338,6 @@ def _try_openai(
     prompt: str,
     attempted: list[str],
     quiet: bool = False,
-    # === ANCHOR: AI_EXPLAIN__TRY_OPENAI_END ===
 ) -> str | None:
     from vibelign.core.keys_store import get_key
     api_key = get_key("OPENAI_API_KEY")
@@ -356,6 +355,7 @@ def _try_openai(
         if not quiet:
             print(_friendly_error("OpenAI", exc) + "\n")
         return None
+# === ANCHOR: AI_EXPLAIN__TRY_OPENAI_END ===
 
 
 # === ANCHOR: AI_EXPLAIN__TRY_GEMINI_START ===
@@ -363,7 +363,6 @@ def _try_gemini(
     prompt: str,
     attempted: list[str],
     quiet: bool = False,
-    # === ANCHOR: AI_EXPLAIN__TRY_GEMINI_END ===
 ) -> str | None:
     from vibelign.core.keys_store import get_key
     api_key = get_key("GEMINI_API_KEY")
@@ -395,6 +394,7 @@ def _try_gemini(
         if not quiet:
             print(_format_gemini_error(exc, model) + "\n")
         return None
+# === ANCHOR: AI_EXPLAIN__TRY_GEMINI_END ===
 
 
 # === ANCHOR: AI_EXPLAIN__TRY_GLM_START ===
@@ -456,7 +456,6 @@ def explain_with_ai(data: ExplainPromptData) -> tuple[str | None, list[str]]:
 def generate_text_with_ai(
     prompt: str,
     quiet: bool = False,
-    # === ANCHOR: AI_EXPLAIN_GENERATE_TEXT_WITH_AI_END ===
 ) -> tuple[str | None, list[str]]:
     attempted: list[str] = []
     text = _try_anthropic(prompt, attempted, quiet=quiet)
@@ -471,6 +470,7 @@ def generate_text_with_ai(
     if text is None and not quiet:
         print_attempted_providers(attempted)
     return text, attempted
+# === ANCHOR: AI_EXPLAIN_GENERATE_TEXT_WITH_AI_END ===
 
 
 # === ANCHOR: AI_EXPLAIN_END ===

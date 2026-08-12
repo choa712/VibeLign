@@ -91,18 +91,18 @@ class _WatchMovedEvent(Protocol):
 
 # === ANCHOR: WATCH_ENGINE__WATCHPATHLIKE_START ===
 class _WatchPathLike(Protocol):
-    @property
     # === ANCHOR: WATCH_ENGINE_PARTS_START ===
+    @property
     def parts(self) -> tuple[str, ...]: ...
     # === ANCHOR: WATCH_ENGINE_PARTS_END ===
 
-    @property
     # === ANCHOR: WATCH_ENGINE_NAME_START ===
+    @property
     def name(self) -> str: ...
     # === ANCHOR: WATCH_ENGINE_NAME_END ===
 
-    @property
     # === ANCHOR: WATCH_ENGINE_SUFFIX_START ===
+    @property
     def suffix(self) -> str: ...
     # === ANCHOR: WATCH_ENGINE_SUFFIX_END ===
 

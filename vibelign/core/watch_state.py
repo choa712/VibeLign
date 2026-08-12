@@ -12,15 +12,15 @@ class SnapshotPayload(TypedDict):
     sha1: str
 
 
-@dataclass
 # === ANCHOR: WATCH_STATE_FILESNAPSHOT_START ===
+@dataclass
 class FileSnapshot:
     path: str
     lines: int
     sha1: str
-
-
 # === ANCHOR: WATCH_STATE_FILESNAPSHOT_END ===
+
+
 
 
 # === ANCHOR: WATCH_STATE_HASH_TEXT_START ===

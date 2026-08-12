@@ -39,9 +39,9 @@ def _add_page_number_footer(document) -> None:
     # === ANCHOR: DOCX_RENDERER__FIELD_END ===
 
     _field("PAGE")
-# === ANCHOR: DOCX_RENDERER__ADD_PAGE_NUMBER_FOOTER_END ===
     para.add_run(" / ")
     _field("NUMPAGES")
+# === ANCHOR: DOCX_RENDERER__ADD_PAGE_NUMBER_FOOTER_END ===
 
 
 # === ANCHOR: DOCX_RENDERER_RENDER_DOCX_START ===
@@ -121,7 +121,7 @@ def render_docx(
     if page_numbers:
         _add_page_number_footer(doc)
     buf = io.BytesIO()
-# === ANCHOR: DOCX_RENDERER_RENDER_DOCX_END ===
     doc.save(buf)
     return buf.getvalue()
+# === ANCHOR: DOCX_RENDERER_RENDER_DOCX_END ===
 # === ANCHOR: DOCX_RENDERER_END ===

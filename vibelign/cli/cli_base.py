@@ -61,8 +61,8 @@ class RichArgumentParser(argparse.ArgumentParser):
         )
     # === ANCHOR: CLI_BASE___INIT___END ===
 
-    @override
     # === ANCHOR: CLI_BASE__PRINT_MESSAGE_START ===
+    @override
     def _print_message(
         self,
         message: str | None,

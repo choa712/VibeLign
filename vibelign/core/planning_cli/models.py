@@ -4,8 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True)
 # === ANCHOR: MODELS_PLANNINGINPUT_START ===
+@dataclass(frozen=True)
 class PlanningInput:
     idea: str
     language: str = "auto"
@@ -14,8 +14,8 @@ class PlanningInput:
 # === ANCHOR: MODELS_PLANNINGINPUT_END ===
 
 
-@dataclass(frozen=True)
 # === ANCHOR: MODELS_PLANNINGRESULT_START ===
+@dataclass(frozen=True)
 class PlanningResult:
     output_path: str
     absolute_output_path: str
@@ -54,7 +54,6 @@ class PlanningResult:
         persona_id: str,
         llm_status: str,
         fallback_reason: str | None,
-    # === ANCHOR: MODELS_WITH_LLM_STATUS_END ===
     ) -> "PlanningResult":
         return PlanningResult(
             output_path=self.output_path,
@@ -69,6 +68,7 @@ class PlanningResult:
             agents_used=self.agents_used,
             agent_statuses=self.agent_statuses,
         )
+    # === ANCHOR: MODELS_WITH_LLM_STATUS_END ===
 
     # === ANCHOR: MODELS_WITH_AGENTS_START ===
     def with_agents(
@@ -81,7 +81,6 @@ class PlanningResult:
         persona_id: str | None,
         llm_status: str | None,
         fallback_reason: str | None,
-    # === ANCHOR: MODELS_WITH_AGENTS_END ===
     ) -> "PlanningResult":
         return PlanningResult(
             output_path=self.output_path,
@@ -90,11 +89,12 @@ class PlanningResult:
             fallback_reason=fallback_reason,
             session_id=self.session_id,
             adapter=adapter,
-# === ANCHOR: MODELS_PLANNINGRESULT_END ===
             persona_id=persona_id,
             llm_status=llm_status,
             agents_requested=agents_requested,
             agents_used=agents_used,
             agent_statuses=agent_statuses,
         )
+    # === ANCHOR: MODELS_WITH_AGENTS_END ===
+# === ANCHOR: MODELS_PLANNINGRESULT_END ===
 # === ANCHOR: MODELS_END ===

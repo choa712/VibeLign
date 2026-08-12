@@ -157,10 +157,10 @@ def _html_artifact_json_for_path(root: Path, relative_path: str) -> tuple[str, s
 # === ANCHOR: VIB_DOCS_BUILD_CMD_RENDER_DOCS_VISUAL_ARTIFACTS_START ===
 def render_docs_visual_artifacts(
     root: Path, relative_paths: Iterable[str]
-# === ANCHOR: VIB_DOCS_BUILD_CMD_RENDER_DOCS_VISUAL_ARTIFACTS_END ===
 ) -> list[tuple[str, str]]:
     resolved_root = root.resolve()
     return [_artifact_json_for_path(resolved_root, path) for path in relative_paths]
+# === ANCHOR: VIB_DOCS_BUILD_CMD_RENDER_DOCS_VISUAL_ARTIFACTS_END ===
 
 
 def render_docs_html_artifacts(
@@ -173,7 +173,6 @@ def render_docs_html_artifacts(
 # === ANCHOR: VIB_DOCS_BUILD_CMD_BUILD_DOCS_VISUAL_CACHE_START ===
 def build_docs_visual_cache(
     root: Path, source_relative_path: str | None = None
-# === ANCHOR: VIB_DOCS_BUILD_CMD_BUILD_DOCS_VISUAL_CACHE_END ===
 ) -> dict[str, object]:
     root = root.resolve()
     meta = MetaPaths(root)
@@ -243,6 +242,7 @@ def build_docs_visual_cache(
         "html_written": [relative_path for relative_path, _ in html_rendered],
         "root": str(root),
     }
+# === ANCHOR: VIB_DOCS_BUILD_CMD_BUILD_DOCS_VISUAL_CACHE_END ===
 
 
 # === ANCHOR: VIB_DOCS_BUILD_CMD_RUN_VIB_DOCS_BUILD_START ===
