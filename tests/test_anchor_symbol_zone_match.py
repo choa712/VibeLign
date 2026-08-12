@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest import mock
 
 from vibelign.core.anchor_tools import (
     extract_anchor_blocks,
@@ -772,6 +773,124 @@ def test_js_decorator_left_outside_is_reported(tmp_path: Path) -> None:
     assert len(find_misplaced_anchors(path)) == 1
     assert repair_crossing_anchors(tmp_path, path, dry_run=False)["status"] == "repaired"
     assert "@Authorized" in extract_anchor_blocks(path)["CTL_SERVICE"]
+
+
+def test_python_fallback_also_covers_decorators(tmp_path: Path) -> None:
+    """AST 폴백만 계약이 다르면 그게 우회로가 된다.
+
+    파일 어딘가의 무관한 문법 오류로 폴백을 유도한 뒤, @authorized 와 def
+    사이에 START 가 놓여도 정상으로 통과시킬 수 있다. 마커 아닌 줄은
+    그대로라 코드 보존 안전망도 이를 막지 못한다.
+    """
+    path = _write(
+        tmp_path,
+        "deco.py",
+        "x = (\n"  # 문법 오류 — AST 가 실패해 들여쓰기 폴백으로 떨어진다
+        "@authorized\n"
+        "# === ANCHOR: DECO_HANDLE_START ===\n"
+        "def handle():\n"
+        "    return 1\n"
+        "# === ANCHOR: DECO_HANDLE_END ===\n",
+    )
+
+    problems = find_misplaced_anchors(path)
+    assert len(problems) == 1
+    assert "DECO_HANDLE" in problems[0]
+
+
+def test_python_scan_cap_is_reported_not_silent(tmp_path: Path) -> None:
+    """조용히 건너뛰면 --strict 를 우회하는 길이 열린다.
+
+    문법 오류 하나로 폴백을 유도하고 정의를 상한 너머로 채우면, 오배치가
+    있어도 아무 말 없이 통과한다. 건너뛴 사실은 반드시 위로 올라와야 한다.
+    """
+    body = "def broken(:\n# === ANCHOR: BIG_F0_START ===\n"
+    body += "".join(f"def f{i}():\n    pass\n" for i in range(2100))
+    body += "# === ANCHOR: BIG_F0_END ===\n"
+    path = _write(tmp_path, "big.py", body)
+
+    problems = find_misplaced_anchors(path)
+
+    assert len(problems) == 1
+    assert "건너뜁니다" in problems[0]
+    assert repair_crossing_anchors(tmp_path, path, dry_run=True)["status"] == "unchanged"
+
+
+def test_repair_aborts_when_the_file_changed_mid_analysis(tmp_path: Path) -> None:
+    """읽고 분석하는 사이 편집기가 저장하면 물러난다.
+
+    그대로 덮으면 사용자가 방금 친 코드가 조용히 사라진다. 창이 좁아도
+    되돌릴 수 없는 손실이라 확인하고 충돌이면 쓰지 않는다.
+    """
+    path = _write(
+        tmp_path,
+        "race.py",
+        "# === ANCHOR: RACE_HANDLE_START ===\n"
+        "def handle(\n"
+        "    v: int,\n"
+        "# === ANCHOR: RACE_HANDLE_END ===\n"
+        ") -> int:\n"
+        "    return v\n",
+    )
+    real_read = Path.read_bytes
+    calls = {"n": 0}
+
+    def spy(self: Path) -> bytes:
+        calls["n"] += 1
+        if calls["n"] == 2:  # 쓰기 직전 확인 시점에 다른 프로세스가 저장
+            self.write_text("# 사용자가 방금 친 코드\n", encoding="utf-8")
+        return real_read(self)
+
+    with mock.patch.object(Path, "read_bytes", spy):
+        outcome = repair_crossing_anchors(tmp_path, path, dry_run=False)
+
+    assert outcome["status"] == "skipped"
+    assert "바뀌었습니다" in outcome["reason"]
+    assert "사용자가 방금 친 코드" in path.read_text(encoding="utf-8")
+
+
+def test_multiline_decorator_is_part_of_the_symbol(tmp_path: Path) -> None:
+    """`@Authorized({ ... })` 가 여러 줄이어도 정의의 일부다."""
+    path = _write(
+        tmp_path,
+        "ctl.ts",
+        "@Authorized({\n"
+        "  roles: ['admin'],\n"
+        "})\n"
+        "// === ANCHOR: CTL_SERVICE_START ===\n"
+        "export class Service {\n"
+        "  run() { return 1; }\n"
+        "}\n"
+        "// === ANCHOR: CTL_SERVICE_END ===\n",
+    )
+
+    assert len(find_misplaced_anchors(path)) == 1
+    assert repair_crossing_anchors(tmp_path, path, dry_run=False)["status"] == "repaired"
+    assert "@Authorized({" in extract_anchor_blocks(path)["CTL_SERVICE"]
+
+
+def test_a_previous_functions_closing_brace_is_not_a_decorator(
+    tmp_path: Path,
+) -> None:
+    """균형을 맞춘 줄이 `@` 로 시작할 때만 가져간다.
+
+    앞 함수의 닫는 `}` 를 데코레이터 연속으로 착각하면 그 함수를 통째로
+    심볼 안에 끌고 들어와, 멀쩡한 앵커가 전부 오배치로 잡힌다.
+    """
+    path = _write(
+        tmp_path,
+        "two.ts",
+        "export function a() {\n"
+        "  return 1;\n"
+        "}\n"
+        "// === ANCHOR: TWO_B_START ===\n"
+        "export function b() {\n"
+        "  return 2;\n"
+        "}\n"
+        "// === ANCHOR: TWO_B_END ===\n",
+    )
+
+    assert find_misplaced_anchors(path) == []
 
 
 def test_repair_leaves_clean_file_untouched(tmp_path: Path) -> None:

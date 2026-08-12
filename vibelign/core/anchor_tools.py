@@ -318,8 +318,6 @@ def _python_symbol_blocks_by_indent(text: str) -> list[SymbolBlock]:
     # 이 폴백은 정의마다 앞으로 훑어서 들여쓰기가 계단식으로 깊어지는 파일에
     # 이차식이 된다. AST 가 못 읽는 파일에서만 오지만, 검사가 읽기 전용
     # 경로(--validate)에까지 들어온 이상 파일 하나로 멈춰 세울 수 있다.
-    if len(_PY_SYMBOL_START_RE.findall(text)) > _PY_SYMBOL_SCAN_CAP:
-        return []
     lines = text.splitlines()
     blocks: list[SymbolBlock] = []
     for idx, line in enumerate(lines):
@@ -333,6 +331,10 @@ def _python_symbol_blocks_by_indent(text: str) -> list[SymbolBlock]:
             continue
         indent = len(match.group(1))
         symbol_name = match.group(3)
+        # AST 경로와 같은 계약: 데코레이터는 정의의 일부다. 폴백만 빼두면
+        # 무관한 문법 오류 하나로 폴백을 유도해 @authorized 를 보호 밖으로
+        # 밀어낼 수 있고, 마커 아닌 줄은 그대로라 안전망도 통과한다.
+        start_idx = _decorator_start(lines, idx)
         end_idx = len(lines) - 1
         for probe in range(idx + 1, len(lines)):
             probe_line = lines[probe]
@@ -345,7 +347,7 @@ def _python_symbol_blocks_by_indent(text: str) -> list[SymbolBlock]:
                 break
         while end_idx > idx and not lines[end_idx].strip():
             end_idx -= 1
-        blocks.append((idx, end_idx, symbol_name, match.group(1)))
+        blocks.append((start_idx, end_idx, symbol_name, match.group(1)))
     return blocks
 # === ANCHOR: ANCHOR_TOOLS__PYTHON_SYMBOL_BLOCKS_BY_INDENT_END ===
 
@@ -610,20 +612,9 @@ def _js_symbol_blocks(text: str) -> list[SymbolBlock]:
         indent = match.group(1)
         # 데코레이터는 정의의 일부다(@Controller, @Authorized 등). 빼두면
         # 라우팅·권한 메타데이터가 보호 구역 밖에 남는데 검사는 정상으로 본다.
-        start_idx = idx
-        probe_back = idx - 1
-        while probe_back >= 0:
-            candidate = lines[probe_back].strip()
-            # 마커 줄은 코드가 아니다. 넘어가서 그 위의 데코레이터를 본다 —
-            # 오배치의 전형이 바로 데코레이터와 정의 **사이**에 낀 START 다.
-            if _parse_anchor_marker(lines[probe_back]) is not None:
-                probe_back -= 1
-                continue
-            if candidate.startswith("@"):
-                start_idx = probe_back
-                probe_back -= 1
-                continue
-            break
+        # 데코레이터는 정의의 일부다(@Controller, @Authorized 등). 빼두면
+        # 라우팅·권한 메타데이터가 보호 구역 밖에 남는데 검사는 정상으로 본다.
+        start_idx = _decorator_start(lines, idx)
         # 문자열·템플릿·주석을 인식하는 정확한 중괄호 카운터로 블록 끝을 찾는다.
         # depth 는 줄 끝에서만 검사해 한 줄짜리 시그니처(구조분해 파라미터 { ... })를
         # 본문 블록과 혼동하지 않는다.
@@ -1174,6 +1165,60 @@ def _parse_anchor_marker(line: str) -> tuple[str, bool] | None:
 
 
 # === ANCHOR: ANCHOR_TOOLS__PARSE_ANCHOR_MARKER_END ===
+
+def _decorator_start(lines: list[str], idx: int) -> int:
+    """`idx` 의 정의 위에 붙은 데코레이터까지 올라간 시작 줄.
+
+    한 줄짜리(`@route`)만 보면 `@Authorized({\n  roles: [...]\n})` 같은 여러
+    줄 데코레이터를 놓친다. 그러면 그 사이에 낀 START 가 정상으로 통과하고
+    권한·라우팅 메타데이터가 보호 밖에 남는다.
+
+    괄호 균형으로 이어지는 줄을 따라간다. 문자열 안의 괄호까지 세는 근사지만,
+    틀려도 앵커 시작이 한두 줄 넓어지거나 좁아질 뿐이다. 병적인 입력에서
+    끝없이 올라가지 않도록 훑는 줄 수를 묶는다.
+    """
+    start = idx
+    depth = 0
+    probe = idx - 1
+    budget = _DECORATOR_LOOKBACK_LINES
+    while probe >= 0 and budget > 0:
+        budget -= 1
+        if _parse_anchor_marker(lines[probe]) is not None:
+            probe -= 1  # 마커 줄은 코드가 아니다 — 넘어가서 그 위를 본다
+            continue
+        stripped = lines[probe].strip()
+        if not stripped:
+            break
+        opens = sum(stripped.count(ch) for ch in "([{")
+        closes = sum(stripped.count(ch) for ch in ")]}")
+        if depth > 0:
+            depth += closes - opens
+            if depth <= 0:
+                # 균형을 맞춘 이 줄이 여는 줄이다. 데코레이터일 때만 가져간다 —
+                # 앞 함수의 닫는 `}` 를 연속으로 착각하면 그 함수를 통째로
+                # 심볼 안에 끌고 들어와 멀쩡한 앵커가 전부 오배치로 잡힌다.
+                if not stripped.startswith("@"):
+                    break
+                start = probe
+                depth = 0
+                probe -= 1
+                continue
+            probe -= 1
+            continue
+        if stripped.startswith("@"):
+            start = probe
+            probe -= 1
+            continue
+        if stripped.endswith((")", "]", "}")) and closes > opens:
+            depth = closes - opens
+            probe -= 1
+            continue
+        break
+    return start
+
+
+_DECORATOR_LOOKBACK_LINES = 50
+
 
 
 # === ANCHOR: ANCHOR_TOOLS_EXTRACT_ANCHOR_LINE_RANGES_START ===
@@ -2099,6 +2144,16 @@ def repair_crossing_anchors(
         try:
             # 원자적 교체. write_text 는 먼저 비우고 쓰므로, 도중에 죽으면
             # 소스가 잘린 채 남는다 — 마커만 옮기려다 코드를 잃는다.
+            # 읽은 뒤 분석하는 동안 편집기가 저장했을 수 있다. 그대로 덮으면
+            # 사용자가 방금 친 코드가 조용히 사라진다 — 되돌릴 수 없는 손실이라
+            # 창이 좁아도 확인하고 충돌이면 물러난다.
+            if path.read_bytes() != raw:
+                return {
+                    "path": rel,
+                    "status": "skipped",
+                    "reason": "분석 중 파일이 바뀌었습니다 — 덮어쓰지 않았습니다",
+                    "lost_names": [],
+                }
             # 원본 줄바꿈으로 되돌려 쓴다. 아래 문자열은 전부 LF 기준이다.
             atomic_write_text(
                 path,
@@ -2204,6 +2259,14 @@ def _symbol_zones(path: Path, text: str) -> dict[str, list[tuple[int, int]]]:
     """
     suffix = path.suffix.lower()
     if suffix == ".py":
+        # 폴백(AST 실패)은 정의마다 앞으로 훑어 이차식이 된다. JS 와 같은
+        # 상한을 두되, 조용히 넘기면 문법 오류 하나로 검사를 우회하는 길이
+        # 열리므로 건너뛴 사실을 위로 올린다.
+        if (
+            _python_symbol_blocks_ast(text) is None
+            and len(_PY_SYMBOL_START_RE.findall(text)) > _PY_SYMBOL_SCAN_CAP
+        ):
+            raise _TooManySymbols
         blocks = _python_symbol_blocks(text)
     elif suffix in {".js", ".ts", ".jsx", ".tsx"}:
         if _js_symbol_count(text) > _JS_SYMBOL_SCAN_CAP:
@@ -2243,18 +2306,15 @@ def find_misplaced_anchors(path: Path) -> list[str]:
     고쳤지만 이미 놓인 마커는 그대로 남아 있다. 먼저 보고만 하고, 리포가
     0이 된 뒤에 차단으로 올린다 (soft → hard 승격).
     """
-    text = safe_read_text(path)
-    if (
-        text
-        and path.suffix.lower() in {".js", ".ts", ".jsx", ".tsx"}
-        and _js_symbol_count(text) > _JS_SYMBOL_SCAN_CAP
-    ):
+    try:
+        uncovered = _uncovered_symbols(path)
+    except _TooManySymbols:
         return [
-            f"심볼이 {_JS_SYMBOL_SCAN_CAP}개를 넘어 배치 검사를 건너뜁니다 — "
+            "심볼이 너무 많아 배치 검사를 건너뜁니다 — "
             "이 파일의 앵커 위치는 확인되지 않았습니다"
         ]
     problems: list[str] = []
-    for item in _uncovered_symbols(path):
+    for item in uncovered:
         start_line, end_line = item.anchor
         sym_start, sym_end = item.symbol
         problems.append(
@@ -2283,10 +2343,7 @@ def _uncovered_symbols(path: Path) -> list[_Uncovered]:
     text = safe_read_text(path)
     if not text:
         return []
-    try:
-        zones = _symbol_zones(path, text)
-    except _TooManySymbols:
-        return []
+    zones = _symbol_zones(path, text)
     if not zones:
         return []
     found: list[_Uncovered] = []
@@ -2355,7 +2412,11 @@ def _misplaced_displays(path: Path) -> set[str]:
 def _repairable_uncovered(path: Path) -> list[_Uncovered]:
     """심볼과 겹치는 오배치만 — 떨어져 있으면 감싸려던 대상이 아니었다고 본다."""
     out: list[_Uncovered] = []
-    for item in _uncovered_symbols(path):
+    try:
+        candidates = _uncovered_symbols(path)
+    except _TooManySymbols:
+        return []
+    for item in candidates:
         start_line, end_line = item.anchor
         sym_start, sym_end = item.symbol
         if start_line <= sym_end and sym_start <= end_line:
