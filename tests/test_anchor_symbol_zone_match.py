@@ -1021,5 +1021,33 @@ def test_scan_work_is_bounded_not_just_symbol_count(tmp_path: Path) -> None:
 
     assert len(problems) == 1
     assert "건너뜁니다" in problems[0]
+    # 생성기는 죽지 않는다 — 상한은 "확신할 수 없다" 는 뜻이지 크래시가 아니다.
+    assert anchor_tools.insert_js_symbol_anchors(path) is False
+    assert extract_anchors(path) == []
+
+
+def test_symbol_count_regex_is_linear_on_blank_lines() -> None:
+    """공백 클래스는 개행도 먹는다.
+
+    줄머리 고정 + MULTILINE 에서 쓰면 시작 위치마다 줄을 가로질러 훑어
+    이차식이 된다. 빈 줄 1만 개짜리 파일 하나로 strict CI 를 멈춰 세울 수
+    있었다 (실측 0.9초 → 들여쓰기만 매칭하도록 좁혀 0.0004초).
+    """
+    import time
+
+    blank = "\n" * 10000
+    started = time.perf_counter()
+    assert anchor_tools._js_symbol_count(blank) == 0
+    assert anchor_tools._PY_SYMBOL_START_RE.findall(blank) == []
+    assert time.perf_counter() - started < 0.2
+
+    # 좁히면서 정상 매칭을 잃지 않았는지도 본다.
+    assert (
+        anchor_tools._js_symbol_count(
+            "export function a() {}\n  class B {}\nconst c = (x) => x;\n"
+            "export async function d() {}\n"
+        )
+        == 4
+    )
 
 # === ANCHOR: TEST_ANCHOR_SYMBOL_ZONE_MATCH_END ===

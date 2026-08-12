@@ -319,7 +319,11 @@ def _python_symbol_blocks_ast(text: str) -> list[SymbolBlock] | None:
 
 # === ANCHOR: ANCHOR_TOOLS__PYTHON_SYMBOL_BLOCKS_BY_INDENT_START ===
 _PY_SYMBOL_SCAN_CAP = 2000
-_PY_SYMBOL_START_RE = re.compile(r"^\s*(?:async\s+def|def|class)\s+[A-Za-z_]", re.M)
+# 파싱 전 크기 상한. 이 리포 최대 소스가 100KB 미만이라 20배 여유다.
+_PY_PARSE_BYTE_CAP = 2_000_000
+_PY_SYMBOL_START_RE = re.compile(
+    r"^[ \t]*(?:async[ \t]+def|def|class)[ \t]+[A-Za-z_]", re.M
+)
 
 
 def _python_symbol_blocks_by_indent(
@@ -2336,10 +2340,13 @@ _JS_SYMBOL_SCAN_CAP = 200
 # 이 리포에서 가장 무거운 파일이 약 6.4만(2천 줄 × 32 심볼)이라 3배 여유다.
 # 200만으로 뒀더니 걸리기까지 37초가 걸려 상한의 의미가 없었다.
 _SYMBOL_SCAN_WORK_CAP = 200_000
+# `\s` 는 개행도 먹는다. `^\s*` 를 MULTILINE 으로 쓰면 빈 줄이 많은 파일에서
+# 시작 위치마다 줄을 가로질러 훑어 이차식이 된다 (빈 줄 1만 개에 0.9초).
+# 줄 안의 들여쓰기만 원하므로 `[ \t]*` 로 좁힌다.
 _JS_SYMBOL_START_RE = re.compile(
-    r"^\s*(?:export\s+)?(?:(?:async\s+)?function\s+[A-Za-z_]"
-    r"|class\s+[A-Za-z_]"
-    r"|(?:const|let|var)\s+[A-Za-z_][A-Za-z0-9_]*\s*=\s*(?:async\s*)?\()",
+    r"^[ \t]*(?:export[ \t]+)?(?:(?:async[ \t]+)?function[ \t]+[A-Za-z_]"
+    r"|class[ \t]+[A-Za-z_]"
+    r"|(?:const|let|var)[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*=[ \t]*(?:async[ \t]*)?\()",
     re.M,
 )
 
@@ -2357,15 +2364,22 @@ def _symbol_zones(path: Path, text: str) -> dict[str, list[tuple[int, int]]]:
     """
     suffix = path.suffix.lower()
     if suffix == ".py":
-        # 폴백(AST 실패)은 정의마다 앞으로 훑어 이차식이 된다. JS 와 같은
-        # 상한을 두되, 조용히 넘기면 문법 오류 하나로 검사를 우회하는 길이
-        # 열리므로 건너뛴 사실을 위로 올린다.
-        if (
-            _python_symbol_blocks_ast(text) is None
-            and len(_PY_SYMBOL_START_RE.findall(text)) > _PY_SYMBOL_SCAN_CAP
-        ):
+        # 파싱 전에 크기부터 막는다. ast.parse 는 파일 하나로 CPU·메모리를
+        # 태울 수 있고, 그 뒤에 상한을 둬봐야 이미 늦다.
+        if len(text) > _PY_PARSE_BYTE_CAP:
             raise _TooManySymbols
-        blocks = _python_symbol_blocks(text, strict_decorators=True)
+        # 한 번만 파싱해서 재사용한다. 예전엔 None 인지 보려고 파싱하고
+        # _python_symbol_blocks 안에서 또 파싱해 큰 파일을 두 번 훑었다.
+        parsed = _python_symbol_blocks_ast(text)
+        if parsed is not None:
+            blocks = parsed  # AST 경로는 decorator_list 로 데코레이터를 이미 안다
+        else:
+            # 폴백은 정의마다 앞으로 훑어 이차식이 된다. JS 와 같은 상한을
+            # 두되, 조용히 넘기면 문법 오류 하나로 검사를 우회하는 길이
+            # 열리므로 건너뛴 사실을 위로 올린다.
+            if len(_PY_SYMBOL_START_RE.findall(text)) > _PY_SYMBOL_SCAN_CAP:
+                raise _TooManySymbols
+            blocks = _python_symbol_blocks_by_indent(text, strict_decorators=True)
     elif suffix in {".js", ".ts", ".jsx", ".tsx"}:
         if _js_symbol_count(text) > _JS_SYMBOL_SCAN_CAP:
             raise _TooManySymbols
