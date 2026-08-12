@@ -2,6 +2,7 @@
 from collections.abc import Callable, Collection, Iterable, Iterator
 from pathlib import Path
 import ast
+import contextlib
 import hashlib
 import heapq
 import json
@@ -10,7 +11,12 @@ import sys
 import tempfile
 from typing import NamedTuple, TypeAlias, TypedDict, cast
 
-from vibelign.core.atomic_write import atomic_write_text
+from vibelign.core.atomic_write import (
+    atomic_write_text,
+    commit_staged,
+    resolve_write_target,
+    stage_text,
+)
 from vibelign.core.project_map import ProjectMapSnapshot
 from vibelign.core.project_scan import iter_source_files, line_count, safe_read_text
 from vibelign.core.structure_policy import ANCHOR_MARKER_PATTERN, has_anchor_markers
@@ -1181,7 +1187,11 @@ def _decorator_start(lines: list[str], idx: int) -> int:
     depth = 0
     probe = idx - 1
     budget = _DECORATOR_LOOKBACK_LINES
-    while probe >= 0 and budget > 0:
+    while probe >= 0:
+        if budget <= 0:
+            # 한도 안에서 끝을 못 봤다. 조용히 멈추면 긴 권한 데코레이터가
+            # 보호 밖에 남은 채 --strict 를 통과한다 — 모른다고 말한다.
+            raise _TooManySymbols
         budget -= 1
         if _parse_anchor_marker(lines[probe]) is not None:
             probe -= 1  # 마커 줄은 코드가 아니다 — 넘어가서 그 위를 본다
@@ -1991,14 +2001,26 @@ def repair_crossing_anchors(
     # CRLF 파일이 통째로 LF 로 바뀌는데, 그 뒤의 어떤 비교도 이미 변환된
     # 문자열끼리 대조해서 못 잡는다. 마커 하나 옮기려고 파일 전체 diff 를
     # 만드는 건 "마커만 옮긴다" 는 계약 위반이다.
-    if b"\r\n" in raw and b"\r" in raw:
+    # splitlines() 는 U+2028·U+2029·\x0b·\x0c 도 줄로 나눈다. LF 로 다시 이으면
+    # 문자열 리터럴 안의 그 문자가 진짜 줄바꿈으로 바뀌어 값이 달라지거나
+    # 문법이 깨진다. _non_marker_lines 도 같은 정규화를 거치므로 못 잡는다.
+    _SPLIT_ONLY = "\x0b\x0c\x1c\x1d\x1e\u0085\u2028\u2029"
+    crlf = raw.count(b"\r\n")
+    lone_lf = raw.count(b"\n") - crlf
+    lone_cr = raw.count(b"\r") - crlf
+    if crlf and not lone_lf and not lone_cr:
         newline = "\r\n"
-    elif b"\r" in raw and b"\n" not in raw:
-        newline = "\r"
-    else:
+    elif not crlf and not lone_cr:
         newline = "\n"
+    else:
+        # 섞여 있으면 어느 쪽으로 통일해도 나머지가 바뀐다. 여러 줄 문자열이나
+        # 템플릿 리터럴 안의 줄바꿈이면 런타임 값이 달라지는데, 마커 아닌 줄을
+        # 비교하는 안전망은 이미 정규화된 문자열끼리 대조해 못 잡는다.
+        # 판정만 해두고 실제로 쓸 때 막는다 — 고칠 게 없는 파일까지
+        # "건너뛰었다" 고 알리면 리포트가 소음이 된다.
+        newline = None
     try:
-        _ = path.read_text(encoding="utf-8")
+        decoded = path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         return {
             "path": rel,
@@ -2013,10 +2035,24 @@ def repair_crossing_anchors(
             "reason": f"읽기 실패: {exc}",
             "lost_names": [],
         }
+    if any(ch in decoded for ch in _SPLIT_ONLY):
+        return {
+            "path": rel,
+            "status": "skipped",
+            "reason": "줄로 나뉘는 특수 문자가 있습니다 — 다시 이으면 내용이 바뀝니다",
+            "lost_names": [],
+        }
     original = safe_read_text(path)
     moved_ok = _crossing_participants(original or "") | _misplaced_participants(path)
     # 교차 참가자는 이름이 곧 표시 이름이다(교차 진단이 마커 이름을 낸다).
     flagged_displays = _crossing_participants(original or "") | _misplaced_displays(path)
+    if original and moved_ok and newline is None:
+        return {
+            "path": rel,
+            "status": "skipped",
+            "reason": "줄바꿈이 섞여 있습니다 — 통일하면 문자열 내용이 바뀔 수 있습니다",
+            "lost_names": [],
+        }
     if not original or not moved_ok:
         return {
             "path": rel,
@@ -2145,21 +2181,28 @@ def repair_crossing_anchors(
             # 원자적 교체. write_text 는 먼저 비우고 쓰므로, 도중에 죽으면
             # 소스가 잘린 채 남는다 — 마커만 옮기려다 코드를 잃는다.
             # 읽은 뒤 분석하는 동안 편집기가 저장했을 수 있다. 그대로 덮으면
-            # 사용자가 방금 친 코드가 조용히 사라진다 — 되돌릴 수 없는 손실이라
-            # 창이 좁아도 확인하고 충돌이면 물러난다.
-            if path.read_bytes() != raw:
+            # 사용자가 방금 친 코드가 조용히 사라진다.
+            #
+            # 먼저 임시 파일을 끝까지 준비(쓰기·fsync)한 뒤, 확인과 os.replace
+            # 사이에 I/O 가 하나도 없게 만든다. 확인을 쓰기 앞에 두면 준비하는
+            # 동안(수 밀리초)의 저장이 통째로 날아간다. 임의의 편집기를 상대로
+            # 완전한 원자성은 파일 잠금 없이는 불가능하지만, 창을 os.replace
+            # 직전 수 마이크로초로 줄이는 것이 잠금 없이 도달 가능한 최선이다.
+            target = resolve_write_target(path, root)
+            staged = stage_text(
+                target,
+                rebuilt if newline == "\n" else rebuilt.replace("\n", newline),
+            )
+            if target.read_bytes() != raw:
+                with contextlib.suppress(OSError):
+                    staged.unlink()
                 return {
                     "path": rel,
                     "status": "skipped",
                     "reason": "분석 중 파일이 바뀌었습니다 — 덮어쓰지 않았습니다",
                     "lost_names": [],
                 }
-            # 원본 줄바꿈으로 되돌려 쓴다. 아래 문자열은 전부 LF 기준이다.
-            atomic_write_text(
-                path,
-                rebuilt if newline == "\n" else rebuilt.replace("\n", newline),
-                root=root,
-            )
+            commit_staged([(staged, target)])
         except OSError as exc:
             return {
                 "path": rel,
@@ -2228,7 +2271,11 @@ _MISPLACED_MAX_FINDINGS = 50
 
 # === ANCHOR: ANCHOR_TOOLS__SYMBOL_ZONES_START ===
 class _TooManySymbols(Exception):
-    """JS 블록 탐지를 돌리기엔 심볼이 너무 많다 — 검사를 건너뛴다."""
+    """한도 안에서 구조를 다 못 봤다 — 모른다고 말하고 검사를 건너뛴다.
+
+    심볼 수가 상한을 넘거나, 데코레이터 탐색이 한도 안에서 끝을 못 본 경우다.
+    조용히 통과시키면 그게 곧 --strict 우회로가 된다.
+    """
 
 
 # JS 블록 탐지는 심볼마다 파일 끝까지 다시 훑어서 중첩 함수에 초선형이다
@@ -2310,7 +2357,7 @@ def find_misplaced_anchors(path: Path) -> list[str]:
         uncovered = _uncovered_symbols(path)
     except _TooManySymbols:
         return [
-            "심볼이 너무 많아 배치 검사를 건너뜁니다 — "
+            "구조가 검사 한도를 넘어 배치 검사를 건너뜁니다 — "
             "이 파일의 앵커 위치는 확인되지 않았습니다"
         ]
     problems: list[str] = []

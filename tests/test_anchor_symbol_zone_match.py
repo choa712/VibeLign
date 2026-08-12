@@ -19,6 +19,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest import mock
 
+from vibelign.core import anchor_tools
 from vibelign.core.anchor_tools import (
     extract_anchor_blocks,
     extract_anchors,
@@ -832,16 +833,16 @@ def test_repair_aborts_when_the_file_changed_mid_analysis(tmp_path: Path) -> Non
         ") -> int:\n"
         "    return v\n",
     )
-    real_read = Path.read_bytes
-    calls = {"n": 0}
+    # 임시 파일을 다 준비한 **뒤** 저장이 끼어드는 시점을 노린다. 확인을
+    # 쓰기 앞에 두면 준비하는 동안(수 밀리초)의 저장이 통째로 날아간다.
+    real_stage = anchor_tools.stage_text
 
-    def spy(self: Path) -> bytes:
-        calls["n"] += 1
-        if calls["n"] == 2:  # 쓰기 직전 확인 시점에 다른 프로세스가 저장
-            self.write_text("# 사용자가 방금 친 코드\n", encoding="utf-8")
-        return real_read(self)
+    def spy(target: Path, text: str, **kwargs: object) -> Path:
+        staged = real_stage(target, text, **kwargs)  # type: ignore[arg-type]
+        target.write_text("# 사용자가 방금 친 코드\n", encoding="utf-8")
+        return staged
 
-    with mock.patch.object(Path, "read_bytes", spy):
+    with mock.patch.object(anchor_tools, "stage_text", spy):
         outcome = repair_crossing_anchors(tmp_path, path, dry_run=False)
 
     assert outcome["status"] == "skipped"
@@ -909,5 +910,76 @@ def test_repair_leaves_clean_file_untouched(tmp_path: Path) -> None:
     assert outcome["status"] == "unchanged"
     assert path.read_text(encoding="utf-8") == original
 
+
+
+def test_mixed_line_endings_are_left_alone(tmp_path: Path) -> None:
+    """섞여 있으면 어느 쪽으로 통일해도 나머지가 바뀐다.
+
+    여러 줄 문자열이나 템플릿 리터럴 안의 줄바꿈이면 런타임 값이 달라지는데,
+    마커 아닌 줄을 비교하는 안전망은 이미 정규화된 문자열끼리 대조해 못 잡는다.
+    """
+    path = tmp_path / "mixed.py"
+    body = (
+        "# === ANCHOR: MIXED_HANDLE_START ===\n"
+        "def handle(\n"
+        "    v: int,\n"
+        "# === ANCHOR: MIXED_HANDLE_END ===\n"
+        ") -> int:\n"
+    )
+    path.write_bytes(body.replace("\n", "\r\n").encode("utf-8") + b"    return v\n")
+    before = path.read_bytes()
+
+    outcome = repair_crossing_anchors(tmp_path, path, dry_run=False)
+
+    assert outcome["status"] == "skipped"
+    assert "줄바꿈" in outcome["reason"]
+    assert path.read_bytes() == before
+
+
+def test_unicode_line_separator_file_is_left_alone(tmp_path: Path) -> None:
+    """splitlines() 는 U+2028 도 줄로 나눈다 — LF 로 이으면 값이 달라진다.
+
+    문자열 리터럴 안의 그 문자가 진짜 줄바꿈이 되어 내용이 바뀌거나 문법이
+    깨진다. _non_marker_lines 도 같은 정규화를 거치므로 안전망이 못 잡는다.
+    """
+    path = tmp_path / "sep.py"
+    path.write_text(
+        "# === ANCHOR: SEP_HANDLE_START ===\n"
+        "def handle(\n"
+        "    v: str,\n"
+        "# === ANCHOR: SEP_HANDLE_END ===\n"
+        ") -> str:\n"
+        "    return v + '\u2028'\n",
+        encoding="utf-8",
+    )
+    before = path.read_bytes()
+
+    outcome = repair_crossing_anchors(tmp_path, path, dry_run=False)
+
+    assert outcome["status"] == "skipped"
+    assert path.read_bytes() == before
+
+
+def test_overlong_decorator_is_reported_not_silently_accepted(tmp_path: Path) -> None:
+    """한도 안에서 끝을 못 보면 모른다고 말한다.
+
+    조용히 멈추면 긴 권한 데코레이터가 보호 밖에 남은 채 --strict 를 통과한다.
+    """
+    decorator = "@Authorized({\n" + "".join(f"  k{i}: {i},\n" for i in range(60)) + "})\n"
+    path = _write(
+        tmp_path,
+        "long.ts",
+        decorator
+        + "// === ANCHOR: LONG_SERVICE_START ===\n"
+        "export class Service {\n"
+        "  run() { return 1; }\n"
+        "}\n"
+        "// === ANCHOR: LONG_SERVICE_END ===\n",
+    )
+
+    problems = find_misplaced_anchors(path)
+
+    assert len(problems) == 1
+    assert "건너뜁니다" in problems[0]
 
 # === ANCHOR: TEST_ANCHOR_SYMBOL_ZONE_MATCH_END ===
