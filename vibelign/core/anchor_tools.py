@@ -310,7 +310,16 @@ def _python_symbol_blocks_ast(text: str) -> list[SymbolBlock] | None:
 
 
 # === ANCHOR: ANCHOR_TOOLS__PYTHON_SYMBOL_BLOCKS_BY_INDENT_START ===
+_PY_SYMBOL_SCAN_CAP = 2000
+_PY_SYMBOL_START_RE = re.compile(r"^\s*(?:async\s+def|def|class)\s+[A-Za-z_]", re.M)
+
+
 def _python_symbol_blocks_by_indent(text: str) -> list[SymbolBlock]:
+    # 이 폴백은 정의마다 앞으로 훑어서 들여쓰기가 계단식으로 깊어지는 파일에
+    # 이차식이 된다. AST 가 못 읽는 파일에서만 오지만, 검사가 읽기 전용
+    # 경로(--validate)에까지 들어온 이상 파일 하나로 멈춰 세울 수 있다.
+    if len(_PY_SYMBOL_START_RE.findall(text)) > _PY_SYMBOL_SCAN_CAP:
+        return []
     lines = text.splitlines()
     blocks: list[SymbolBlock] = []
     for idx, line in enumerate(lines):
@@ -599,6 +608,22 @@ def _js_symbol_blocks(text: str) -> list[SymbolBlock]:
             continue
         symbol_name = match.group(2)
         indent = match.group(1)
+        # 데코레이터는 정의의 일부다(@Controller, @Authorized 등). 빼두면
+        # 라우팅·권한 메타데이터가 보호 구역 밖에 남는데 검사는 정상으로 본다.
+        start_idx = idx
+        probe_back = idx - 1
+        while probe_back >= 0:
+            candidate = lines[probe_back].strip()
+            # 마커 줄은 코드가 아니다. 넘어가서 그 위의 데코레이터를 본다 —
+            # 오배치의 전형이 바로 데코레이터와 정의 **사이**에 낀 START 다.
+            if _parse_anchor_marker(lines[probe_back]) is not None:
+                probe_back -= 1
+                continue
+            if candidate.startswith("@"):
+                start_idx = probe_back
+                probe_back -= 1
+                continue
+            break
         # 문자열·템플릿·주석을 인식하는 정확한 중괄호 카운터로 블록 끝을 찾는다.
         # depth 는 줄 끝에서만 검사해 한 줄짜리 시그니처(구조분해 파라미터 { ... })를
         # 본문 블록과 혼동하지 않는다.
@@ -628,7 +653,7 @@ def _js_symbol_blocks(text: str) -> list[SymbolBlock]:
             continue
         while end_idx > idx and not lines[end_idx].strip():
             end_idx -= 1
-        blocks.append((idx, end_idx, symbol_name, indent))
+        blocks.append((start_idx, end_idx, symbol_name, indent))
     return blocks
 
 
@@ -1914,6 +1939,20 @@ def repair_crossing_anchors(
     # 식별자가 영구 손실되고, 전후 비교도 이미 잃은 것끼리 대조해 못 잡는다.
     # 마커를 옮기려다 코드를 잃는 건 이 도구가 가장 하면 안 되는 일이다.
     try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        return {"path": rel, "status": "skipped", "reason": f"읽기 실패: {exc}", "lost_names": []}
+    # 줄바꿈 스타일. text 로 읽으면 universal newline 변환이 먼저 일어나
+    # CRLF 파일이 통째로 LF 로 바뀌는데, 그 뒤의 어떤 비교도 이미 변환된
+    # 문자열끼리 대조해서 못 잡는다. 마커 하나 옮기려고 파일 전체 diff 를
+    # 만드는 건 "마커만 옮긴다" 는 계약 위반이다.
+    if b"\r\n" in raw and b"\r" in raw:
+        newline = "\r\n"
+    elif b"\r" in raw and b"\n" not in raw:
+        newline = "\r"
+    else:
+        newline = "\n"
+    try:
         _ = path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         return {
@@ -2060,7 +2099,12 @@ def repair_crossing_anchors(
         try:
             # 원자적 교체. write_text 는 먼저 비우고 쓰므로, 도중에 죽으면
             # 소스가 잘린 채 남는다 — 마커만 옮기려다 코드를 잃는다.
-            atomic_write_text(path, rebuilt, root=root)
+            # 원본 줄바꿈으로 되돌려 쓴다. 아래 문자열은 전부 LF 기준이다.
+            atomic_write_text(
+                path,
+                rebuilt if newline == "\n" else rebuilt.replace("\n", newline),
+                root=root,
+            )
         except OSError as exc:
             return {
                 "path": rel,

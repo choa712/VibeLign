@@ -726,6 +726,54 @@ def test_multiline_condition_paren_before_a_regex(tmp_path: Path) -> None:
     assert find_misplaced_anchors(path) == []
 
 
+def test_crlf_file_keeps_its_line_endings(tmp_path: Path) -> None:
+    """CRLF 파일을 LF 로 통째로 바꾸면 마커만 옮긴다는 계약이 깨진다.
+
+    text 로 읽으면 universal newline 변환이 먼저 일어나 그 뒤의 어떤 비교도
+    이미 변환된 문자열끼리 대조해 못 잡는다. 마커 하나 때문에 파일 전체
+    diff 가 뜨는 건 Windows 사용자에게 그대로 손해다.
+    """
+    path = tmp_path / "crlf.py"
+    body = (
+        "# === ANCHOR: CRLF_HANDLE_START ===\n"
+        "def handle(\n"
+        "    v: int,\n"
+        "# === ANCHOR: CRLF_HANDLE_END ===\n"
+        ") -> int:\n"
+        "    return v\n"
+    )
+    path.write_bytes(body.replace("\n", "\r\n").encode("utf-8"))
+
+    assert repair_crossing_anchors(tmp_path, path, dry_run=False)["status"] == "repaired"
+
+    raw = path.read_bytes()
+    assert b"\r\n" in raw
+    assert b"\n" not in raw.replace(b"\r\n", b"")  # 홀로 남은 LF 가 없다
+    assert find_misplaced_anchors(path) == []
+
+
+def test_js_decorator_left_outside_is_reported(tmp_path: Path) -> None:
+    """@Authorized 같은 메타데이터가 보호 밖이면 검사가 잡아야 한다.
+
+    오배치의 전형이 데코레이터와 정의 **사이**에 낀 START 다. 마커 줄은
+    코드가 아니므로 넘어가서 그 위의 데코레이터를 봐야 한다.
+    """
+    path = _write(
+        tmp_path,
+        "ctl.ts",
+        "@Authorized\n"
+        "// === ANCHOR: CTL_SERVICE_START ===\n"
+        "export class Service {\n"
+        "  run() { return 1; }\n"
+        "}\n"
+        "// === ANCHOR: CTL_SERVICE_END ===\n",
+    )
+
+    assert len(find_misplaced_anchors(path)) == 1
+    assert repair_crossing_anchors(tmp_path, path, dry_run=False)["status"] == "repaired"
+    assert "@Authorized" in extract_anchor_blocks(path)["CTL_SERVICE"]
+
+
 def test_repair_leaves_clean_file_untouched(tmp_path: Path) -> None:
     path = _write(
         tmp_path,
