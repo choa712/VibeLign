@@ -735,7 +735,12 @@ def insert_python_symbol_anchors(path: Path) -> bool:
     if not text:
         return False
     lines = text.splitlines()
-    blocks = _python_symbol_blocks(text)
+    # 상한(심볼 수·데코레이터·작업량)에 걸리면 이 파일은 경계를 확신할 수
+    # 없다는 뜻이다. 생성기는 죽지도, 아무렇게나 달지도 않고 손을 뗀다.
+    try:
+        blocks = _python_symbol_blocks(text)
+    except _TooManySymbols:
+        return False
     if not blocks:
         return False
     existing = set(extract_anchors(path))
@@ -781,7 +786,10 @@ def insert_js_symbol_anchors(path: Path) -> bool:
     if not text:
         return False
     lines = text.splitlines()
-    blocks = _js_symbol_blocks(text)
+    try:
+        blocks = _js_symbol_blocks(text)
+    except _TooManySymbols:
+        return False  # 경계를 확신할 수 없다 — 손대지 않는다
     if not blocks:
         return False
     existing = set(extract_anchors(path))

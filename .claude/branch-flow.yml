@@ -58,7 +58,11 @@ merge_gate:
     # 범위는 이 함수 하나에 묶는다. 넓게 잡으면 앞으로 다른 곳에서 생길
     # repair/replace 경합까지 만료일까지 조용히 덮는다 (적대 리뷰 지적).
     - id: "repair-replace-toctou"
-      match: "repair_crossing_anchors.*(TOCTOU|toctou|check/replace)|(TOCTOU|toctou).*repair_crossing_anchors"
+      # 함수명으로만 좁혔더니 리뷰어가 파일:줄 로만 지목한 회차에 매칭이
+      # 어긋났다 (tool_install waiver 때와 같은 교훈 — 제목 정규식으로
+      # 좁히는 방향은 신뢰할 수 없다). 파일 + TOCTOU 어휘로 고정한다.
+      # 여전히 anchor_tools.py 밖의 경합은 덮지 않는다.
+      match: "(anchor_tools\\.py|repair_crossing_anchors).*(TOCTOU|toctou|check/replace)|(TOCTOU|toctou).*(anchor_tools\\.py|repair_crossing_anchors)"
       reason: "repair_crossing_anchors 의 파일 교체와 외부 편집기 저장 사이의 경합. 조건부 원자 교체 API 가 없고 권고 잠금은 편집기가 안 지켜 원리적으로 제거 불가. 창은 stage 후 os.replace 직전으로 최소화했고 테스트로 고정. 잠금 프로토콜은 별도 설계 과제."
       accepted_by: "choa712"
       expires: "2026-09-11"
